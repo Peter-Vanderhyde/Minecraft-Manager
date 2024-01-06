@@ -1,6 +1,7 @@
 import socket
 import threading
 import os
+import subprocess
 import pyautogui as pag
 import pygetwindow as pgw
 import time
@@ -11,12 +12,17 @@ import sys
 import queue
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
-from PyQt6.QtCore import Qt, QRect, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
+
+TESTING = False
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
+        if TESTING:
+            self.background_image = QPixmap("block_background.png")
+        else:
+            self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -26,18 +32,19 @@ class ServerManagerApp(QMainWindow):
     get_status_signal = pyqtSignal()
     set_status_signal = pyqtSignal(list)
     set_players_signal = pyqtSignal(list)
-    update_log_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
 
         # Default IP
-        self.host_ip = "25.6.72.126"
+        self.default_ip = "25.6.72.126"
+        self.host_ip = ""
         self.port = 5555
         self.server_port = "25565"
         self.server = None
-        self.receive_thread = None
-        self.message_thread = None
+        self.receive_thread = threading.Thread(target=self.receive)
+        self.message_timer = QTimer(self)
+        self.message_timer.timeout.connect(self.check_messages)
         self.ips = {}
         self.clients = {}
         self.status = ""
@@ -45,6 +52,7 @@ class ServerManagerApp(QMainWindow):
         self.world_paths = {}
         self.log_queue = queue.Queue()
 
+        self.no_clients = True
         self.stop_threads = threading.Event()
         self.file_lock = threading.Lock()
 
@@ -52,7 +60,6 @@ class ServerManagerApp(QMainWindow):
         self.get_status_signal.connect(self.get_status)
         self.set_status_signal.connect(self.set_status)
         self.set_players_signal.connect(self.set_players)
-        self.update_log_signal.connect(self.update_log)
 
         self.init_ui()
         self.load_settings()
@@ -199,7 +206,10 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
+        if TESTING:
+            icon = QIcon("block_icon.png")
+        else:
+            icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
@@ -305,7 +315,7 @@ class ServerManagerApp(QMainWindow):
         """)
 
     def load_settings(self):
-        data = {"names": {}, "worlds": {}}
+        data = {"ip": f"{self.default_ip}", "names": {}, "worlds": {}}
         try:
             with open("manager_settings.json", 'r') as f:
                 data = json.load(f)
@@ -316,14 +326,26 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("Created new manager_settings.json file.")
             return
         
-        self.ips = data["names"]
-        self.world_paths = data["worlds"]
-        self.load_worlds()
+        self.host_ip = data.get("ip")
+        self.ips = data.get("names")
+        self.world_paths = data.get("worlds")
+        if self.world_paths is not None:
+            self.load_worlds()
+        else:
+            self.world_paths = {}
+            self.log_queue.put(f"<font color='red'>Unable to find worlds in the settings.</font>")
+        
+        if self.host_ip is None or self.ips is None:
+            if self.ips is None:
+                self.ips = {}
+            if self.host_ip is None:
+                self.host_ip = self.default_ip
+            self.update_names()
     
     def update_names(self):
         with self.file_lock:
             with open("manager_settings.json", 'w') as f:
-                json.dump({'names':self.ips, 'worlds':self.world_paths}, f)
+                json.dump({"ip":f"{self.host_ip}", "names":self.ips, "worlds":self.world_paths}, f)
     
     def load_worlds(self):
         worlds_to_ignore = []
@@ -415,8 +437,7 @@ class ServerManagerApp(QMainWindow):
             return
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
-        self.message_thread = threading.Thread(target=self.check_messages)
-        self.message_thread.start()
+        self.message_timer.start(1000)
         self.log_queue.put("Waiting for connections...")
     
     def receive(self):
@@ -431,9 +452,10 @@ class ServerManagerApp(QMainWindow):
                     client_thread.start()
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
-                    time.sleep(0.1) # Avoid CPU usage
+                    pass
                 else:
                     break
+            time.sleep(3) # Avoid CPU usage
         
         for thread in handlers:
             thread.join()
@@ -463,10 +485,12 @@ class ServerManagerApp(QMainWindow):
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
-                        time.sleep(0.1)
+                        pass
                     else:
                         client.close()
                         return
+                
+                time.sleep(1)
         
         self.log_queue.put(f"{self.clients[client]} has joined the room!")
         self.tell(client, "You have joined the room!")
@@ -541,11 +565,13 @@ class ServerManagerApp(QMainWindow):
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
-                    time.sleep(0.1)
+                    pass
                 else:
                     break
             except Exception as e:
                 break
+
+            time.sleep(0.5)
         
         client.close()
         self.log_queue.put(f"{self.clients[client]} has left the room.")
@@ -578,10 +604,11 @@ class ServerManagerApp(QMainWindow):
         client.sendall(f"SERVER-MESSAGE:{message}".encode("utf-8"))
     
     def check_messages(self):
-        while not self.stop_threads.is_set():
-            while not self.log_queue.empty():
-                message = self.log_queue.get()
-                self.update_log_signal.emit(message)
+        while not self.log_queue.empty():
+            message = self.log_queue.get()
+            self.log_box.append(message)
+            scrollbar = self.log_box.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
     
     def first_load(self):
         self.set_worlds_list()
@@ -617,29 +644,19 @@ class ServerManagerApp(QMainWindow):
         else:
             try:
                 dirname = os.path.dirname(os.path.abspath(path))
-                os.system(f'start cmd /C "cd /d {dirname} && \"{path}\""')
+                process = subprocess.Popen([path], shell=True, cwd=dirname, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
                 loop = True
                 window = None
-                cmd = None
-                found_cmd = True
-                while loop and found_cmd:
-                    found_cmd = False
+                while loop and not self.stop_threads.is_set():
                     QApplication.processEvents()
                     windows = pgw.getAllTitles()
                     for w in windows:
                         if w == "Minecraft server":
                             loop = False
                             window = pgw.getWindowsWithTitle(w)[0]
-                        elif "cmd.exe" in w:
-                            cmd = pgw.getWindowsWithTitle(w)[0]
-                            found_cmd = True
-                
-                if not found_cmd:
-                    self.log_queue.put(f"Server was closed on startup.")
-                    return "Server was closed on startup"
+                    
 
                 window.minimize()
-                cmd.close()
 
                 self.delay(8)
 
@@ -786,10 +803,12 @@ class ServerManagerApp(QMainWindow):
         self.dropdown.clear()
         self.dropdown.addItems(self.world_paths.keys())
     
-    def update_log(self, message):
-        self.log_box.append(message)
-        scrollbar = self.log_box.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+    @pyqtSlot()
+    def onWindowStateChanged(self):
+        if self.windowState() == Qt.WindowMinimized:
+            self.message_timer.stop()
+        else:
+            self.message_timer.start(1000)
     
     def closeEvent(self, event):
         try:
@@ -797,10 +816,8 @@ class ServerManagerApp(QMainWindow):
         except:
             pass
         self.stop_threads.set()
-        if self.receive_thread:
+        if self.receive_thread.is_alive():
             self.receive_thread.join()
-        if self.message_thread:
-            self.message_thread.join()
         if self.server:
             self.server.close()
         event.accept()
