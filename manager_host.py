@@ -13,6 +13,8 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal
 
+#10045
+
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -583,11 +585,13 @@ class ServerManagerApp(QMainWindow):
         else:
             try:
                 dirname = os.path.dirname(os.path.abspath(path))
-                os.system(f'start cmd /C "cd /d {dirname} && {path}')
+                os.system(f'start cmd /C "cd /d {dirname} && \"{path}\""')
                 loop = True
                 window = None
                 cmd = None
-                while loop:
+                found_cmd = True
+                while loop and found_cmd:
+                    found_cmd = False
                     QApplication.processEvents()
                     windows = pgw.getAllTitles()
                     for w in windows:
@@ -596,6 +600,11 @@ class ServerManagerApp(QMainWindow):
                             window = pgw.getWindowsWithTitle(w)[0]
                         elif "cmd.exe" in w:
                             cmd = pgw.getWindowsWithTitle(w)[0]
+                            found_cmd = True
+                
+                if not found_cmd:
+                    self.log_queue.put(f"Server was closed on startup.")
+                    return "Server was closed on startup"
 
                 window.minimize()
                 cmd.close()
