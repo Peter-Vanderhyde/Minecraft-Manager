@@ -1,6 +1,5 @@
 import socket
 import threading
-import subprocess
 import os
 import pyautogui as pag
 import pygetwindow as pgw
@@ -9,11 +8,10 @@ import json
 from mcstatus import JavaServer
 
 import sys
-import socket
 import queue
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QStackedLayout, QGridLayout, QWidget, QTextBrowser
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
-from PyQt6.QtCore import Qt, QRect, QTimer, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, pyqtSignal
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -24,14 +22,10 @@ class BackgroundWidget(QWidget):
         painter = QPainter(self)
         painter.drawPixmap(QRect(0, 0, self.width(), self.height()), self.background_image)
 
-# Find error crashing program when client spams chat
-# Have the properties change the world name to whatever you put
-# Make updating names thread safe
-# Close clients gracefully
-# Add delay
-
 class ServerManagerApp(QMainWindow):
     get_status_signal = pyqtSignal()
+    set_status_signal = pyqtSignal(list)
+    set_players_signal = pyqtSignal(list)
     update_log_signal = pyqtSignal(str)
 
     def __init__(self):
@@ -54,9 +48,12 @@ class ServerManagerApp(QMainWindow):
         self.log_queue = queue.Queue()
 
         self.stop_threads = threading.Event()
+        self.file_lock = threading.Lock()
 
         # Signals
         self.get_status_signal.connect(self.get_status)
+        self.set_status_signal.connect(self.set_status)
+        self.set_players_signal.connect(self.set_players)
         self.update_log_signal.connect(self.update_log)
 
         self.init_ui()
@@ -299,8 +296,9 @@ class ServerManagerApp(QMainWindow):
         self.load_worlds()
     
     def update_names(self):
-        with open("manager_settings.json", 'w') as f:
-            json.dump({'names':self.ips, 'worlds':self.world_paths}, f)
+        with self.file_lock:
+            with open("manager_settings.json", 'w') as f:
+                json.dump({'names':self.ips, 'worlds':self.world_paths}, f)
     
     def load_worlds(self):
         worlds_to_ignore = []
@@ -372,6 +370,11 @@ class ServerManagerApp(QMainWindow):
         
         for world in worlds_to_ignore:
             self.world_paths.pop(world)
+    
+    def delay(self, delay_amount):
+        end_time = time.time() + delay_amount
+        while time.time() < end_time:
+            QApplication.processEvents()
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -398,13 +401,13 @@ class ServerManagerApp(QMainWindow):
                 if e.errno == 10035: # Non blocking socket error
                     time.sleep(0.1) # Avoid CPU usage
                 else:
-                    print(f"Socket error {e}")
                     break
         
         for thread in handlers:
             thread.join()
     
     def handle_client(self, client, address):
+        skip_receive = False
         messages = []
         ip, port = address
         if self.ips.get(ip) is not None:
@@ -417,10 +420,10 @@ class ServerManagerApp(QMainWindow):
             while not stop and not self.stop_threads.is_set():
                 try:
                     message = client.recv(1024).decode('utf-8')
-                    if not message:
-                        client.close()
-                        return
-                    
+                    if not message or message == "CLOSING":
+                        skip_receive = True
+                        break
+
                     messages += message.split("CLIENT-MESSAGE:")[1:]
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
@@ -430,7 +433,6 @@ class ServerManagerApp(QMainWindow):
                     if e.errno == 10035: # Non blocking socket error
                         time.sleep(0.1)
                     else:
-                        print(f"Socket error (handler during indentify) {e}")
                         client.close()
                         return
         
@@ -440,18 +442,20 @@ class ServerManagerApp(QMainWindow):
             if send_client is not client:
                 self.tell(send_client, f"{self.clients[client]} has joined the room!")
         
-        time.sleep(1)
-        while not self.stop_threads.is_set():
+        self.delay(1)
+
+        while not self.stop_threads.is_set() and not skip_receive:
             try:
                 new_message = client.recv(1024).decode('utf-8')
                 if not new_message:
-                    print("Not message")
                     break
 
                 messages += new_message.split("CLIENT-MESSAGE:")[1:]
+
+                if "CLOSING" in messages:
+                    break
                 while len(messages) != 0:
                     message = messages.pop(0)
-                    self.log_queue.put(f"<font color='blue'>{message}</font>")
                     if message == "":
                         continue
 
@@ -462,15 +466,24 @@ class ServerManagerApp(QMainWindow):
                         data = message.split(':')[-1].split(',')
                         request, args = data[0], data[1:]
                         if request == "get-status":
-                            self.log_queue.put(f"{self.clients[client]} queried the server status.")
+                            # self.log_queue.put(f"{self.clients[client]} queried the server status.")
                             result = self.query_status()
-                            self.log_queue.put(f"Server status is: {result[0]}.")
-                            self.tell(client, f"DATA-RETURN(status):{','.join(result)}")
+                            # self.log_queue.put(f"Server status is: {result[0]}.")
+                            self.set_status_signal.emit(result)
+                            self.send_data("status", result)
                         elif request == "get-players":
-                            self.log_queue.put(f"{self.clients[client]} queried the active players.")
-                            self.tell(client, f"DATA-RETURN(players):{json.dumps(self.query_players())}")
+                            status = self.query_status()
+                            # self.log_queue.put(f"{self.clients[client]} queried the active players.")
+                            if status[0] == "online":
+                                players = self.query_players()
+                                self.set_players_signal.emit(players)
+                                self.send_data("players", players)
+                            else:
+                                self.set_status_signal.emit(status)
+                                self.tell(client, "The server has closed.")
+                                self.send_data("status", status)
                         elif request == "get-worlds-list":
-                            self.tell(client, f"DATA-RETURN(worlds-list):{json.dumps(list(self.world_paths.keys()))}")
+                            self.send_data("worlds-list", self.query_worlds_list(), client)
                         elif request in ["start-server", "stop-server", "restart-server"]:
                             self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
                             if request in ["stop-server", "restart-server"]:
@@ -478,7 +491,7 @@ class ServerManagerApp(QMainWindow):
                                 if error:
                                     if error == "already offline":
                                         self.tell(client, "Server already stopped.")
-                                        self.tell(client, "DATA-RETURN(stop):refresh")
+                                        self.send_data("status", ["offline", "", ""])
                                     else:
                                         self.tell(client, error)
                             if request in ["start-server", "restart-server"]:
@@ -490,7 +503,7 @@ class ServerManagerApp(QMainWindow):
                                 if error:
                                     if error == "already online":
                                         self.tell(client, "Server already running.")
-                                        self.tell(client, "DATA-RETURN(start):refresh")
+                                        self.send_data("start", "refresh")
                                     else:
                                         self.tell(client, error)
 
@@ -498,16 +511,23 @@ class ServerManagerApp(QMainWindow):
                 if e.errno == 10035: # Non blocking socket error
                     time.sleep(0.1)
                 else:
-                    print(f"Socket error (handler) {e}")
                     break
             except Exception as e:
-                print(f"Error receiving message from a client: {e}")
                 break
         
         client.close()
         self.log_queue.put(f"{self.clients[client]} has left the room.")
         self.broadcast(f"{self.clients[client]} has left the room.")
         self.clients.pop(client)
+
+    def send_data(self, topic, data, client=None):
+        if not isinstance(data, (list, tuple)):
+            data = [data]
+        
+        if client:
+            self.tell(client, f"DATA-RETURN({topic}):{json.dumps(data)}")
+        else:
+            self.broadcast(f"DATA-RETURN({topic}):{json.dumps(data)}")
     
     def broadcast(self, message, owner=None):
         for client, name in self.clients.items():
@@ -520,7 +540,7 @@ class ServerManagerApp(QMainWindow):
                 else:
                     self.tell(client, message)
             except Exception as e:
-                print(f"Error sending message to a client: {e}")
+                pass
     
     def tell(self, client, message):
         client.sendall(f"SERVER-MESSAGE:{message}".encode("utf-8"))
@@ -566,6 +586,7 @@ class ServerManagerApp(QMainWindow):
                 window = None
                 cmd = None
                 while loop:
+                    QApplication.processEvents()
                     windows = pgw.getAllTitles()
                     for w in windows:
                         if w == "Minecraft server":
@@ -577,12 +598,12 @@ class ServerManagerApp(QMainWindow):
                 window.minimize()
                 cmd.close()
 
-                time.sleep(5)
+                self.delay(8)
 
                 self.get_status_signal.emit()
                 self.log_queue.put(f"Server world '{world}' has been started.")
                 self.broadcast(f"Server world '{world}' has been started.")
-                self.broadcast(f"DATA-RETURN(start):refresh")
+                self.send_data("start", "refresh")
             except:
                 error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
                 self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}' at path '{path}'!</font>")
@@ -607,23 +628,23 @@ class ServerManagerApp(QMainWindow):
         window.activate()
         target_pos = pag.Point(window.bottomright.x - 30, window.bottomright.y - 30)
         while pag.position() != target_pos:
-            pag.moveTo(target_pos.x, target_pos.y, 1)
+            pag.moveTo(target_pos.x, target_pos.y)
 
         pag.click()
-        pag.typewrite("stop", 0.4)
+        pag.typewrite("stop")
         pag.keyDown("enter")
 
-        time.sleep(2)
+        self.delay(3)
 
         self.get_status_signal.emit()
         self.log_queue.put("Server has been stopped.")
         self.broadcast("Server has been stopped.")
-        self.broadcast(f"DATA-RETURN(stop):refresh")
+        self.send_data("stop", "refresh")
         return None
 
     def restart_server(self):
         self.stop_server()
-        time.sleep(5)
+        self.delay(5)
         self.start_server(self.previous_world)
 
     def query_status(self):
@@ -631,7 +652,13 @@ class ServerManagerApp(QMainWindow):
             query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
             if query.map:
                 self.previous_world = query.map
-            return "online", f"{query.software.brand} {query.software.version}", query.map
+            
+            # Check for possible fabric presence
+            server_dir = os.path.dirname(self.world_paths.get(query.map))
+            if os.path.isdir(server_dir) and os.path.isfile(os.path.join(server_dir, "fabric-server-launch.jar")):
+                return "online", f"{query.software.brand}/fabric {query.software.version}", query.map
+            else:
+                return "online", f"{query.software.brand} {query.software.version}", query.map
         except:
             return "offline", "", ""
     
@@ -643,22 +670,23 @@ class ServerManagerApp(QMainWindow):
             return []
     
     def query_worlds_list(self):
-        return self.world_paths.keys()
+        return list(self.world_paths.keys())
 
     def get_status(self):
         self.set_status(["pinging",None,None])
-        status, version, world = self.query_status()
-        if status == "offline":
-            self.set_status(["offline",None,None])
-        elif status == "online":
-            self.set_status(["online", version, world])
+        status = self.query_status()
+        self.set_status(status)
+        self.send_data("status", status)
 
     def get_players(self):
-        status, _, _ = self.query_status()
-        if status == "online":
-            self.set_players(self.query_players())
+        status = self.query_status()
+        if status[0] == "online":
+            players = self.query_players()
+            self.set_players(players)
+            self.send_data("players", players)
         else:
-            self.set_status(["offline",None,None])
+            self.set_status(status)
+            self.send_data("status", status)
     
     def set_status(self, info):
         status, version, world = info
@@ -721,6 +749,7 @@ class ServerManagerApp(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
     
     def closeEvent(self, event):
+        self.broadcast("CLOSING")
         self.stop_threads.set()
         if self.receive_thread:
             self.receive_thread.join()

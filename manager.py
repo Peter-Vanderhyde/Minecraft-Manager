@@ -4,9 +4,9 @@ import queue
 import time
 import threading
 import json
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QStackedLayout, QGridLayout, QWidget, QTextBrowser
-from PyQt6.QtGui import QCloseEvent, QFont, QIcon, QPixmap, QPainter, QPaintEvent
-from PyQt6.QtCore import Qt, QRect, QTimer, QThread, pyqtSignal, QObject
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
+from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -38,7 +38,6 @@ class ConnectionWorker(QObject):
             if e.errno == 10035:
                 time.sleep(0.1)
             else:
-                print(f"Error connecting to server: {e}")
                 self.connection_failure.emit()
 
 class ServerManagerApp(QMainWindow):
@@ -47,6 +46,7 @@ class ServerManagerApp(QMainWindow):
     set_worlds_list_signal = pyqtSignal(list)
     get_status_signal = pyqtSignal()
     update_log_signal = pyqtSignal(str)
+    switch_to_connect_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -75,6 +75,7 @@ class ServerManagerApp(QMainWindow):
         self.set_worlds_list_signal.connect(self.set_worlds_list)
         self.get_status_signal.connect(self.get_status)
         self.update_log_signal.connect(self.update_log)
+        self.switch_to_connect_signal.connect(self.switch_to_connect_page)
         
         self.init_ui()
         self.connect_button.clicked.connect(self.start_connection_thread)
@@ -369,6 +370,11 @@ class ServerManagerApp(QMainWindow):
             }
         """)
     
+    def delay(self, delay_amount):
+        end_time = time.time() + delay_amount
+        while time.time() < end_time:
+            QApplication.processEvents()
+    
     def start_connection_thread(self):
         if self.host_ip_entry.text() == "":
             return
@@ -435,30 +441,32 @@ class ServerManagerApp(QMainWindow):
                     break
 
                 messages += message.split("SERVER-MESSAGE:")[1:]
+                if "CLOSING" in messages:
+                    break
+
                 while len(messages) != 0:
                     message = messages.pop(0)
                     if not message.startswith("DATA-RETURN"):
                         self.log_queue.put(message)
                     else:
-                        self.log_queue.put(f"<font color='blue'>{message}</font>")
                         data = message.split(':')
-                        key, args = data[0][data[0].find('(')+1:data[0].find(')')], data[1].split(',')
-                        self.log_queue.put(f"<font color='red'>{key}, {args}</font>")
+                        key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
                         if key == "status":
                             self.set_status_signal.emit(args)
                         elif key == "players":
-                            self.set_players_signal.emit(json.loads(args[0]))
+                            self.set_players_signal.emit(args)
                         elif key == "worlds-list":
-                            self.set_worlds_list_signal.emit(json.loads(args[0]))
+                            self.set_worlds_list_signal.emit(args)
                         elif key in ["start", "stop"] and args == ["refresh"]:
                             self.get_status_signal.emit()
             except socket.error as e:
                 if e.errno == 10035:
                     time.sleep(0.1)
                 else:
-                    print("Error getting message from server")
                     self.close_threads.set()
                     break
+        
+        self.switch_to_connect_signal.emit()
 
     def display_delay_messages(self):
         for i, label in enumerate(self.connection_delabels):
@@ -474,12 +482,27 @@ class ServerManagerApp(QMainWindow):
         name = self.name_entry.text()
         if name != "":
             self.send(name)
-            time.sleep(1)
+            self.delay(1)
             self.switch_to_server_manager()
             self.first_connect()
 
     def switch_to_server_manager(self):
         self.stacked_layout.setCurrentIndex(2)  # Show the third page (Server Manager)
+    
+    def switch_to_connect_page(self):
+        self.close_threads.set()
+        self.close_connection_thread()
+        if self.receive_thread:
+            self.receive_thread.join()
+        if self.message_thread:
+            self.message_thread.join()
+        if self.client:
+            self.client.close()
+        self.stacked_layout.setCurrentIndex(0)
+        self.connecting_label.setText("Lost Connection")
+        self.close_threads.clear()
+        self.log_box.clear()
+        self.set_status(["pinging", "", ""])
 
     def check_messages(self):
         while not self.close_threads.is_set():
@@ -571,6 +594,7 @@ class ServerManagerApp(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
     
     def closeEvent(self, event):
+        self.send("CLOSING")
         self.close_threads.set()
         self.close_connection_thread()
         if self.receive_thread:
