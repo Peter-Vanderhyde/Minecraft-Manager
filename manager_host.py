@@ -751,7 +751,10 @@ class ServerManagerApp(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
     
     def closeEvent(self, event):
-        self.broadcast("CLOSING")
+        try:
+            self.broadcast("CLOSING")
+        except:
+            pass
         self.stop_threads.set()
         if self.receive_thread:
             self.receive_thread.join()
