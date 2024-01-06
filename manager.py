@@ -52,9 +52,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        #self.host_ip = "25.6.72.126"
-        #self.host_ip = "127.0.0.1"
-        self.host_ip = "25.58.119.174"
+        self.host_ip = "25.6.72.126"
         self.port = 5555
         self.client = None
         self.close_threads = threading.Event()

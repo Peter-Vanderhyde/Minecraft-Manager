@@ -32,9 +32,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        #self.host_ip = "25.6.72.126"
-        #self.host_ip = "127.0.0.1"
-        self.host_ip = "25.58.119.174"
+        self.host_ip = "25.6.72.126"
         self.port = 5555
         self.server_port = "25565"
         self.server = None
@@ -563,6 +561,10 @@ class ServerManagerApp(QMainWindow):
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
     def start_server(self, world):
+        if world == "":
+            self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
+            return f"<font color='red'>There is no world selected.</font>"
+        
         status, _, _ = self.query_status()
         if status == "online":
             self.log_queue.put("Server is already online.")
