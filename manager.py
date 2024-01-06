@@ -4,6 +4,7 @@ import queue
 import time
 import threading
 import json
+import os
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
@@ -11,7 +12,7 @@ from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.background_image = QPixmap("block_background.png")
+        self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -258,7 +259,7 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon("block_icon.png")
+        icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
