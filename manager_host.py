@@ -1,6 +1,6 @@
 import socket
 import threading
-import datetime
+import subprocess
 import os
 import pyautogui as pag
 import pygetwindow as pgw
@@ -24,13 +24,23 @@ class BackgroundWidget(QWidget):
         painter = QPainter(self)
         painter.drawPixmap(QRect(0, 0, self.width(), self.height()), self.background_image)
 
+# Find error crashing program when client spams chat
+# Have the properties change the world name to whatever you put
+# Make updating names thread safe
+# Close clients gracefully
+# Add delay
+
 class ServerManagerApp(QMainWindow):
+    get_status_signal = pyqtSignal()
+    update_log_signal = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
 
         # Default IP
         #self.host_ip = "25.6.72.126"
-        self.host_ip = "127.0.0.1"
+        #self.host_ip = "127.0.0.1"
+        self.host_ip = "25.58.119.174"
         self.port = 5555
         self.server_port = "25565"
         self.server = None
@@ -38,17 +48,19 @@ class ServerManagerApp(QMainWindow):
         self.message_thread = None
         self.ips = {}
         self.clients = {}
-        self.player_list = []
         self.status = ""
-        self.server_world = ""
-        self.path_list = {}
+        self.previous_world = ""
+        self.world_paths = {}
         self.log_queue = queue.Queue()
 
         self.stop_threads = threading.Event()
 
+        # Signals
+        self.get_status_signal.connect(self.get_status)
+        self.update_log_signal.connect(self.update_log)
+
         self.init_ui()
-        self.load_ips()
-        self.load_worlds()
+        self.load_settings()
         self.start_manager_server()
         self.first_load()
 
@@ -270,78 +282,96 @@ class ServerManagerApp(QMainWindow):
 
         """)
 
-    def load_ips(self):
+    def load_settings(self):
+        data = {"names": {}, "worlds": {}}
         try:
-            with open("server_names.json", 'r') as f:
-                self.ips = json.load(f)
-            
+            with open("manager_settings.json", 'r') as f:
+                data = json.load(f)
         except:
-            with open("server_names.json", 'w') as f:
-                json.dump(self.ips, f)
-            self.log_queue.put("Names file not found.")
-            self.log_queue.put("Created new server_names.json file.")
+            with open("manager_settings.json", 'w') as f:
+                json.dump(data, f)
+            self.log_queue.put("Settings file not found.")
+            self.log_queue.put("Created new manager_settings.json file.")
+            return
+        
+        self.ips = data["names"]
+        self.world_paths = data["worlds"]
+        self.load_worlds()
     
     def update_names(self):
-        with open("names.json", 'w') as f:
-            json.dump(self.ips, f)
+        with open("manager_settings.json", 'w') as f:
+            json.dump({'names':self.ips, 'worlds':self.world_paths}, f)
     
     def load_worlds(self):
-        try:
-            with open("server_worlds.json", 'r') as f:
-                self.path_list = json.load(f)
-        
-        except:
-            with open("server_worlds.json", 'w') as f:
-                json.dump(self.path_list, f)
-            self.log_queue.put("Worlds file not found.")
-            self.log_queue.put("Created new server_worlds.json file")
-            return
+        worlds_to_ignore = []
+        for world, path in self.world_paths.items():
+            if not os.path.isfile(path):
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to find file '{path}'.</font>")
+                worlds_to_ignore.append(world)
+                continue
 
-        def check_properties(path):
-            try:
-                with open(path, 'r') as f:
-                    lines = f.readlines()
-                
-                edited = False
-                found_query = False
-                found_port = False
-                for i, line in enumerate(lines):
-                    if line.startswith("enable-query="):
-                        found_query = True
-                        compare = "enable-query=true\n"
-                        if line != compare:
-                            lines[i] = compare
-                            edited = True
-                    elif line.startswith("query.port="):
-                        found_port = True
-                        compare = "query.port=25565\n"
-                        if line != compare:
-                            lines[i] = compare
-                            edited = True
-                
-                if not found_query:
-                    lines.append("\nenable-query=true")
-                    edited = True
-                if not found_port:
-                    lines.append("\nquery.port=25565")
-                    edited = True
-                
-                if edited:
-                    with open(path, 'w') as f:
-                        f.writelines(lines)
-            except IOError:
-                self.log_queue.put(f"<font color='orange'>WARNING: Was unable to check if '{path}' has query enabled \
-                                    while server.properties is being accessed.</font>")
-        
-        for world, path in self.path_list.items():
             directory = os.path.dirname(path)
-            check_path = f"{directory}\\server.properties"
-            if os.path.exists(check_path):
-                check_properties(check_path)
+            world_folder_path = f"{directory}\\{world}"
+            properties_path = f"{directory}\\server.properties"
+            if os.path.isfile(properties_path):
+                try:
+                    with open(properties_path, 'r') as f:
+                        lines = f.readlines()
+                    
+                    edited = False
+                    found_query = False
+                    found_port = False
+                    for i, line in enumerate(lines):
+                        compare = None
+                        if line.startswith("enable-query="):
+                            found_query = True
+                            compare = "enable-query=true\n"
+                        elif line.startswith("query.port="):
+                            found_port = True
+                            compare = "query.port=25565\n"
+                        elif line.startswith("level-name="):
+                            compare = f"level-name={world}\n"
+                            if line != compare:
+                                other_world_name = line.split('=')[1].strip()
+                                other_world_folder = f"{directory}\\{other_world_name}"
+                                if os.path.isdir(world_folder_path):
+                                    # Will switch to reference this folder
+                                    pass
+                                elif os.path.isdir(other_world_folder):
+                                    try:
+                                        os.rename(other_world_folder, world_folder_path)
+                                    except:
+                                        self.log_queue.put(f"<font color='red'>ERROR: Unable to rename world folder '{other_world_name}' to '{world}'.</font>")
+                                        if not os.path.isdir(world_folder_path):
+                                            worlds_to_ignore.append(world)
+                            else:
+                                if not os.path.isdir(world_folder_path):
+                                    self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' folder at '{directory}'.</font>")
+                                    worlds_to_ignore.append(world)
+                        
+                        if compare and line != compare:
+                            lines[i] = compare
+                            edited = True
+                    
+                    if not found_query:
+                        lines.append("\nenable-query=true")
+                        edited = True
+                    if not found_port:
+                        lines.append("\nquery.port=25565")
+                        edited = True
+                    
+                    if edited:
+                        with open(properties_path, 'w') as f:
+                            f.writelines(lines)
+                except IOError:
+                    self.log_queue.put(f"<font color='orange'>WARNING: Was unable to check if '{path}' has query enabled \
+                                        while server.properties is being accessed.</font>")
             else:
                 self.log_queue.put(f"<font color='orange'>WARNING: Unable to find 'server.properties' in folder at '{directory}'. \
                                    Make sure the server's .bat file is placed in the server folder.</font>")
-
+        
+        for world in worlds_to_ignore:
+            self.world_paths.pop(world)
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -352,14 +382,14 @@ class ServerManagerApp(QMainWindow):
         self.receive_thread.start()
         self.message_thread = threading.Thread(target=self.check_messages)
         self.message_thread.start()
-        self.log_queue.put("Manager waiting for connections...")
+        self.log_queue.put("Waiting for connections...")
     
     def receive(self):
         handlers = []
         while not self.stop_threads.is_set():
             try:
                 client, address = self.server.accept()
-                intention = client.recv(1024).decode("ascii")
+                intention = client.recv(1024).decode("utf-8")
                 if intention == "connection request":
                     client_thread = threading.Thread(target=self.handle_client, args=(client, address))
                     handlers.append(client_thread)
@@ -375,24 +405,25 @@ class ServerManagerApp(QMainWindow):
             thread.join()
     
     def handle_client(self, client, address):
+        messages = []
         ip, port = address
         if self.ips.get(ip) is not None:
             self.clients[client] = self.ips.get(ip)
-            self.tell(client, "accept")
+            client.sendall("accept".encode("utf-8"))
         else:
             # Get display name
-            self.tell(client, "identify")
+            client.sendall("identify".encode("utf-8"))
             stop = False
             while not stop and not self.stop_threads.is_set():
                 try:
-                    identity = client.recv(1024)
-                    if not identity:
+                    message = client.recv(1024).decode('utf-8')
+                    if not message:
                         client.close()
                         return
                     
-                    self.clients[client] = identity.decode("ascii")
+                    messages += message.split("CLIENT-MESSAGE:")[1:]
+                    self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    print(self.ips.items())
                     self.update_names()
                     stop = True
                 except socket.error as e:
@@ -409,35 +440,59 @@ class ServerManagerApp(QMainWindow):
             if send_client is not client:
                 self.tell(send_client, f"{self.clients[client]} has joined the room!")
         
+        time.sleep(1)
         while not self.stop_threads.is_set():
             try:
-                message = client.recv(1024)
-                if not message:
+                new_message = client.recv(1024).decode('utf-8')
+                if not new_message:
+                    print("Not message")
                     break
 
-                message = message.decode('ascii')
-                if not message.startswith("MANAGER-REQUEST"):
-                    self.log_queue.put(f'<font color="blue">{self.clients[client]}: {message}</font>')
-                    self.broadcast(message, client)
-                else:
-                    data = message.split(':')[-1].split(',')
-                    request, args = data[0], data[1:]
-                    if request == "get-status":
-                        self.log_queue.put(f"{self.clients[client]} queried the server status.")
-                        result = self.query_status()
-                        self.log_queue.put(f"Server status is: {result[0]}.")
-                        self.tell(client, f"DATA-RETURN(status):{','.join(result)}")
-                    elif request == "get-players":
-                        self.log_queue.put(f"{self.clients[client]} queried the active players.")
-                        self.tell(client, f"DATA-RETURN(players):{self.query_players()}")
-                    elif request == "start-server":
-                        self.log_queue.put(f"{self.clients[client]} requested to start the server.")
-                        self.tell(client, "Starting server...")
-                        error = self.start_server(args[0])
-                        if error:
-                            self.tell(client, f"DATA-RETURN(start):{error}")
-                        else:
-                            self.tell(client, "DATA-RETURN(start):success")
+                messages += new_message.split("CLIENT-MESSAGE:")[1:]
+                while len(messages) != 0:
+                    message = messages.pop(0)
+                    self.log_queue.put(f"<font color='blue'>{message}</font>")
+                    if message == "":
+                        continue
+
+                    if not message.startswith("MANAGER-REQUEST"):
+                        self.log_queue.put(f'<font color="blue">{self.clients[client]}: {message}</font>')
+                        self.broadcast(message, client)
+                    else:
+                        data = message.split(':')[-1].split(',')
+                        request, args = data[0], data[1:]
+                        if request == "get-status":
+                            self.log_queue.put(f"{self.clients[client]} queried the server status.")
+                            result = self.query_status()
+                            self.log_queue.put(f"Server status is: {result[0]}.")
+                            self.tell(client, f"DATA-RETURN(status):{','.join(result)}")
+                        elif request == "get-players":
+                            self.log_queue.put(f"{self.clients[client]} queried the active players.")
+                            self.tell(client, f"DATA-RETURN(players):{json.dumps(self.query_players())}")
+                        elif request == "get-worlds-list":
+                            self.tell(client, f"DATA-RETURN(worlds-list):{json.dumps(list(self.world_paths.keys()))}")
+                        elif request in ["start-server", "stop-server", "restart-server"]:
+                            self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
+                            if request in ["stop-server", "restart-server"]:
+                                error = self.stop_server()
+                                if error:
+                                    if error == "already offline":
+                                        self.tell(client, "Server already stopped.")
+                                        self.tell(client, "DATA-RETURN(stop):refresh")
+                                    else:
+                                        self.tell(client, error)
+                            if request in ["start-server", "restart-server"]:
+                                error = None
+                                if request == "start-server":
+                                    error = self.start_server(args[0])
+                                else:
+                                    error = self.start_server(self.previous_world)
+                                if error:
+                                    if error == "already online":
+                                        self.tell(client, "Server already running.")
+                                        self.tell(client, "DATA-RETURN(start):refresh")
+                                    else:
+                                        self.tell(client, error)
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -468,16 +523,16 @@ class ServerManagerApp(QMainWindow):
                 print(f"Error sending message to a client: {e}")
     
     def tell(self, client, message):
-        client.sendall(message.encode("ascii"))
+        client.sendall(f"SERVER-MESSAGE:{message}".encode("utf-8"))
     
     def check_messages(self):
         while not self.stop_threads.is_set():
             while not self.log_queue.empty():
                 message = self.log_queue.get()
-                self.log_box.append(message)
-                self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
+                self.update_log_signal.emit(message)
     
     def first_load(self):
+        self.set_worlds_list()
         self.get_status()
     
     def message_entered(self):
@@ -488,7 +543,14 @@ class ServerManagerApp(QMainWindow):
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
     def start_server(self, world):
-        path = self.path_list.get(world)
+        status, _, _ = self.query_status()
+        if status == "online":
+            self.log_queue.put("Server is already online.")
+            return "already online"
+        
+        self.broadcast("Starting server...")
+        self.log_queue.put("Starting server...")
+        path = self.world_paths.get(world)
         if not path:
             self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
             return f"<font color='red'>Manager doesn't recognize that world.</font>"
@@ -498,51 +560,108 @@ class ServerManagerApp(QMainWindow):
             return error
         else:
             try:
-                os.system(path)
-                return None
+                dirname = os.path.dirname(os.path.abspath(path))
+                os.system(f'start cmd /C "cd /d {dirname} && {path}')
+                loop = True
+                window = None
+                cmd = None
+                while loop:
+                    windows = pgw.getAllTitles()
+                    for w in windows:
+                        if w == "Minecraft server":
+                            loop = False
+                            window = pgw.getWindowsWithTitle(w)[0]
+                        elif "cmd.exe" in w:
+                            cmd = pgw.getWindowsWithTitle(w)[0]
+
+                window.minimize()
+                cmd.close()
+
+                time.sleep(5)
+
+                self.get_status_signal.emit()
+                self.log_queue.put(f"Server world '{world}' has been started.")
+                self.broadcast(f"Server world '{world}' has been started.")
+                self.broadcast(f"DATA-RETURN(start):refresh")
             except:
                 error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
                 self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}' at path '{path}'!</font>")
                 return error
     
     def stop_server(self):
-        pass
+        status, _, _ = self.query_status()
+        if status == "offline":
+            self.log_queue.put("Server is already offline.")
+            return "already offline"
+
+        self.broadcast("Stopping server...")
+        self.log_queue.put("Stopping server...")
+        windows = pgw.getWindowsWithTitle("Minecraft server")
+        window = None
+        for w in windows:
+            if w.title == "Minecraft server":
+                window = w
+        
+        pgw.getActiveWindow().title
+        window.restore()
+        window.activate()
+        target_pos = pag.Point(window.bottomright.x - 30, window.bottomright.y - 30)
+        while pag.position() != target_pos:
+            pag.moveTo(target_pos.x, target_pos.y, 1)
+
+        pag.click()
+        pag.typewrite("stop", 0.4)
+        pag.keyDown("enter")
+
+        time.sleep(2)
+
+        self.get_status_signal.emit()
+        self.log_queue.put("Server has been stopped.")
+        self.broadcast("Server has been stopped.")
+        self.broadcast(f"DATA-RETURN(stop):refresh")
+        return None
 
     def restart_server(self):
         self.stop_server()
-        
-    
+        time.sleep(5)
+        self.start_server(self.previous_world)
+
     def query_status(self):
         try:
-            query = JavaServer.lookup(f"25.6.72.126:{self.server_port}", 1).query()
+            query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
+            if query.map:
+                self.previous_world = query.map
             return "online", f"{query.software.brand} {query.software.version}", query.map
-        except TimeoutError:
+        except:
             return "offline", "", ""
     
     def query_players(self):
         try:
-            query = JavaServer.lookup(f"25.6.72.126:{self.server_port}", 1).query()
+            query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
             return query.players.names
         except TimeoutError:
             return []
+    
+    def query_worlds_list(self):
+        return self.world_paths.keys()
 
     def get_status(self):
-        self.set_status("pinging")
+        self.set_status(["pinging",None,None])
         status, version, world = self.query_status()
         if status == "offline":
-            self.set_status("offline")
-            self.players_info_box.clear()
-            self.set_world_list()
+            self.set_status(["offline",None,None])
         elif status == "online":
-            self.set_status("online", version, world)
-            self.get_players()
-            self.set_world_list()
+            self.set_status(["online", version, world])
 
     def get_players(self):
-        self.player_list = self.query_players()
-        self.set_players(self.player_list)
+        status, _, _ = self.query_status()
+        if status == "online":
+            self.set_players(self.query_players())
+        else:
+            self.set_status(["offline",None,None])
     
-    def set_status(self, status, version=None, world=None):
+    def set_status(self, info):
+        status, version, world = info
         if status == "online":
             self.status = "online"
             self.server_status_label.hide()
@@ -551,6 +670,7 @@ class ServerManagerApp(QMainWindow):
             self.version_label.setText(f"Version: {version}")
             self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
+            self.get_players()
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
@@ -563,6 +683,7 @@ class ServerManagerApp(QMainWindow):
             self.version_label.setText("Version:")
             self.world_label.setText("World:")
             self.refresh_button.setEnabled(False)
+            self.players_info_box.clear()
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
@@ -575,6 +696,7 @@ class ServerManagerApp(QMainWindow):
             self.version_label.setText("Version:")
             self.world_label.setText("World:")
             self.refresh_button.setEnabled(False)
+            self.players_info_box.clear()
             self.refresh_status_button.setEnabled(False)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(False)
@@ -589,9 +711,14 @@ class ServerManagerApp(QMainWindow):
         for player in players:
             self.players_info_box.append(f"<font color='blue'>{player}</font>")
     
-    def set_world_list(self):
+    def set_worlds_list(self):
         self.dropdown.clear()
-        self.dropdown.addItems(self.path_list.keys())
+        self.dropdown.addItems(self.world_paths.keys())
+    
+    def update_log(self, message):
+        self.log_box.append(message)
+        scrollbar = self.log_box.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
     
     def closeEvent(self, event):
         self.stop_threads.set()

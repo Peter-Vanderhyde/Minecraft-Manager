@@ -3,6 +3,7 @@ import socket
 import queue
 import time
 import threading
+import json
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QTextEdit, QStackedLayout, QGridLayout, QWidget, QTextBrowser
 from PyQt6.QtGui import QCloseEvent, QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QTimer, QThread, pyqtSignal, QObject
@@ -15,8 +16,6 @@ class BackgroundWidget(QWidget):
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
         painter.drawPixmap(QRect(0, 0, self.width(), self.height()), self.background_image)
-
-# Make the app open pinging the server then add functionality to the server
 
 class ConnectionWorker(QObject):
     connection_success = pyqtSignal(object)
@@ -33,7 +32,7 @@ class ConnectionWorker(QObject):
             client.setblocking(False)
             client.settimeout(5)
             client.connect((self.ip, self.port))
-            client.sendall("connection test".encode("ascii"))
+            client.sendall("connection test".encode("utf-8"))
             self.connection_success.emit(client)
         except socket.error as e:
             if e.errno == 10035:
@@ -43,28 +42,39 @@ class ConnectionWorker(QObject):
                 self.connection_failure.emit()
 
 class ServerManagerApp(QMainWindow):
+    set_status_signal = pyqtSignal(list)
+    set_players_signal = pyqtSignal(list)
+    set_worlds_list_signal = pyqtSignal(list)
+    get_status_signal = pyqtSignal()
+    update_log_signal = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
 
         # Default IP
         #self.host_ip = "25.6.72.126"
-        self.host_ip = "127.0.0.1"
+        #self.host_ip = "127.0.0.1"
+        self.host_ip = "25.58.119.174"
         self.port = 5555
         self.client = None
         self.close_threads = threading.Event()
         self.receive_thread = None
         self.message_thread = None
         self.connection_thread = None
-        self.player_list = []
         self.status = ""
         self.server_version = ""
-        self.server_world = ""
-        self.world_list = []
         self.log_queue = queue.Queue()
         self.connection_delay_messages = ["Having trouble connecting? Either",
                                      "1. Your Hamachi is not open",
                                      "2. The host's Hamachi is not open",
                                      "3. The host is not running their manager application"]
+
+        # Signals
+        self.set_status_signal.connect(self.set_status)
+        self.set_players_signal.connect(self.set_players)
+        self.set_worlds_list_signal.connect(self.set_worlds_list)
+        self.get_status_signal.connect(self.get_status)
+        self.update_log_signal.connect(self.update_log)
         
         self.init_ui()
         self.connect_button.clicked.connect(self.start_connection_thread)
@@ -128,6 +138,8 @@ class ServerManagerApp(QMainWindow):
         name_prompt_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.name_entry = QLineEdit()
+        self.name_entry.setMaximumWidth(self.width() // 2)
+        self.name_entry.setFont(QFont(self.name_entry.font().family(), int(self.name_entry.font().pointSize() * 1.5)))
         self.name_entry.setPlaceholderText("Display Name")
         self.name_entry.returnPressed.connect(self.send_name)
 
@@ -144,8 +156,8 @@ class ServerManagerApp(QMainWindow):
         self.current_players_label = QLabel("Current Players")
         self.current_players_label.setFont(QFont(self.current_players_label.font().family(), int(self.current_players_label.font().pointSize() * 1.5)))
         self.refresh_button = QPushButton("Refresh")
+        self.refresh_button.clicked.connect(self.get_players)
         self.players_info_box = QTextBrowser()
-        self.players_info_box.setReadOnly(True)
 
         left_column_layout.addWidget(self.current_players_label)
         left_column_layout.addWidget(self.refresh_button)
@@ -165,7 +177,7 @@ class ServerManagerApp(QMainWindow):
         self.server_status_label = QLabel("Status: Pinging...")  # Replace with dynamic status
         self.server_status_label.setFont(QFont("Verdana", int(self.server_status_label.font().pointSize() * 1.5)))
         status_layout.addWidget(self.server_status_label, 0, 0)
-        self.server_status_label.show()
+        self.server_status_label.hide()
         self.server_status_online_label = QLabel("Status: Online")  # Replace with dynamic status
         self.server_status_online_label.setObjectName("statusOnline")
         self.server_status_online_label.setFont(QFont("Verdana", int(self.server_status_online_label.font().pointSize() * 1.5)))
@@ -175,12 +187,15 @@ class ServerManagerApp(QMainWindow):
         self.server_status_offline_label.setObjectName("statusOffline")
         self.server_status_offline_label.setFont(QFont("Verdana", int(self.server_status_offline_label.font().pointSize() * 1.5)))
         status_layout.addWidget(self.server_status_offline_label, 0, 0)
-        self.server_status_offline_label.hide()
+        self.server_status_offline_label.show()
         status_layout.setColumnStretch(1, 1)
         
         self.version_label = QLabel("Server Version: ")
+        self.version_label.setObjectName("details")
         self.world_label = QLabel("Server World: ")
+        self.world_label.setObjectName("details")
         self.refresh_status_button = QPushButton("Refresh Status")
+        self.refresh_status_button.clicked.connect(self.get_status)
         self.log_box = QTextBrowser()
         self.log_box.setReadOnly(True)
         self.message_entry = QLineEdit()
@@ -200,9 +215,12 @@ class ServerManagerApp(QMainWindow):
         self.functions_label = QLabel("Functions")
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
+        self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
         self.stop_button = QPushButton("Stop")
+        self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
         self.restart_button = QPushButton("Restart")
+        self.restart_button.clicked.connect(self.restart_server)
         self.restart_button.setObjectName("restartButton")
 
         functions_layout = QGridLayout()
@@ -211,8 +229,8 @@ class ServerManagerApp(QMainWindow):
 
         # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QHBoxLayout()
-        self.world_dropdown = QComboBox()
-        dropdown_layout.addWidget(self.world_dropdown)  # Dropdown for start options
+        self.dropdown = QComboBox()
+        dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         functions_layout.addLayout(dropdown_layout, 1, 1)
 
         functions_layout.addWidget(self.stop_button, 2, 0, 1, 2)  # Spanning two columns
@@ -329,6 +347,10 @@ class ServerManagerApp(QMainWindow):
                 color: white;
                 font-size: 18px;
             }
+
+            #details {
+                font-size: 16px;
+            }
                            
             #statusOnline {
                 color: lightgreen; /* Text color */
@@ -378,8 +400,8 @@ class ServerManagerApp(QMainWindow):
         self.close_connection_thread()
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client.connect((self.host_ip, self.port))
-        self.send("connection request")
-        accepted = self.client.recv(1024).decode("ascii")
+        self.client.sendall("connection request".encode("utf-8"))
+        accepted = self.client.recv(1024).decode("utf-8")
         if accepted == "accept" or accepted == "identify":
             self.client.setblocking(False)
             self.receive_thread = threading.Thread(target=self.receive)
@@ -404,14 +426,32 @@ class ServerManagerApp(QMainWindow):
             self.send(message)
     
     def receive(self):
+        messages = []
         while not self.close_threads.is_set():
             try:
-                message = self.client.recv(1024).decode("ascii")
+                message = self.client.recv(1024).decode("utf-8")
                 if not message:
                     self.close_threads.set()
                     break
 
-                self.log_queue.put(message)
+                messages += message.split("SERVER-MESSAGE:")[1:]
+                while len(messages) != 0:
+                    message = messages.pop(0)
+                    if not message.startswith("DATA-RETURN"):
+                        self.log_queue.put(message)
+                    else:
+                        self.log_queue.put(f"<font color='blue'>{message}</font>")
+                        data = message.split(':')
+                        key, args = data[0][data[0].find('(')+1:data[0].find(')')], data[1].split(',')
+                        self.log_queue.put(f"<font color='red'>{key}, {args}</font>")
+                        if key == "status":
+                            self.set_status_signal.emit(args)
+                        elif key == "players":
+                            self.set_players_signal.emit(json.loads(args[0]))
+                        elif key == "worlds-list":
+                            self.set_worlds_list_signal.emit(json.loads(args[0]))
+                        elif key in ["start", "stop"] and args == ["refresh"]:
+                            self.get_status_signal.emit()
             except socket.error as e:
                 if e.errno == 10035:
                     time.sleep(0.1)
@@ -425,7 +465,7 @@ class ServerManagerApp(QMainWindow):
             label.setText(self.connection_delay_messages[i])
     
     def send(self, message):
-        self.client.sendall(message.encode("ascii"))
+        self.client.sendall(f"CLIENT-MESSAGE:{message}".encode("utf-8"))
 
     def switch_to_name_prompt(self):
         self.stacked_layout.setCurrentIndex(1) # Show the second page (Name Prompt)
@@ -434,6 +474,7 @@ class ServerManagerApp(QMainWindow):
         name = self.name_entry.text()
         if name != "":
             self.send(name)
+            time.sleep(1)
             self.switch_to_server_manager()
             self.first_connect()
 
@@ -444,29 +485,42 @@ class ServerManagerApp(QMainWindow):
         while not self.close_threads.is_set():
             while not self.log_queue.empty():
                 message = self.log_queue.get()
-                self.log_box.append(message)
-                self.log_box.verticalScrollBar().setValue(self.log_box.verticalScrollBar().maximum())
+                self.update_log_signal.emit(message)
 
     def first_connect(self):
-        self.set_status("pinging")
+        self.get_worlds_list()
         self.get_status()
 
     def get_status(self):
-        pass
+        self.set_status(["pinging",None,None])
+        self.send("MANAGER-REQUEST:get-status")
 
     def get_players(self):
-        pass
+        self.send("MANAGER-REQUEST:get-players")
+
+    def get_worlds_list(self):
+        self.send("MANAGER-REQUEST:get-worlds-list")
     
-    def server_command(self, command):
-        pass
+    def start_server(self, world):
+        self.send(f"MANAGER-REQUEST:start-server,{world}")
     
-    def set_status(self, status, version=None, world=None):
+    def stop_server(self):
+        self.send("MANAGER-REQUEST:stop-server")
+    
+    def restart_server(self):
+        self.send("MANAGER-REQUEST:restart-server")
+    
+    def set_status(self, info):
+        status, version, world = info
         if status == "online":
             self.status = "online"
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
+            self.version_label.setText(f"Version: {version}")
+            self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
+            self.get_players()
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
@@ -476,7 +530,10 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.show()
             self.server_status_online_label.hide()
+            self.version_label.setText("Version:")
+            self.world_label.setText("World:")
             self.refresh_button.setEnabled(False)
+            self.players_info_box.clear()
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
@@ -486,17 +543,32 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.show()
             self.server_status_offline_label.hide()
             self.server_status_online_label.hide()
+            self.version_label.setText("Version:")
+            self.world_label.setText("World:")
             self.refresh_button.setEnabled(False)
+            self.players_info_box.clear()
             self.refresh_status_button.setEnabled(False)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(False)
             self.restart_button.setEnabled(False)
 
     def set_players(self, players):
-        pass
-
-    def update_log(self, log):
-        pass
+        self.players_info_box.clear()
+        if len(players) == 0:
+            self.players_info_box.append("<font color='red'>No players online</font>")
+            return
+        
+        for player in players:
+            self.players_info_box.append(f"<font color='blue'>{player}</font>")
+    
+    def set_worlds_list(self, worlds):
+        self.dropdown.clear()
+        self.dropdown.addItems(worlds)
+    
+    def update_log(self, message):
+        self.log_box.append(message)
+        scrollbar = self.log_box.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
     
     def closeEvent(self, event):
         self.close_threads.set()
