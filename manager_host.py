@@ -13,8 +13,6 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal
 
-#10045
-
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -167,11 +165,32 @@ class ServerManagerApp(QMainWindow):
         server_manager_layout.addLayout(center_column_layout, 5)  # Keep the center column as it is
         server_manager_layout.addLayout(right_column_layout, 2)  # Make the right column twice as wide
 
+        # Page 2: Startup error
+        error_layout = QVBoxLayout()
+
+        top_box = QVBoxLayout()
+        self.error_label = QLabel("Unable to start manager")
+        self.error_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        self.error_label.setObjectName("error")
+        top_box.addWidget(self.error_label)
+        bot_box = QVBoxLayout()
+        self.info_label = QLabel("Is Hamachi running?")
+        self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.info_label.setObjectName("details")
+        bot_box.addWidget(self.info_label)
+
+        error_layout.addLayout(top_box)
+        error_layout.addLayout(bot_box)
+
         server_manager_page = QWidget()
         server_manager_page.setLayout(server_manager_layout)
 
+        error_page = QWidget()
+        error_page.setLayout(error_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
+        self.stacked_layout.addWidget(error_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -255,6 +274,12 @@ class ServerManagerApp(QMainWindow):
 
             QLabel {
                 color: white;
+            }
+
+            #error {
+                color: black;
+                font-size: 30px;
+                font-family: "Arial";
             }
 
             #details {
@@ -375,12 +400,19 @@ class ServerManagerApp(QMainWindow):
         end_time = time.time() + delay_amount
         while time.time() < end_time:
             QApplication.processEvents()
+    
+    def show_error_page(self):
+        self.stacked_layout.setCurrentIndex(1)
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind((self.host_ip, self.port))
-        self.server.listen()
-        self.server.setblocking(False)
+        try:
+            self.server.bind((self.host_ip, self.port))
+            self.server.listen()
+            self.server.setblocking(False)
+        except:
+            self.show_error_page()
+            return
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
         self.message_thread = threading.Thread(target=self.check_messages)
