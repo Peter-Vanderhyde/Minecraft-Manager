@@ -3,7 +3,7 @@
 ### About
 This is a Java Minecraft server manager that allows for basic control of the server being run on a host's machine by the host and others on the same network. If the host has multiple server worlds available on their machine, clients can select a world to run. 
   
-![Manager window](window.png)
+![!\[Manager window\](window.png)](Images/window.png)
 
 ### Features
 Through this manager both the host and clients will have the ability to

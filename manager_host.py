@@ -16,7 +16,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.background_image = QPixmap("block_background.png")
+        self.background_image = QPixmap("Images\\block_background.png")
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -178,7 +178,7 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon("block_icon.png")
+        icon = QIcon("Images\\block_icon.png")
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
