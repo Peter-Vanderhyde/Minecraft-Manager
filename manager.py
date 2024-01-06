@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.background_image = QPixmap("block_background.png")
+        self.background_image = QPixmap("Images\\block_background.png")
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -258,7 +258,7 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon("block_icon.png")
+        icon = QIcon("Images\\block_icon.png")
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
@@ -592,9 +592,12 @@ class ServerManagerApp(QMainWindow):
         scrollbar.setValue(scrollbar.maximum())
     
     def closeEvent(self, event):
-        self.send("CLOSING")
+        try:
+            self.send("CLOSING")
+            self.close_connection_thread()
+        except:
+            pass
         self.close_threads.set()
-        self.close_connection_thread()
         if self.receive_thread:
             self.receive_thread.join()
         if self.message_thread:
