@@ -1,7 +1,6 @@
 import socket
 import threading
 import os
-import subprocess
 import pyautogui as pag
 import pygetwindow as pgw
 import time
