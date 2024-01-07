@@ -10,6 +10,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
 TESTING = False
+VERSION = "v2.2"
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -97,7 +98,8 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout = QStackedLayout()
 
         # Page 1: Connect to Server
-        connect_layout = QVBoxLayout()
+        connect_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
         input_layout = QVBoxLayout()
         input_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
@@ -107,6 +109,7 @@ class ServerManagerApp(QMainWindow):
         host_ip_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.host_ip_entry = QLineEdit(self.host_ip)  # Set default IP
+        self.host_ip_entry.setMinimumWidth(self.width() // 2)
         self.host_ip_entry.setMaximumWidth(self.width() // 2)
         self.host_ip_entry.setFont(QFont(self.host_ip_entry.font().family(), int(self.host_ip_entry.font().pointSize() * 1.5)))
         self.host_ip_entry.setPlaceholderText("IP Address")
@@ -132,23 +135,48 @@ class ServerManagerApp(QMainWindow):
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             message_layout.addWidget(label)
 
-        connect_layout.addLayout(input_layout)
-        connect_layout.addLayout(message_layout)
+        center_column_layout.addLayout(input_layout)
+        center_column_layout.addLayout(message_layout)
+
+
+        right_column_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        connect_layout.setColumnStretch(0, 1)
+        connect_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        connect_layout.addLayout(right_column_layout, 0, 9)
+        connect_layout.setColumnStretch(9, 1)
 
         connect_page = QWidget()
         connect_page.setLayout(connect_layout)
 
         # Page 2: Name Prompt
-        name_prompt_layout = QVBoxLayout()
-        name_prompt_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_prompt_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        center_column_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.name_entry = QLineEdit()
+        self.name_entry.setMinimumWidth(self.width() // 2)
         self.name_entry.setMaximumWidth(self.width() // 2)
         self.name_entry.setFont(QFont(self.name_entry.font().family(), int(self.name_entry.font().pointSize() * 1.5)))
         self.name_entry.setPlaceholderText("Display Name")
         self.name_entry.returnPressed.connect(self.send_name)
 
-        name_prompt_layout.addWidget(self.name_entry)
+        center_column_layout.addWidget(self.name_entry, Qt.AlignmentFlag.AlignHCenter)
+
+        right_column_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        name_prompt_layout.setColumnStretch(0, 1)
+        name_prompt_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        name_prompt_layout.addLayout(right_column_layout, 0, 9)
+        name_prompt_layout.setColumnStretch(9, 1)
 
         name_prompt_page = QWidget()
         name_prompt_page.setLayout(name_prompt_layout)
@@ -244,6 +272,9 @@ class ServerManagerApp(QMainWindow):
 
         right_column_layout.addLayout(functions_layout)
         right_column_layout.addStretch(1)  # Add empty space at the bottom
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         server_manager_layout.addLayout(left_column_layout, 2)  # Make the left column twice as wide
         server_manager_layout.addLayout(center_column_layout, 5)  # Keep the center column as it is
@@ -357,6 +388,11 @@ class ServerManagerApp(QMainWindow):
             }
 
             #details {
+                font-size: 16px;
+            }
+
+            #version_num {
+                color: #4285f4;
                 font-size: 16px;
             }
                            

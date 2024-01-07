@@ -1,7 +1,6 @@
 import socket
 import threading
 import os
-import subprocess
 import pyautogui as pag
 import pygetwindow as pgw
 import time
@@ -15,6 +14,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
 TESTING = False
+VERSION = "v2.2"
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -37,7 +37,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        self.default_ip = "25.6.72.126"
+        self.default_ip = "127.0.0.1"
         self.host_ip = ""
         self.port = 5555
         self.server_port = "25565"
@@ -167,13 +167,17 @@ class ServerManagerApp(QMainWindow):
 
         right_column_layout.addLayout(functions_layout)
         right_column_layout.addStretch(1)  # Add empty space at the bottom
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         server_manager_layout.addLayout(left_column_layout, 2)  # Make the left column twice as wide
         server_manager_layout.addLayout(center_column_layout, 5)  # Keep the center column as it is
         server_manager_layout.addLayout(right_column_layout, 2)  # Make the right column twice as wide
 
         # Page 2: Startup error
-        error_layout = QVBoxLayout()
+        error_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
 
         top_box = QVBoxLayout()
         self.error_label = QLabel("Unable to start manager")
@@ -186,8 +190,18 @@ class ServerManagerApp(QMainWindow):
         self.info_label.setObjectName("details")
         bot_box.addWidget(self.info_label)
 
-        error_layout.addLayout(top_box)
-        error_layout.addLayout(bot_box)
+        center_column_layout.addLayout(top_box)
+        center_column_layout.addLayout(bot_box)
+
+        right_column_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        error_layout.setColumnStretch(0, 1)
+        error_layout.addLayout(center_column_layout, 0, 1, 0, 8)
+        error_layout.addLayout(right_column_layout, 0, 9)
+        error_layout.setColumnStretch(9, 1)
 
         server_manager_page = QWidget()
         server_manager_page.setLayout(server_manager_layout)
@@ -296,6 +310,11 @@ class ServerManagerApp(QMainWindow):
                 font-size: 16px;
             }
 
+            #version_num {
+                color: #4285f4;
+                font-size: 16px;
+            }
+
             #statusOnline {
                 color: lightgreen; /* Text color */
                 background-color: darkgreen; /* Background color of the text outline */
@@ -350,19 +369,35 @@ class ServerManagerApp(QMainWindow):
     def load_worlds(self):
         worlds_to_ignore = []
         for world, path in self.world_paths.items():
+            # Check batch file exists
             if not os.path.isfile(path):
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to find file '{path}'.</font>")
                 worlds_to_ignore.append(world)
                 continue
+            else:
+                # Make sure the command uses javaw instead of java
+                try:
+                    with open(path, 'r') as batch_file:
+                        command = batch_file.read()
+                    
+                    new_command = command.replace("java ", "javaw ")
+                    if command != new_command:
+                        with open(path, 'w') as batch_file:
+                            batch_file.write(new_command)
+                except:
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to inspect batch file at {path}.</font>")
+                    worlds_to_ignore.append(world)
 
             directory = os.path.dirname(path)
             world_folder_path = f"{directory}\\{world}"
             properties_path = f"{directory}\\server.properties"
+            # Look for server properties file
             if os.path.isfile(properties_path):
                 try:
                     with open(properties_path, 'r') as f:
                         lines = f.readlines()
                     
+                    # Make sure the properties are correctly set up for queries
                     edited = False
                     found_query = False
                     found_port = False
@@ -474,11 +509,15 @@ class ServerManagerApp(QMainWindow):
             while not stop and not self.stop_threads.is_set():
                 try:
                     message = client.recv(1024).decode('utf-8')
-                    if not message or message == "CLOSING":
-                        skip_receive = True
-                        break
+                    if not message:
+                        client.close()
+                        return
 
                     messages += message.split("CLIENT-MESSAGE:")[1:]
+                    if "CLOSING" in messages:
+                        client.close()
+                        return
+
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
                     self.update_names()
@@ -644,9 +683,10 @@ class ServerManagerApp(QMainWindow):
         else:
             try:
                 dirname = os.path.dirname(os.path.abspath(path))
-                process = subprocess.Popen([path], shell=True, cwd=dirname, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
+                os.system(f'start cmd /C "title Server Ignition && cd /d {dirname} && \"{path}\""')
                 loop = True
                 window = None
+                ignition_window = None
                 while loop and not self.stop_threads.is_set():
                     QApplication.processEvents()
                     windows = pgw.getAllTitles()
@@ -654,9 +694,15 @@ class ServerManagerApp(QMainWindow):
                         if w == "Minecraft server":
                             loop = False
                             window = pgw.getWindowsWithTitle(w)[0]
-                    
+                        elif ignition_window is None and "Server Ignition" in w:
+                            ignition_window = pgw.getWindowsWithTitle(w)[0]
+                
+                if self.stop_threads.is_set():
+                    return
 
                 window.minimize()
+                if ignition_window:
+                    ignition_window.close()
 
                 self.delay(8)
 
