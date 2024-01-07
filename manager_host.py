@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
-TESTING = False
+TESTING = True
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -37,7 +37,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        self.default_ip = "25.6.72.126"
+        self.default_ip = "127.0.0.1"
         self.host_ip = ""
         self.port = 5555
         self.server_port = "25565"
@@ -644,9 +644,11 @@ class ServerManagerApp(QMainWindow):
         else:
             try:
                 dirname = os.path.dirname(os.path.abspath(path))
-                process = subprocess.Popen([path], shell=True, cwd=dirname, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
+                process = subprocess.Popen([f"{path}"], cwd=dirname, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
+                #os.system(f'start cmd /C "cd /d {dirname} && \"{path}\""')
                 loop = True
                 window = None
+                ignition_window = None
                 while loop and not self.stop_threads.is_set():
                     QApplication.processEvents()
                     windows = pgw.getAllTitles()
@@ -654,9 +656,12 @@ class ServerManagerApp(QMainWindow):
                         if w == "Minecraft server":
                             loop = False
                             window = pgw.getWindowsWithTitle(w)[0]
-                    
-
+                        elif ignition_window is None and "cmd" in w:
+                            ignition_window = pgw.getWindowsWithTitle(w)[0]
+                
                 window.minimize()
+                if ignition_window:
+                    ignition_window.close()
 
                 self.delay(8)
 
