@@ -349,19 +349,35 @@ class ServerManagerApp(QMainWindow):
     def load_worlds(self):
         worlds_to_ignore = []
         for world, path in self.world_paths.items():
+            # Check batch file exists
             if not os.path.isfile(path):
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to find file '{path}'.</font>")
                 worlds_to_ignore.append(world)
                 continue
+            else:
+                # Make sure the command uses javaw instead of java
+                try:
+                    with open(path, 'r') as batch_file:
+                        command = batch_file.read()
+                    
+                    new_command = command.replace("java ", "javaw ")
+                    if command != new_command:
+                        with open(path, 'w') as batch_file:
+                            batch_file.write(new_command)
+                except:
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to inspect batch file at {path}.</font>")
+                    worlds_to_ignore.append(world)
 
             directory = os.path.dirname(path)
             world_folder_path = f"{directory}\\{world}"
             properties_path = f"{directory}\\server.properties"
+            # Look for server properties file
             if os.path.isfile(properties_path):
                 try:
                     with open(properties_path, 'r') as f:
                         lines = f.readlines()
                     
+                    # Make sure the properties are correctly set up for queries
                     edited = False
                     found_query = False
                     found_port = False
