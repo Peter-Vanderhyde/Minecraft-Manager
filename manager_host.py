@@ -509,11 +509,15 @@ class ServerManagerApp(QMainWindow):
             while not stop and not self.stop_threads.is_set():
                 try:
                     message = client.recv(1024).decode('utf-8')
-                    if not message or message == "CLOSING":
-                        skip_receive = True
-                        break
+                    if not message:
+                        client.close()
+                        return
 
                     messages += message.split("CLIENT-MESSAGE:")[1:]
+                    if "CLOSING" in messages:
+                        client.close()
+                        return
+
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
                     self.update_names()
