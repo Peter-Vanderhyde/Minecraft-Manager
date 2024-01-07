@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
-TESTING = True
+TESTING = False
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -644,8 +644,7 @@ class ServerManagerApp(QMainWindow):
         else:
             try:
                 dirname = os.path.dirname(os.path.abspath(path))
-                process = subprocess.Popen([f"{path}"], cwd=dirname, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
-                #os.system(f'start cmd /C "cd /d {dirname} && \"{path}\""')
+                os.system(f'start cmd /C "title Server Ignition && cd /d {dirname} && \"{path}\""')
                 loop = True
                 window = None
                 ignition_window = None
@@ -656,9 +655,12 @@ class ServerManagerApp(QMainWindow):
                         if w == "Minecraft server":
                             loop = False
                             window = pgw.getWindowsWithTitle(w)[0]
-                        elif ignition_window is None and "cmd" in w:
+                        elif ignition_window is None and "Server Ignition" in w:
                             ignition_window = pgw.getWindowsWithTitle(w)[0]
                 
+                if self.stop_threads.is_set():
+                    return
+
                 window.minimize()
                 if ignition_window:
                     ignition_window.close()
