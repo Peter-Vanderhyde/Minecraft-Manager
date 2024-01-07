@@ -14,6 +14,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
 TESTING = False
+VERSION = "v2.2"
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
@@ -166,13 +167,17 @@ class ServerManagerApp(QMainWindow):
 
         right_column_layout.addLayout(functions_layout)
         right_column_layout.addStretch(1)  # Add empty space at the bottom
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         server_manager_layout.addLayout(left_column_layout, 2)  # Make the left column twice as wide
         server_manager_layout.addLayout(center_column_layout, 5)  # Keep the center column as it is
         server_manager_layout.addLayout(right_column_layout, 2)  # Make the right column twice as wide
 
         # Page 2: Startup error
-        error_layout = QVBoxLayout()
+        error_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
 
         top_box = QVBoxLayout()
         self.error_label = QLabel("Unable to start manager")
@@ -185,8 +190,18 @@ class ServerManagerApp(QMainWindow):
         self.info_label.setObjectName("details")
         bot_box.addWidget(self.info_label)
 
-        error_layout.addLayout(top_box)
-        error_layout.addLayout(bot_box)
+        center_column_layout.addLayout(top_box)
+        center_column_layout.addLayout(bot_box)
+
+        right_column_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        error_layout.setColumnStretch(0, 1)
+        error_layout.addLayout(center_column_layout, 0, 1, 0, 8)
+        error_layout.addLayout(right_column_layout, 0, 9)
+        error_layout.setColumnStretch(9, 1)
 
         server_manager_page = QWidget()
         server_manager_page.setLayout(server_manager_layout)
@@ -292,6 +307,11 @@ class ServerManagerApp(QMainWindow):
             }
 
             #details {
+                font-size: 16px;
+            }
+
+            #version_num {
+                color: #4285f4;
                 font-size: 16px;
             }
 
