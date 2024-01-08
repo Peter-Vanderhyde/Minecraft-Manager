@@ -10,15 +10,19 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
 TESTING = False
-VERSION = "v2.2"
+VERSION = "v2.3"
+
+if TESTING:
+    STYLE_PATH = "Styles"
+    IMAGE_PATH = "Images"
+else:
+    STYLE_PATH = sys._MEIPASS
+    IMAGE_PATH = sys._MEIPASS
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        if TESTING:
-            self.background_image = QPixmap("block_background.png")
-        else:
-            self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
+        self.background_image = QPixmap(os.path.join(IMAGE_PATH, "block_background.png"))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -295,123 +299,14 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        if TESTING:
-            icon = QIcon("block_icon.png")
-        else:
-            icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
+        icon = QIcon(os.path.join(IMAGE_PATH, "block_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        self.setStyleSheet(
-            """
-            text {
-                color: white;
-            }
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                color: white;
-                padding: 5px 15px;
-                text-align: center;
-                text-decoration: none;
-                font-size: 16px;
-                margin: 4px 2px;
-                border-radius: 8px;
-            }
-                           
-            QPushButton:hover {
-                background-color: #45a049; /* Change background color on hover */
-            }
-
-            QPushButton:pressed {
-                background-color: #3c9039; /* Change background color when pressed */
-            }
-                           
-            QPushButton:disabled {
-                background-color: #d3d3d3; /* Light gray */
-            }
-
-            #stopButton {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-            }
-
-            #stopButton:hover {
-                background-color: #780000; /* Darker red on hover */
-            }
-
-            #stopButton:pressed {
-                background-color: #660000; /* Even darker red when pressed */
-            }
-
-            #restartButton {
-                background-color: #3b5998; /* Blue variant */
-                color: #4285f4;
-            }
-
-            #restartButton:hover {
-                background-color: #2d4278; /* Darker blue on hover */
-            }
-
-            #restartButton:pressed {
-                background-color: #1d2951; /* Even darker blue when pressed */
-            }
-
-            #stopButton:disabled,
-            #restartButton:disabled {
-                background-color: #a0a0a0; /* Slightly lighter gray for disabled */
-                color: #d0d0d0; /* Lighter text color for disabled */
-            }
-
-            QLineEdit, QTextEdit {
-                border: 4px solid #4CAF50;
-                border-radius: 8px;
-                padding: 0px;
-            }
-
-            QLabel {
-                color: white;
-            }
-
-            #mediumText {
-                font-size: 27px;
-            }
-                           
-            #connectingText {
-                color: #4285f4;
-                font-size: 28px;
-            }
-
-            #messageText {
-                color: white;
-                font-size: 18px;
-            }
-
-            #details {
-                font-size: 16px;
-            }
-
-            #version_num {
-                color: #4285f4;
-                font-size: 16px;
-            }
-                           
-            #statusOnline {
-                color: lightgreen; /* Text color */
-                background-color: darkgreen; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-            
-            #statusOffline {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-        """)
+        with open(os.path.join(STYLE_PATH, "manager_style.css"), 'r') as stylesheet:
+            style_str = stylesheet.read()
+        
+        self.setStyleSheet(style_str)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount

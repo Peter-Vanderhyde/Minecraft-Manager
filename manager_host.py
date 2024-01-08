@@ -5,24 +5,29 @@ import pyautogui as pag
 import pygetwindow as pgw
 import time
 import json
-from mcstatus import JavaServer
-
 import sys
 import queue
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
+import queries
+import file_funcs
+
 TESTING = False
-VERSION = "v2.2"
+VERSION = "v2.3"
+
+if TESTING:
+    STYLE_PATH = "Styles"
+    IMAGE_PATH = "Images"
+else:
+    STYLE_PATH = sys._MEIPASS
+    IMAGE_PATH = sys._MEIPASS
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        if TESTING:
-            self.background_image = QPixmap("block_background.png")
-        else:
-            self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
+        self.background_image = QPixmap(os.path.join(IMAGE_PATH, "block_background.png"))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -62,7 +67,7 @@ class ServerManagerApp(QMainWindow):
         self.set_players_signal.connect(self.set_players)
 
         self.init_ui()
-        self.load_settings()
+        self.host_ip, self.ips, self.world_paths = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
         self.start_manager_server()
         self.first_load()
 
@@ -220,238 +225,14 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        if TESTING:
-            icon = QIcon("block_icon.png")
-        else:
-            icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
+        icon = QIcon(os.path.join(IMAGE_PATH, "block_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        self.setStyleSheet(
-            """
-            text {
-                color: white;
-            }
-
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                color: white;
-                padding: 5px 15px;
-                text-align: center;
-                text-decoration: none;
-                font-size: 16px;
-                margin: 4px 2px;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #45a049; /* Change background color on hover */
-            }
-
-            QPushButton:pressed {
-                background-color: #3c9039; /* Change background color when pressed */
-            }
-
-            QPushButton:disabled {
-                background-color: #a0a0a0; /* Slightly lighter gray for disabled */
-                color: #d0d0d0; /* Lighter text color for disabled */
-            }
-
-            #stopButton:disabled,
-            #restartButton:disabled {
-                background-color: #a0a0a0; /* Slightly lighter gray for disabled */
-                color: #d0d0d0; /* Lighter text color for disabled */
-            }
-
-            #stopButton {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-            }
-
-            #stopButton:hover {
-                background-color: #780000; /* Darker red on hover */
-            }
-
-            #stopButton:pressed {
-                background-color: #660000; /* Even darker red when pressed */
-            }
-
-            #restartButton {
-                background-color: #3b5998; /* Blue variant */
-                color: #4285f4;
-            }
-
-            #restartButton:hover {
-                background-color: #2d4278; /* Darker blue on hover */
-            }
-
-            #restartButton:pressed {
-                background-color: #1d2951; /* Even darker blue when pressed */
-            }
-
-            QLineEdit, QTextEdit {
-                border: 4px solid #4CAF50;
-                border-radius: 8px;
-                padding: 0px;
-            }
-
-            QLabel {
-                color: white;
-            }
-
-            #error {
-                color: black;
-                font-size: 30px;
-                font-family: "Arial";
-            }
-
-            #details {
-                font-size: 16px;
-            }
-
-            #version_num {
-                color: #4285f4;
-                font-size: 16px;
-            }
-
-            #statusOnline {
-                color: lightgreen; /* Text color */
-                background-color: darkgreen; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-
-            #statusOffline {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-
-        """)
-
-    def load_settings(self):
-        data = {"ip": f"{self.default_ip}", "names": {}, "worlds": {}}
-        try:
-            with open("manager_settings.json", 'r') as f:
-                data = json.load(f)
-        except:
-            with open("manager_settings.json", 'w') as f:
-                json.dump(data, f)
-            self.log_queue.put("Settings file not found.")
-            self.log_queue.put("Created new manager_settings.json file.")
-            return
+        with open(os.path.join(STYLE_PATH, "manager_host_style.css"), 'r') as stylesheet:
+            style_str = stylesheet.read()
         
-        self.host_ip = data.get("ip")
-        self.ips = data.get("names")
-        self.world_paths = data.get("worlds")
-        if self.world_paths is not None:
-            self.load_worlds()
-        else:
-            self.world_paths = {}
-            self.log_queue.put(f"<font color='red'>Unable to find worlds in the settings.</font>")
-        
-        if self.host_ip is None or self.ips is None:
-            if self.ips is None:
-                self.ips = {}
-            if self.host_ip is None:
-                self.host_ip = self.default_ip
-            self.update_names()
-    
-    def update_names(self):
-        with self.file_lock:
-            with open("manager_settings.json", 'w') as f:
-                json.dump({"ip":f"{self.host_ip}", "names":self.ips, "worlds":self.world_paths}, f)
-    
-    def load_worlds(self):
-        worlds_to_ignore = []
-        for world, path in self.world_paths.items():
-            # Check batch file exists
-            if not os.path.isfile(path):
-                self.log_queue.put(f"<font color='red'>ERROR: Unable to find file '{path}'.</font>")
-                worlds_to_ignore.append(world)
-                continue
-            else:
-                # Make sure the command uses javaw instead of java
-                try:
-                    with open(path, 'r') as batch_file:
-                        command = batch_file.read()
-                    
-                    new_command = command.replace("java ", "javaw ")
-                    if command != new_command:
-                        with open(path, 'w') as batch_file:
-                            batch_file.write(new_command)
-                except:
-                    self.log_queue.put(f"<font color='red'>ERROR: Unable to inspect batch file at {path}.</font>")
-                    worlds_to_ignore.append(world)
-
-            directory = os.path.dirname(path)
-            world_folder_path = f"{directory}\\{world}"
-            properties_path = f"{directory}\\server.properties"
-            # Look for server properties file
-            if os.path.isfile(properties_path):
-                try:
-                    with open(properties_path, 'r') as f:
-                        lines = f.readlines()
-                    
-                    # Make sure the properties are correctly set up for queries
-                    edited = False
-                    found_query = False
-                    found_port = False
-                    for i, line in enumerate(lines):
-                        compare = None
-                        if line.startswith("enable-query="):
-                            found_query = True
-                            compare = "enable-query=true\n"
-                        elif line.startswith("query.port="):
-                            found_port = True
-                            compare = "query.port=25565\n"
-                        elif line.startswith("level-name="):
-                            compare = f"level-name={world}\n"
-                            if line != compare:
-                                other_world_name = line.split('=')[1].strip()
-                                other_world_folder = f"{directory}\\{other_world_name}"
-                                if os.path.isdir(world_folder_path):
-                                    # Will switch to reference this folder
-                                    pass
-                                elif os.path.isdir(other_world_folder):
-                                    try:
-                                        os.rename(other_world_folder, world_folder_path)
-                                    except:
-                                        self.log_queue.put(f"<font color='red'>ERROR: Unable to rename world folder '{other_world_name}' to '{world}'.</font>")
-                                        if not os.path.isdir(world_folder_path):
-                                            worlds_to_ignore.append(world)
-                            else:
-                                if not os.path.isdir(world_folder_path):
-                                    self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' folder at '{directory}'.</font>")
-                                    worlds_to_ignore.append(world)
-                        
-                        if compare and line != compare:
-                            lines[i] = compare
-                            edited = True
-                    
-                    if not found_query:
-                        lines.append("\nenable-query=true")
-                        edited = True
-                    if not found_port:
-                        lines.append("\nquery.port=25565")
-                        edited = True
-                    
-                    if edited:
-                        with open(properties_path, 'w') as f:
-                            f.writelines(lines)
-                except IOError:
-                    self.log_queue.put(f"<font color='orange'>WARNING: Was unable to check if '{path}' has query enabled \
-                                        while server.properties is being accessed.</font>")
-            else:
-                self.log_queue.put(f"<font color='orange'>WARNING: Unable to find 'server.properties' in folder at '{directory}'. \
-                                   Make sure the server's .bat file is placed in the server folder.</font>")
-        
-        for world in worlds_to_ignore:
-            self.world_paths.pop(world)
+        self.setStyleSheet(style_str)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
@@ -520,7 +301,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    self.update_names()
+                    file_funcs.update_names(self.file_lock, self.host_ip, self.ips, self.world_paths)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -754,26 +535,22 @@ class ServerManagerApp(QMainWindow):
         self.start_server(self.previous_world)
 
     def query_status(self):
-        try:
-            query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
-            if query.map:
-                self.previous_world = query.map
-            
+        status, brand, version, world = queries.status(self.host_ip, self.server_port)
+        if status == "offline":
+            return status, "", ""
+        else:
+            self.previous_world = world or self.previous_world
+
+            fabric = ""
+            server_dir = os.path.dirname(self.world_paths.get(world))
             # Check for possible fabric presence
-            server_dir = os.path.dirname(self.world_paths.get(query.map))
             if os.path.isdir(server_dir) and os.path.isfile(os.path.join(server_dir, "fabric-server-launch.jar")):
-                return "online", f"{query.software.brand}/fabric {query.software.version}", query.map
-            else:
-                return "online", f"{query.software.brand} {query.software.version}", query.map
-        except:
-            return "offline", "", ""
+                fabric = "/fabric"
+            
+            return status, f"{brand}{fabric} {version}", world
     
     def query_players(self):
-        try:
-            query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
-            return query.players.names
-        except TimeoutError:
-            return []
+        return queries.players(self.host_ip, self.server_port)
     
     def query_worlds_list(self):
         return list(self.world_paths.keys())
