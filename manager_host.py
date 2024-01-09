@@ -152,6 +152,7 @@ class ServerManagerApp(QMainWindow):
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
+        self.world_version_label = QLabel("")
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
@@ -161,16 +162,18 @@ class ServerManagerApp(QMainWindow):
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0)
+        functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
 
         # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QHBoxLayout()
         self.dropdown = QComboBox()
+        self.dropdown.currentTextChanged.connect(self.set_selected_world_version)
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         functions_layout.addLayout(dropdown_layout, 1, 1)
+        functions_layout.addWidget(self.world_version_label, 2, 1)
 
-        functions_layout.addWidget(self.stop_button, 2, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(self.restart_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -477,49 +480,49 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
             return error
         else:
-            # try:
-            if not restart:
-                self.log_queue.put(f"Preparing for version {version}.")
-                self.delay(1)
-                if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue):
-                    raise RuntimeError("Failed to prepare settings.")
-            
-            os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
-            loop = True
-            window = None
-            ignition_window = None
-            end_time = time.time() + 30
-            while loop and not self.stop_threads.is_set():
-                QApplication.processEvents()
-                windows = pgw.getAllTitles()
-                for w in windows:
-                    if w == "Minecraft server":
-                        loop = False
-                        window = pgw.getWindowsWithTitle(w)[0]
-                    elif ignition_window is None and "Server Ignition" in w:
-                        ignition_window = pgw.getWindowsWithTitle(w)[0]
+            try:
+                if not restart:
+                    self.log_queue.put(f"Preparing for version {version}.")
+                    self.delay(1)
+                    if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue):
+                        raise RuntimeError("Failed to prepare settings.")
                 
-                if time.time() > end_time:
-                    self.log_queue.put("<font color='red'>Timed out waiting for the server to start up.</font>")
-                    return "<font color='red'>Timed out waiting for the server to start.</font>"
-            
-            if self.stop_threads.is_set():
-                return
+                os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
+                loop = True
+                window = None
+                ignition_window = None
+                end_time = time.time() + 30
+                while loop and not self.stop_threads.is_set():
+                    QApplication.processEvents()
+                    windows = pgw.getAllTitles()
+                    for w in windows:
+                        if w == "Minecraft server":
+                            loop = False
+                            window = pgw.getWindowsWithTitle(w)[0]
+                        elif ignition_window is None and "Server Ignition" in w:
+                            ignition_window = pgw.getWindowsWithTitle(w)[0]
+                    
+                    if time.time() > end_time:
+                        self.log_queue.put("<font color='red'>Timed out waiting for the server to start up.</font>")
+                        return "<font color='red'>Timed out waiting for the server to start.</font>"
+                
+                if self.stop_threads.is_set():
+                    return
 
-            window.minimize()
-            if ignition_window:
-                ignition_window.close()
+                window.minimize()
+                if ignition_window:
+                    ignition_window.close()
 
-            self.delay(8)
+                self.delay(8)
 
-            self.get_status_signal.emit()
-            self.log_queue.put(f"Server world '{world}' has been started.")
-            self.broadcast(f"Server world '{world}' has been started.")
-            self.send_data("start", "refresh")
-            # except:
-            #     error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
-            #     self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
-            #     return error
+                self.get_status_signal.emit()
+                self.log_queue.put(f"Server world '{world}' has been started.")
+                self.broadcast(f"Server world '{world}' has been started.")
+                self.send_data("start", "refresh")
+            except:
+                error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
+                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
+                return error
     
     def stop_server(self):
         status, _, _ = self.query_status()
@@ -646,6 +649,11 @@ class ServerManagerApp(QMainWindow):
     def set_worlds_list(self):
         self.dropdown.clear()
         self.dropdown.addItems(self.worlds.keys())
+        self.set_selected_world_version(self.dropdown.currentText())
+    
+    def set_selected_world_version(self, world):
+        if world:
+            self.world_version_label.setText(f'v{self.worlds[world]["version"]}')
     
     @pyqtSlot()
     def onWindowStateChanged(self):

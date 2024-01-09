@@ -131,47 +131,47 @@ def update_names(file_lock, host_ip, ips, server_path, worlds):
 
 def prepare_server_settings(world, version, fabric, server_path, log_queue):
     # Change the properties
-    # try:
-    with open(os.path.join(server_path, "server.properties"), 'r') as properties:
-        lines = properties.readlines()
-    
-    for i, line in enumerate(lines):
-        if line.startswith("level-name="):
-            lines[i] = f"level-name=worlds/{world}\n"
-    
-    with open(os.path.join(server_path, "server.properties"), 'w') as properties:
-        properties.writelines(lines)
-    
-    # TODO Change the .jar
-    source_path = os.path.join(server_path, "versions", version, f"server-{version}.jar")
-    if not os.path.isfile(source_path):
-        # Download needed jar
-        if not os.path.isdir(os.path.join(server_path, "versions")):
-            os.mkdir(os.path.join(server_path, "versions"))
-        if not os.path.isdir(os.path.join(server_path, "versions", version)):
-            os.mkdir(os.path.join(server_path, "versions", version))
-    
-    jars = glob.glob(os.path.join(server_path, "*.jar"))
-    for jar in jars:
-        os.remove(jar)
-    
-    queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
-    time.sleep(1)
-    # Delete libraries and re-extract them
-    if os.path.isdir(os.path.join(server_path, "libraries")):
-        os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
-    
-    destination = server_path
-    new_name = f"server-{version}.jar"
-    shutil.copy2(source_path, os.path.join(destination, new_name))
-    with open(os.path.join(server_path, "run.bat"), 'r') as b:
-        line = b.read()
-    command, file = line.split(" -jar ")
-    new_command = f"{command} -jar {new_name}"
-    with open(os.path.join(server_path, "run.bat"), 'w') as b:
-        b.write(new_command)
-    time.sleep(1)
-    
-    return True
-    # except:
-    #     return False
+    try:
+        with open(os.path.join(server_path, "server.properties"), 'r') as properties:
+            lines = properties.readlines()
+        
+        for i, line in enumerate(lines):
+            if line.startswith("level-name="):
+                lines[i] = f"level-name=worlds/{world}\n"
+        
+        with open(os.path.join(server_path, "server.properties"), 'w') as properties:
+            properties.writelines(lines)
+        
+        # TODO Change the .jar
+        source_path = os.path.join(server_path, "versions", version, f"server-{version}.jar")
+        if not os.path.isfile(source_path):
+            # Download needed jar
+            if not os.path.isdir(os.path.join(server_path, "versions")):
+                os.mkdir(os.path.join(server_path, "versions"))
+            if not os.path.isdir(os.path.join(server_path, "versions", version)):
+                os.mkdir(os.path.join(server_path, "versions", version))
+        
+        jars = glob.glob(os.path.join(server_path, "*.jar"))
+        for jar in jars:
+            os.remove(jar)
+        
+        queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
+        time.sleep(1)
+        # Delete libraries and re-extract them
+        if os.path.isdir(os.path.join(server_path, "libraries")):
+            os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
+        
+        destination = server_path
+        new_name = f"server-{version}.jar"
+        shutil.copy2(source_path, os.path.join(destination, new_name))
+        with open(os.path.join(server_path, "run.bat"), 'r') as b:
+            line = b.read()
+        command, file = line.split(" -jar ")
+        new_command = f"{command} -jar {new_name}"
+        with open(os.path.join(server_path, "run.bat"), 'w') as b:
+            b.write(new_command)
+        time.sleep(1)
+        
+        return True
+    except:
+        return False
