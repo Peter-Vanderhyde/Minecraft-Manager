@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -306,7 +306,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_names(self.file_lock, self.host_ip, self.ips, self.server_path, self.world_paths)
+                    file_funcs.update_names(self.file_lock, self.host_ip, self.ips, self.server_path, self.worlds)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -446,7 +446,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f'<font color="green">You: {message}</font>')
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
-    def start_server(self, world):
+    def start_server(self, world, restart=False):
         if world == "":
             self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
             return f"<font color='red'>There is no world selected.</font>"
@@ -455,6 +455,14 @@ class ServerManagerApp(QMainWindow):
         if status == "online":
             self.log_queue.put("Server is already online.")
             return "already online"
+        
+        version, fabric = None, None
+        if self.worlds.get(world):
+            version = self.worlds[world].get("version")
+            fabric = self.worlds[world].get("fabric")
+        if not version:
+            self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
+            return f"<font color='red'>ERROR: World {world} is missing version.</font>"
         
         self.broadcast("Starting server...")
         self.log_queue.put("Starting server...")
@@ -468,41 +476,48 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
             return error
         else:
-            try:
-                if not file_funcs.prepare_server_settings(world, self.server_path):
+            # try:
+            if not restart:
+                self.log_queue.put(f"Preparing for version {version}.")
+                if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue):
                     raise RuntimeError("Failed to prepare settings.")
+            
+            os.system(f'start cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
+            loop = True
+            window = None
+            ignition_window = None
+            end_time = time.time() + 30
+            while loop and not self.stop_threads.is_set():
+                QApplication.processEvents()
+                windows = pgw.getAllTitles()
+                for w in windows:
+                    if w == "Minecraft server":
+                        loop = False
+                        window = pgw.getWindowsWithTitle(w)[0]
+                    elif ignition_window is None and "Server Ignition" in w:
+                        ignition_window = pgw.getWindowsWithTitle(w)[0]
                 
-                os.system(f'start cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
-                loop = True
-                window = None
-                ignition_window = None
-                while loop and not self.stop_threads.is_set():
-                    QApplication.processEvents()
-                    windows = pgw.getAllTitles()
-                    for w in windows:
-                        if w == "Minecraft server":
-                            loop = False
-                            window = pgw.getWindowsWithTitle(w)[0]
-                        elif ignition_window is None and "Server Ignition" in w:
-                            ignition_window = pgw.getWindowsWithTitle(w)[0]
-                
-                if self.stop_threads.is_set():
-                    return
+                if time.time() > end_time:
+                    self.log_queue.put("<font color='red'>Timed out waiting for the server to start up.</font>")
+                    return "<font color='red'>Timed out waiting for the server to start.</font>"
+            
+            if self.stop_threads.is_set():
+                return
 
-                window.minimize()
-                if ignition_window:
-                    ignition_window.close()
+            window.minimize()
+            if ignition_window:
+                ignition_window.close()
 
-                self.delay(8)
+            self.delay(8)
 
-                self.get_status_signal.emit()
-                self.log_queue.put(f"Server world '{world}' has been started.")
-                self.broadcast(f"Server world '{world}' has been started.")
-                self.send_data("start", "refresh")
-            except:
-                error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
-                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
-                return error
+            self.get_status_signal.emit()
+            self.log_queue.put(f"Server world '{world}' has been started.")
+            self.broadcast(f"Server world '{world}' has been started.")
+            self.send_data("start", "refresh")
+            # except:
+            #     error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
+            #     self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
+            #     return error
     
     def stop_server(self):
         status, _, _ = self.query_status()
@@ -540,7 +555,7 @@ class ServerManagerApp(QMainWindow):
     def restart_server(self):
         self.stop_server()
         self.delay(5)
-        self.start_server(self.previous_world)
+        self.start_server(self.previous_world, True)
 
     def query_status(self):
         status, brand, version, world = queries.status(self.host_ip, self.server_port)

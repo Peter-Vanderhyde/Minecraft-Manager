@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -436,6 +436,7 @@ class ServerManagerApp(QMainWindow):
             self.message_thread.join()
         if self.client:
             self.client.close()
+        self.set_worlds_list([])
         self.stacked_layout.setCurrentIndex(0)
         self.connecting_label.setText("Lost Connection")
         self.close_threads.clear()
