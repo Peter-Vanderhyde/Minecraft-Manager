@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = True
+TESTING = False
 VERSION = "v2.3"
 
 if TESTING:
@@ -53,8 +53,9 @@ class ServerManagerApp(QMainWindow):
         self.ips = {}
         self.clients = {}
         self.status = ""
+        self.server_path = ""
         self.previous_world = ""
-        self.world_paths = {}
+        self.worlds = {}
         self.log_queue = queue.Queue()
 
         self.no_clients = True
@@ -67,7 +68,9 @@ class ServerManagerApp(QMainWindow):
         self.set_players_signal.connect(self.set_players)
 
         self.init_ui()
-        self.host_ip, self.ips, self.world_paths = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+        if self.server_path == "" or not os.path.isdir(self.server_path):
+            self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
         self.start_manager_server()
         self.first_load()
 
@@ -185,12 +188,12 @@ class ServerManagerApp(QMainWindow):
         center_column_layout = QVBoxLayout()
 
         top_box = QVBoxLayout()
-        self.error_label = QLabel("Unable to start manager")
+        self.error_label = QLabel("")
         self.error_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
         self.error_label.setObjectName("error")
         top_box.addWidget(self.error_label)
         bot_box = QVBoxLayout()
-        self.info_label = QLabel("Is Hamachi running?")
+        self.info_label = QLabel("")
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.info_label.setObjectName("details")
         bot_box.addWidget(self.info_label)
@@ -239,7 +242,9 @@ class ServerManagerApp(QMainWindow):
         while time.time() < end_time:
             QApplication.processEvents()
     
-    def show_error_page(self):
+    def show_error_page(self, error, info):
+        self.error_label.setText(error)
+        self.info_label.setText(info)
         self.stacked_layout.setCurrentIndex(1)
 
     def start_manager_server(self):
@@ -249,7 +254,7 @@ class ServerManagerApp(QMainWindow):
             self.server.listen()
             self.server.setblocking(False)
         except:
-            self.show_error_page()
+            self.show_error_page("Unable to Start Manager", "Is Hamachi open?")
             return
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
@@ -301,7 +306,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_names(self.file_lock, self.host_ip, self.ips, self.world_paths)
+                    file_funcs.update_names(self.file_lock, self.host_ip, self.ips, self.server_path, self.world_paths)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -453,8 +458,9 @@ class ServerManagerApp(QMainWindow):
         
         self.broadcast("Starting server...")
         self.log_queue.put("Starting server...")
-        path = self.world_paths.get(world)
-        if not path:
+        data = self.worlds.get(world)
+        path = os.path.join(os.path.join(self.server_path, "worlds"), world)
+        if not data:
             self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
             return f"<font color='red'>Manager doesn't recognize that world.</font>"
         elif not os.path.exists(path):
@@ -463,8 +469,10 @@ class ServerManagerApp(QMainWindow):
             return error
         else:
             try:
-                dirname = os.path.dirname(os.path.abspath(path))
-                os.system(f'start cmd /C "title Server Ignition && cd /d {dirname} && \"{path}\""')
+                if not file_funcs.prepare_server_settings(world, self.server_path):
+                    raise RuntimeError("Failed to prepare settings.")
+                
+                os.system(f'start cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
                 loop = True
                 window = None
                 ignition_window = None
@@ -493,7 +501,7 @@ class ServerManagerApp(QMainWindow):
                 self.send_data("start", "refresh")
             except:
                 error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
-                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}' at path '{path}'!</font>")
+                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
                 return error
     
     def stop_server(self):
@@ -539,21 +547,17 @@ class ServerManagerApp(QMainWindow):
         if status == "offline":
             return status, "", ""
         else:
-            self.previous_world = world or self.previous_world
-
-            fabric = ""
-            server_dir = os.path.dirname(self.world_paths.get(world))
-            # Check for possible fabric presence
-            if os.path.isdir(server_dir) and os.path.isfile(os.path.join(server_dir, "fabric-server-launch.jar")):
-                fabric = "/fabric"
+            if world:
+                world = world.removeprefix("worlds/")
             
-            return status, f"{brand}{fabric} {version}", world
+            self.previous_world = world or self.previous_world
+            return status, f"{brand} {version}", world
     
     def query_players(self):
         return queries.players(self.host_ip, self.server_port)
     
     def query_worlds_list(self):
-        return list(self.world_paths.keys())
+        return list(self.worlds.keys())
 
     def get_status(self):
         self.set_status(["pinging",None,None])
@@ -624,7 +628,7 @@ class ServerManagerApp(QMainWindow):
     
     def set_worlds_list(self):
         self.dropdown.clear()
-        self.dropdown.addItems(self.world_paths.keys())
+        self.dropdown.addItems(self.worlds.keys())
     
     @pyqtSlot()
     def onWindowStateChanged(self):
