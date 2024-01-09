@@ -466,6 +466,7 @@ class ServerManagerApp(QMainWindow):
         
         self.broadcast("Starting server...")
         self.log_queue.put("Starting server...")
+        QApplication.processEvents()
         data = self.worlds.get(world)
         path = os.path.join(os.path.join(self.server_path, "worlds"), world)
         if not data:
@@ -479,10 +480,11 @@ class ServerManagerApp(QMainWindow):
             # try:
             if not restart:
                 self.log_queue.put(f"Preparing for version {version}.")
+                self.delay(1)
                 if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue):
                     raise RuntimeError("Failed to prepare settings.")
             
-            os.system(f'start cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
+            os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
             loop = True
             window = None
             ignition_window = None
