@@ -8,10 +8,10 @@ def load_settings(default_ip, log_queue, file_lock):
             data = json.load(f)
     except:
         with open("manager_settings.json", 'w') as f:
-            json.dump(data, f)
+            json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return
+        return default_ip, {}, {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
@@ -123,4 +123,4 @@ def load_worlds(world_paths, log_queue):
 def update_names(file_lock, host_ip, ips, world_paths):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
-            json.dump({"ip":host_ip, "names":ips, "worlds":world_paths}, f)
+            json.dump({"ip":host_ip, "names":ips, "worlds":world_paths}, f, indent=4)
