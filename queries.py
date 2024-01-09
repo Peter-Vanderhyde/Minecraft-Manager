@@ -20,7 +20,11 @@ def download_server_jar(version, output_directory, log_queue):
     version_url = f'https://launchermeta.mojang.com/mc/game/version_manifest.json'
 
     # Fetch the version manifest
-    response = requests.get(version_url)
+    try:
+        response = requests.get(version_url)
+    except:
+        log_queue.put(f"Failed to download necessary jar file.")
+        raise RuntimeError("Failed to download jar file.")
     if response.status_code == 200:
         manifest = response.json()
         version_info = next(v for v in manifest['versions'] if v['id'] == version)

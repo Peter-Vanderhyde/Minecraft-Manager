@@ -157,6 +157,9 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
     
     queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
     time.sleep(1)
+    # Delete libraries and re-extract them
+    if os.path.isdir(os.path.join(server_path, "libraries")):
+        os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
     
     destination = server_path
     new_name = f"server-{version}.jar"
@@ -168,10 +171,6 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
     with open(os.path.join(server_path, "run.bat"), 'w') as b:
         b.write(new_command)
     time.sleep(1)
-
-    # Delete libraries and re-extract them
-    if os.path.isdir(os.path.join(server_path, "libraries")):
-        os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
     
     return True
     # except:
