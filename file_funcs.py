@@ -143,34 +143,59 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
             properties.writelines(lines)
         
         # TODO Change the .jar
-        source_path = os.path.join(server_path, "versions", version, f"server-{version}.jar")
-        if not os.path.isfile(source_path):
-            # Download needed jar
-            if not os.path.isdir(os.path.join(server_path, "versions")):
-                os.mkdir(os.path.join(server_path, "versions"))
-            if not os.path.isdir(os.path.join(server_path, "versions", version)):
-                os.mkdir(os.path.join(server_path, "versions", version))
+        if not fabric:
+            source_path = os.path.join(server_path, "versions", version, f"server-{version}.jar")
+            if not os.path.isfile(source_path):
+                # Download needed jar
+                if not os.path.isdir(os.path.join(server_path, "versions")):
+                    os.mkdir(os.path.join(server_path, "versions"))
+                if not os.path.isdir(os.path.join(server_path, "versions", version)):
+                    os.mkdir(os.path.join(server_path, "versions", version))
+            
+            jars = glob.glob(os.path.join(server_path, "*.jar"))
+            for jar in jars:
+                # Avoid deleting existing fabric server jar files
+                if f"fabric-server-mc" not in jar:
+                    os.remove(jar)
+            
+            queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
+            time.sleep(1)
+            # Delete libraries and re-extract them
+            if os.path.isdir(os.path.join(server_path, "libraries")):
+                os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
+            
+            destination = server_path
+            new_name = f"server-{version}.jar"
+            shutil.copy2(source_path, os.path.join(destination, new_name))
+            with open(os.path.join(server_path, "run.bat"), 'r') as b:
+                line = b.read()
+            command, file = line.split(" -jar ")
+            new_command = f"{command} -jar {new_name}"
+            with open(os.path.join(server_path, "run.bat"), 'w') as b:
+                b.write(new_command)
+            time.sleep(1)
         
-        jars = glob.glob(os.path.join(server_path, "*.jar"))
-        for jar in jars:
-            os.remove(jar)
-        
-        queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
-        time.sleep(1)
-        # Delete libraries and re-extract them
-        if os.path.isdir(os.path.join(server_path, "libraries")):
-            os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
-        
-        destination = server_path
-        new_name = f"server-{version}.jar"
-        shutil.copy2(source_path, os.path.join(destination, new_name))
-        with open(os.path.join(server_path, "run.bat"), 'r') as b:
-            line = b.read()
-        command, file = line.split(" -jar ")
-        new_command = f"{command} -jar {new_name}"
-        with open(os.path.join(server_path, "run.bat"), 'w') as b:
-            b.write(new_command)
-        time.sleep(1)
+        else:
+            jars = glob.glob(os.path.join(server_path, f"fabric-server-mc.{version}-loader*.jar"))
+            if len(jars) == 0:
+                log_queue.put(f"<font color='red'>ERROR: Unable to find fabric launcher .jar for version {version}.</font>")
+                return False
+            while len(jars) > 1:
+                os.remove(os.path.join(server_path, jars[0]))
+            jar_file = jars[0]
+            
+            time.sleep(1)
+            # Delete libraries and re-extract them
+            if os.path.isdir(os.path.join(server_path, "libraries")):
+                os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
+            
+            with open(os.path.join(server_path, "run.bat"), 'r') as b:
+                line = b.read()
+            command, file = line.split(" -jar ")
+            new_command = f"{command} -jar {jar_file}"
+            with open(os.path.join(server_path, "run.bat"), 'w') as b:
+                b.write(new_command)
+            time.sleep(1)
         
         return True
     except:
