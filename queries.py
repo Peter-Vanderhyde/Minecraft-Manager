@@ -46,3 +46,21 @@ def download_server_jar(version, output_directory, log_queue):
     else:
         log_queue.put(f"Failed to fetch version manifest. Status code: {response.status_code}")
 
+def download_latest_server_jar(server_path, log_queue):
+    version_url = f'https://launchermeta.mojang.com/mc/game/version_manifest.json'
+
+    # Fetch the version manifest
+    try:
+        response = requests.get(version_url)
+    except:
+        log_queue.put(f"Failed to download necessary jar file.")
+        return False
+    
+    if response.status_code == 200:
+        manifest = response.json()
+        lastest_version = manifest["latest"]["release"]
+
+        download_server_jar(lastest_version, server_path, log_queue)
+        return lastest_version
+    
+    return False

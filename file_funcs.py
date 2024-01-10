@@ -4,6 +4,7 @@ import shutil
 import queries
 import time
 import glob
+from PyQt6.QtWidgets import QFileDialog
 
 def load_settings(default_ip, log_queue, file_lock):
     data = {
@@ -28,13 +29,15 @@ def load_settings(default_ip, log_queue, file_lock):
     ips = data.get("names")
     server_path = data["server folder"].get("path")
     worlds = data["server folder"].get("worlds")
+
     # Check batch file exists
-    if not os.path.isfile(os.path.join(server_path, "run.bat")):
-        log_queue.put(f"<font color='red'>ERROR: Unable to find .bat file at '{server_path}'.</font>")
-        worlds = {}
+    # if not os.path.isfile(os.path.join(server_path, "run.bat")):
+    #     log_queue.put(f"<font color='red'>ERROR: Unable to find .bat file at '{server_path}'.</font>")
+    #     worlds = {}
     
     if worlds is not None:
-        worlds = load_worlds(server_path, worlds, log_queue)
+        if server_path:
+            worlds = load_worlds(server_path, worlds, log_queue)
     else:
         worlds = {}
         log_queue.put(f"<font color='red'>Missing worlds key in the settings.</font>")
@@ -44,7 +47,7 @@ def load_settings(default_ip, log_queue, file_lock):
             ips = {}
         if host_ip is None:
             host_ip = default_ip
-        update_names(file_lock, host_ip, ips, server_path, worlds)
+        update_settings(file_lock, host_ip, ips, server_path, worlds)
     
     return host_ip, ips, server_path, worlds
 
@@ -53,10 +56,10 @@ def load_worlds(server_path, worlds, log_queue):
     if not os.path.isdir(os.path.join(server_path, "worlds")):
         try:
             if not os.path.isdir(server_path):
-                return []
+                return {}
             os.mkdir(os.path.join(server_path, "worlds"))
         except:
-            return []
+            return {}
     
     worlds_to_ignore = []
     batch_path = os.path.join(server_path, "run.bat")
@@ -129,7 +132,7 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_names(file_lock, host_ip, ips, server_path, worlds):
+def update_settings(file_lock, host_ip, ips, server_path, worlds):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
             json.dump({"ip": host_ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}}, f, indent=4)
@@ -172,10 +175,14 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
             destination = server_path
             new_name = f"server-{version}.jar"
             shutil.copy2(source_path, os.path.join(destination, new_name))
-            with open(os.path.join(server_path, "run.bat"), 'r') as b:
-                line = b.read()
-            command, file = line.split(" -jar ")
-            new_command = f"{command} -jar {new_name}"
+            try:
+                with open(os.path.join(server_path, "run.bat"), 'r') as b:
+                    line = b.read()
+            except:
+                # No run.bat but will create new one with default "java -jar <file>" commands
+                line = " -jar "
+            command, previous_file = line.split(" -jar ")
+            new_command = f"{command or 'java'} -jar {new_name}"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
                 b.write(new_command)
             time.sleep(1)
@@ -194,8 +201,12 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
             if os.path.isdir(os.path.join(server_path, "libraries")):
                 os.system(f"rmdir /s /q {os.path.join(server_path, 'libraries')}")
             
-            with open(os.path.join(server_path, "run.bat"), 'r') as b:
-                line = b.read()
+            try:
+                with open(os.path.join(server_path, "run.bat"), 'r') as b:
+                    line = b.read()
+            except:
+                # No run.bat but will create new one with default "java -jar <file>" commands
+                line = " -jar "
             command, file = line.split(" -jar ")
             new_command = f"{command} -jar {jar_file}"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
@@ -205,3 +216,15 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
         return True
     except:
         return False
+
+def show_folder_dialog(parent):
+    # Show the file dialog for selecting a folder
+    selected_folder = QFileDialog.getExistingDirectory(
+        parent,                     # Parent widget
+        "Open Folder",              # Dialog title
+        ""                          # Default directory (empty for no specific directory)
+    )
+
+    # If a folder was selected, return it's path
+    if selected_folder:
+        return selected_folder

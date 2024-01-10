@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -32,6 +32,22 @@ class BackgroundWidget(QWidget):
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
         painter.drawPixmap(QRect(0, 0, self.width(), self.height()), self.background_image)
+
+class HoverButton(QPushButton):
+    changeHovering = pyqtSignal(bool)
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setMouseTracking(True)  # Enable mouse tracking to receive enter and leave events
+
+    def enterEvent(self, event):
+        # This is triggered when the mouse enters the button
+        self.changeHovering.emit(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        # This is triggered when the mouse leaves the button
+        self.changeHovering.emit(False)
+        super().leaveEvent(event)
 
 class ServerManagerApp(QMainWindow):
     get_status_signal = pyqtSignal()
@@ -70,9 +86,11 @@ class ServerManagerApp(QMainWindow):
         self.init_ui()
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
         if self.server_path == "" or not os.path.isdir(self.server_path):
-            self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
-        self.start_manager_server()
-        self.first_load()
+            self.show_server_entry_page()
+            # self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
+        else:
+            self.start_manager_server()
+            self.first_load()
 
     def init_ui(self):
         # Central widget to hold everything
@@ -157,10 +175,10 @@ class ServerManagerApp(QMainWindow):
         self.world_version_label.setObjectName("world_version")
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
-        self.stop_button.setObjectName("stopButton")
+        self.stop_button.setObjectName("redButton")
         self.restart_button = QPushButton("Restart")
         self.restart_button.clicked.connect(self.restart_server)
-        self.restart_button.setObjectName("restartButton")
+        self.restart_button.setObjectName("blueButton")
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -222,9 +240,83 @@ class ServerManagerApp(QMainWindow):
         error_page = QWidget()
         error_page.setLayout(error_layout)
 
+        # Page 3: Connect to Server
+        server_path_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        input_layout = QVBoxLayout()
+        input_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
+
+        server_folder_label = QLabel("Server Folder Path:")
+        server_folder_label.setObjectName("mediumText")
+        server_folder_label.setFont(QFont(server_folder_label.font().family(), int(server_folder_label.font().pointSize() * 1.5)))
+        server_folder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        side_by_side = QHBoxLayout()
+        side_by_side.setContentsMargins(0, 0, 0, 0)
+
+        self.server_folder_path_entry = QLineEdit("")
+        self.server_folder_path_entry.setObjectName("serverEntry")
+        self.server_folder_path_entry.setMinimumWidth(self.width() // 2)
+        self.server_folder_path_entry.setMaximumWidth(self.width() // 2)
+        self.server_folder_path_entry.setFont(QFont(self.server_folder_path_entry.font().family(), int(self.server_folder_path_entry.font().pointSize() * 1.5)))
+        self.server_folder_path_entry.setPlaceholderText("Server Path")
+        self.server_folder_path_entry.textChanged.connect(self.check_server_path)
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.setObjectName("browseButton")
+        self.browse_button.clicked.connect(lambda: self.server_folder_path_entry.setText(file_funcs.show_folder_dialog(self) or
+                                                                                         self.server_folder_path_entry.text()))
+
+        side_by_side.addWidget(self.server_folder_path_entry, 8)
+        side_by_side.addWidget(self.browse_button, 2)
+
+        input_layout.addWidget(server_folder_label)
+        input_layout.addLayout(side_by_side)
+
+        self.server_path_hover_label = QLabel("")
+        self.server_path_hover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.server_path_hover_label.setObjectName("smallText")
+
+        options_layout = QHBoxLayout()
+        options_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        self.create_server_button = HoverButton("Create New")
+        self.create_server_button.setEnabled(False)
+        self.create_server_button.changeHovering.connect(lambda hovering: self.server_path_hover_label.setText(
+            "Automatically download and set up a server in the specified empty folder." if hovering else ""
+        ))
+        self.create_server_button.clicked.connect(self.create_server_folder)
+        self.existing_server_button = HoverButton("Use Existing")
+        self.existing_server_button.setObjectName("yellowButton")
+        self.existing_server_button.setEnabled(False)
+        self.existing_server_button.changeHovering.connect(lambda hovering: self.server_path_hover_label.setText(
+            "Use the specified path of a previously created server folder." if hovering else ""
+        ))
+        self.existing_server_button.clicked.connect(self.set_server_path)
+        options_layout.addWidget(self.create_server_button)
+        options_layout.addWidget(self.existing_server_button)
+
+        center_column_layout.addLayout(input_layout)
+        center_column_layout.addLayout(options_layout)
+
+        center_column_layout.addWidget(self.server_path_hover_label)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        server_path_layout.setColumnStretch(0, 1)
+        server_path_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        server_path_layout.addLayout(right_column_layout, 0, 9)
+        server_path_layout.setColumnStretch(9, 1)
+
+        server_path_page = QWidget()
+        server_path_page.setLayout(server_path_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
+        self.stacked_layout.addWidget(server_path_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -247,10 +339,22 @@ class ServerManagerApp(QMainWindow):
         while time.time() < end_time:
             QApplication.processEvents()
     
+    def show_main_page(self):
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+        self.stacked_layout.setCurrentIndex(0)
+    
     def show_error_page(self, error, info):
         self.error_label.setText(error)
         self.info_label.setText(info)
         self.stacked_layout.setCurrentIndex(1)
+    
+    def show_server_entry_page(self):
+        self.stacked_layout.setCurrentIndex(2)
+    
+    def check_server_path(self, new_text):
+        self.existing_server_button.setEnabled(os.path.isdir(new_text))
+        self.create_server_button.setEnabled(new_text != "")
+
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -311,7 +415,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_names(self.file_lock, self.host_ip, self.ips, self.server_path, self.worlds)
+                    file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, self.server_path, self.worlds)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -657,6 +761,39 @@ class ServerManagerApp(QMainWindow):
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
         else:
             self.world_version_label.setText("")
+    
+    def set_server_path(self):
+        path = self.server_folder_path_entry.text()
+        if os.path.isdir(path):
+            file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, path, self.worlds)
+            self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+            self.start_manager_server()
+            self.first_load()
+            self.show_main_page()
+    
+    def create_server_folder(self):
+        path = self.server_folder_path_entry.text()
+        def create_path(path):
+            if path == "" or os.path.exists(path):
+                return
+            
+            parent = os.path.join(path, os.path.pardir)
+            create_path(parent)
+            os.mkdir(path)
+
+        if not os.path.isdir(path):
+            # Build up directories to the requested one
+            create_path(path)
+        
+        file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, path, self.worlds)
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+        
+        version = queries.download_latest_server_jar(path, self.log_queue)
+        if version:
+            os.system(f'start cmd /C "java -jar server-{version}.jar"')
+            self.start_manager_server()
+            self.first_load()
+            self.show_main_page()
     
     @pyqtSlot()
     def onWindowStateChanged(self):

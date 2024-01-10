@@ -14,12 +14,50 @@ QPushButton {
     border-radius: 8px;
 }
 
+#yellowButton {
+    background-color: #d4af37;  /* Yellow background color */
+}
+
+#redButton {
+    color: lightcoral; /* Text color */
+    background-color: darkred; /* Background color of the text outline */
+}
+
+#blueButton {
+    background-color: #3b5998; /* Blue variant */
+    color: #4285f4;
+}
+
 QPushButton:hover {
     background-color: #45a049; /* Change background color on hover */
 }
 
+#yellowButton:hover {
+    background-color: #ba9827; /* Darker yellow on hover */
+}
+
+#redButton:hover {
+    background-color: #780000; /* Darker red on hover */
+}
+
+#blueButton:hover {
+    background-color: #2d4278; /* Darker blue on hover */
+}
+
 QPushButton:pressed {
     background-color: #3c9039; /* Change background color when pressed */
+}
+
+#yellowButton:pressed {
+    background-color: #997e24; /* Even darker yellow when pressed */
+}
+
+#redButton:pressed {
+    background-color: #660000; /* Even darker red when pressed */
+}
+
+#blueButton:pressed {
+    background-color: #1d2951; /* Even darker blue when pressed */
 }
 
 QPushButton:disabled {
@@ -27,36 +65,9 @@ QPushButton:disabled {
     color: #d0d0d0; /* Lighter text color for disabled */
 }
 
-#stopButton:disabled,
-#restartButton:disabled {
+#yellowButton:disabled, #redButton:disabled, #blueButton:disabled {
     background-color: #a0a0a0; /* Slightly lighter gray for disabled */
     color: #d0d0d0; /* Lighter text color for disabled */
-}
-
-#stopButton {
-    color: lightcoral; /* Text color */
-    background-color: darkred; /* Background color of the text outline */
-}
-
-#stopButton:hover {
-    background-color: #780000; /* Darker red on hover */
-}
-
-#stopButton:pressed {
-    background-color: #660000; /* Even darker red when pressed */
-}
-
-#restartButton {
-    background-color: #3b5998; /* Blue variant */
-    color: #4285f4;
-}
-
-#restartButton:hover {
-    background-color: #2d4278; /* Darker blue on hover */
-}
-
-#restartButton:pressed {
-    background-color: #1d2951; /* Even darker blue when pressed */
 }
 
 QLineEdit, QTextEdit {
@@ -87,6 +98,14 @@ QLabel {
 #world_version {
     color: #4285f4;
     font-size: 14px;
+}
+
+#mediumText {
+    font-size: 27px;
+}
+
+#smallText {
+    font-size: 12px;
 }
 
 #statusOnline {
