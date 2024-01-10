@@ -17,15 +17,19 @@ Through this manager both the host and clients will have the ability to
 The host has the ability to choose what worlds he would like the clients to be able to choose from, including worlds running fabric mods.
 
 ## Host Instructions
-If you are hosting the server on your computer, you must have your manager_host executable running for others to be able to control the server.
+If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
   
 ### Step 1
-**<u>Creating the Server Folder</u>**  
-First, if you have not already, you need to set up your server folder. To do so, you will need to download a `server.jar` file. A good place to find the version you want is [MCVersions.Net](https://mcversions.net/). If you need instructions on how to set up the server, there are several resources online that you can easily find.
+**<u>\*Optional\* Creating the Server Folder</u>**  
+If you wish to manually create a server folder for the program, you will need to download a `server.jar` file to execute. [MCVersions.Net](https://mcversions.net/) is the simplest place to find any server version. If you need instructions on how to set up the server, there are several resources online that you can easily find.
 
 ### Step 2
 **<u>Initial Startup</u>**  
-Run the `Host_manager.exe` file. The first time you run the manager, it will create a file called `manager_settings.json` and will also show an error.`"Server Path is Invalid"`. This just indicates that you haven't specified the path of your server folder yet in the settings. Inside the settings file, it will save the IP you are hosting from (defaults to localhost), the displayed names of the clients connecting to your manager, and will store the names of the server worlds you choose. 
+Run the `Host_manager.exe` file. The first time you run the manager, it will prompt you to enter the path of the server folder. This can either be the server folder you created in the previous optional step, or you can let the program download and run the latest server file automatically.
+![Server Path Prompt Image](Images/server_path.png)
+If you set up the folder automatically, it will also prompt you to accept the eula.txt.
+![EULA Prompt Image](Images/eula.png)
+If you see the error. Once you have run the program, it will have created a file called `manager_settings.json`. Inside this settings file, it will save the IP you are hosting from (defaults to localhost), the displayed names of the clients connecting to your manager, the server path, and will store the names of the server worlds you choose. 
 
 #### Example manager_settings.json
 ``` json
@@ -33,7 +37,7 @@ Run the `Host_manager.exe` file. The first time you run the manager, it will cre
     "ip":"127.0.0.1",
     "names":{},
     "server folder": {
-        "path": "C:\\Put\\server\\path\\here",
+        "path": "C:\\server\\path\\here",
         "worlds": {
             "Time to Shhweep": {
                 "version": "1.18.2"
@@ -51,11 +55,9 @@ Run the `Host_manager.exe` file. The first time you run the manager, it will cre
 ```
 
 ### Step 3
-**<u>Setting the Server Path</u>**
-Once you've run the manager, you can open `manager_settings.json` and put the path to your server folder in the quotes. Once you have done that, the manager will create a `worlds` folder in your server folder and should open with no issues. If you still get an error `Unable to Start Manager`, this means the manager was unable to host a server on the given IP address in the settings.
-
 **<u>Changing the Host IP</u>**  
-To change the ip that you are hosting from, simply change the `ip` value in the created manager settings.
+To change the ip that you are hosting from, simply change the `ip` value in the created manager settings. If you get an error `Unable to Start Manager` while starting the program, this means the manager was unable to host a server on the given IP address.
+![Bad IP Error Image](Images/bad_ip.png)
 
 **<u>Adding a World</u>**  
 In order to add a world to the manager, you can either use an existing world folder, or the world folder that was created in the server directory when running the server for the first time. Place the world folder in the `worlds` directory created in your server directory. Next, add the world folder name in the `"worlds"` section of the settings file. Include the version number. Optionally, specify whether it is a fabric server (defaults to false).
@@ -79,10 +81,7 @@ If you want to run a fabric world through the manager, go to [This Link](https:/
 You can add as many worlds as you would like to the worlds folder. The manager will run each of them in their own version.
 
 ### Step 4
-**<u>Creating the Batch File</u>**  
-This step is required both for fabric and non-fabric worlds as both will use this batch file.  
-In the server folder, create a new text file. Inside, enter:  
-`javaw -jar server.jar`  
-Save it with the `.bat` extension. This creates a batch file which will run the server.  
+**<u>\*Optional\* Creating the Batch File</u>**  
+There are several arguments that can be given in the server run command such as defining memory space for the server, etc. Feel free to add any extra arguments to the `run.bat` file command. If the run batch file has not already been created, the program will create it upon starting a world. 
 
 ### You're all set now. Enjoy!
