@@ -5,6 +5,8 @@ import queries
 import time
 import glob
 from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtCore import QUrl
+from PyQt6.QtGui import QDesktopServices
 
 def load_settings(default_ip, log_queue, file_lock):
     data = {
@@ -223,3 +225,6 @@ def show_folder_dialog(parent):
     # If a folder was selected, return it's path
     if selected_folder:
         return selected_folder
+
+def open_folder(folder_path):
+    QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))

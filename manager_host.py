@@ -15,7 +15,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = True
+TESTING = False
 VERSION = "v2.3"
 
 if TESTING:
@@ -222,6 +222,9 @@ class ServerManagerApp(QMainWindow):
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.info_label.setObjectName("details")
         bot_box.addWidget(self.info_label)
+        self.folder_button = QPushButton("Open Server Folder")
+        self.folder_button.clicked.connect(self.open_server_folder)
+        bot_box.addWidget(self.folder_button)
         self.ok_button = QPushButton("OK")
         self.ok_button.clicked.connect(self.accepted_eula)
         bot_box.addWidget(self.ok_button)
@@ -339,6 +342,9 @@ class ServerManagerApp(QMainWindow):
         
         self.setStyleSheet(style_str)
     
+    def open_server_folder(self):
+        file_funcs.open_folder(self.server_path)
+    
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
         while time.time() < end_time:
@@ -353,8 +359,10 @@ class ServerManagerApp(QMainWindow):
         self.info_label.setText(info)
         if ok_button:
             self.ok_button.show()
+            self.folder_button.show()
         else:
             self.ok_button.hide()
+            self.folder_button.hide()
         self.stacked_layout.setCurrentIndex(1)
     
     def show_server_entry_page(self):
