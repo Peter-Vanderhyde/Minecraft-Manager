@@ -86,8 +86,13 @@ QLabel {
 }
 
 #version_num {
-    color: #4285f4;
+    color: #5fb18f;
     font-size: 16px;
+}
+
+#world_version {
+    color: #4285f4;
+    font-size: 14px;
 }
                
 #statusOnline {

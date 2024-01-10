@@ -153,6 +153,8 @@ class ServerManagerApp(QMainWindow):
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
         self.world_version_label = QLabel("")
+        self.world_version_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.world_version_label.setObjectName("world_version")
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
@@ -652,7 +654,9 @@ class ServerManagerApp(QMainWindow):
     
     def set_selected_world_version(self, world):
         if world:
-            self.world_version_label.setText(f'v{self.worlds[world]["version"]}')
+            self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
+        else:
+            self.world_version_label.setText("")
     
     @pyqtSlot()
     def onWindowStateChanged(self):
