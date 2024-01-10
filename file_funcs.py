@@ -118,6 +118,11 @@ def load_worlds(server_path, worlds, log_queue):
         if not os.path.isdir(world_folder_path):
             log_queue.put(f"<font color='red'>ERROR: Unable to find the '{world}' world folder.</font>")
             worlds_to_ignore.append(world)
+        elif not data.get("version"):
+            log_queue.put(f"<font color='red'>ERROR: Unspecified version for '{world}' world.</font>")
+            worlds_to_ignore.append(world)
+        elif not data.get("fabric") or data.get("fabric") != True:
+            worlds[world]["fabric"] = False
     
     for world in worlds_to_ignore:
         worlds.pop(world)
