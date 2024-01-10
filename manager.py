@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
-TESTING = True
+TESTING = False
 VERSION = "v2.3"
 
 if TESTING:
@@ -485,7 +485,7 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            self.version_label.setText(f"Version: {version}")
+            self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
             self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
             self.get_players()
@@ -538,7 +538,7 @@ class ServerManagerApp(QMainWindow):
 
     def set_current_world_version(self, world):
         if world:
-            self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
+            self.world_version_label.setText(f'v{self.worlds[world]["version"]} {"Fabric" * self.worlds[world]["fabric"]}')
         else:
             self.world_version_label.setText("")
     

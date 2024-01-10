@@ -14,7 +14,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = True
+TESTING = False
 VERSION = "v2.3"
 
 if TESTING:
@@ -603,7 +603,7 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            self.version_label.setText(f"Version: {version}")
+            self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
             self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
             self.get_players()
