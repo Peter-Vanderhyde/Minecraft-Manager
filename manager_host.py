@@ -7,6 +7,7 @@ import time
 import json
 import sys
 import queue
+import subprocess
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
@@ -86,6 +87,7 @@ class ServerManagerApp(QMainWindow):
         self.init_ui()
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
         if self.server_path == "" or not os.path.isdir(self.server_path):
+            self.message_timer.stop()
             self.show_server_entry_page()
             # self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
         else:
@@ -220,6 +222,9 @@ class ServerManagerApp(QMainWindow):
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.info_label.setObjectName("details")
         bot_box.addWidget(self.info_label)
+        self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(self.accepted_eula)
+        bot_box.addWidget(self.ok_button)
 
         center_column_layout.addLayout(top_box)
         center_column_layout.addLayout(bot_box)
@@ -343,9 +348,13 @@ class ServerManagerApp(QMainWindow):
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
         self.stacked_layout.setCurrentIndex(0)
     
-    def show_error_page(self, error, info):
+    def show_error_page(self, error, info, ok_button=False):
         self.error_label.setText(error)
         self.info_label.setText(info)
+        if ok_button:
+            self.ok_button.show()
+        else:
+            self.ok_button.hide()
         self.stacked_layout.setCurrentIndex(1)
     
     def show_server_entry_page(self):
@@ -765,11 +774,13 @@ class ServerManagerApp(QMainWindow):
     def set_server_path(self):
         path = self.server_folder_path_entry.text()
         if os.path.isdir(path):
+            while not self.log_queue.empty():
+                self.log_queue.get()
+            self.message_timer.start(1000)
             file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, path, self.worlds)
-            self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+            self.show_main_page()
             self.start_manager_server()
             self.first_load()
-            self.show_main_page()
     
     def create_server_folder(self):
         path = self.server_folder_path_entry.text()
@@ -785,15 +796,32 @@ class ServerManagerApp(QMainWindow):
             # Build up directories to the requested one
             create_path(path)
         
+        while not self.log_queue.empty():
+            self.log_queue.get()
+        self.message_timer.start(1000)
+            
         file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, path, self.worlds)
-        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
         
+        self.log_queue.put("Downloading latest server.jar file...")
+        self.delay(0.5)
         version = queries.download_latest_server_jar(path, self.log_queue)
         if version:
-            os.system(f'start cmd /C "java -jar server-{version}.jar"')
+            self.log_queue.put("Generating server files...")
+            self.delay(0.5)
+            subprocess.run(["java", "-jar", f"server-{version}.jar"], cwd=path)
+            self.server_path = path
+            self.accepted_eula()
+    
+    def accepted_eula(self):
+        with open(os.path.join(self.server_path, "eula.txt")) as f:
+            content = f.read()
+        if "eula=false" in content:
+            self.show_error_page("You must agree to the EULA in order to run the server.",
+                                    "Please open 'eula.txt' in the server folder.", True)
+        elif "eula=true" in content:
+            self.show_main_page()
             self.start_manager_server()
             self.first_load()
-            self.show_main_page()
     
     @pyqtSlot()
     def onWindowStateChanged(self):

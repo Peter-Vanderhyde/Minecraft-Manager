@@ -62,19 +62,6 @@ def load_worlds(server_path, worlds, log_queue):
             return {}
     
     worlds_to_ignore = []
-    batch_path = os.path.join(server_path, "run.bat")
-    # Make sure the command uses javaw instead of java
-    try:
-        with open(batch_path, 'r') as batch_file:
-            command = batch_file.read()
-        
-        new_command = command.replace("java ", "javaw ")
-        if command != new_command:
-            with open(batch_path, 'w') as batch_file:
-                batch_file.write(new_command)
-    except:
-        log_queue.put(f"<font color='red'>ERROR: Unable to inspect batch file at {batch_path}.</font>")
-        return {}
 
     properties_path = os.path.join(server_path, "server.properties")
     # Look for server properties file
@@ -113,7 +100,7 @@ def load_worlds(server_path, worlds, log_queue):
         except IOError:
             log_queue.put(f"<font color='orange'>WARNING: Was unable to check if server.properties has query enabled.</font>")
     else:
-        log_queue.put(f"<font color='orange'>WARNING: Unable to find 'server.properties' in folder at '{directory}'.</font>")
+        log_queue.put(f"<font color='orange'>WARNING: Unable to find 'server.properties' in folder at '{server_path}'.</font>")
     
     for world, data in worlds.items():
         directory = os.path.join(server_path, "worlds")
@@ -140,6 +127,12 @@ def update_settings(file_lock, host_ip, ips, server_path, worlds):
 def prepare_server_settings(world, version, fabric, server_path, log_queue):
     # Change the properties
     try:
+        with open(os.path.join(server_path, "eula.txt"), 'r') as f:
+            content = f.read()
+        if "eula=false" in content:
+            log_queue.put("<font color='orange'>WARNING: The EULA has not been accepted yet! Please open eula.txt.</font>")
+            return False
+        
         with open(os.path.join(server_path, "server.properties"), 'r') as properties:
             lines = properties.readlines()
         
@@ -182,7 +175,8 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
                 # No run.bat but will create new one with default "java -jar <file>" commands
                 line = " -jar "
             command, previous_file = line.split(" -jar ")
-            new_command = f"{command or 'java'} -jar {new_name}"
+            command.replace("java", "javaw") # Ensure using javaw instead of java
+            new_command = f"{command or 'javaw'} -jar {new_name}"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
                 b.write(new_command)
             time.sleep(1)
@@ -208,6 +202,7 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
                 # No run.bat but will create new one with default "java -jar <file>" commands
                 line = " -jar "
             command, file = line.split(" -jar ")
+            command.replace("java", "javaw") # Ensure using javaw instead of java
             new_command = f"{command} -jar {jar_file}"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
                 b.write(new_command)
