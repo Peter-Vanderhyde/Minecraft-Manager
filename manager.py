@@ -54,7 +54,7 @@ class ConnectionWorker(QObject):
 class ServerManagerApp(QMainWindow):
     set_status_signal = pyqtSignal(list)
     set_players_signal = pyqtSignal(list)
-    set_worlds_list_signal = pyqtSignal(list)
+    set_worlds_list_signal = pyqtSignal(dict)
     get_status_signal = pyqtSignal()
     update_log_signal = pyqtSignal(str)
     switch_to_connect_signal = pyqtSignal()
@@ -253,6 +253,7 @@ class ServerManagerApp(QMainWindow):
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
+        self.world_version_label = QLabel("")
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
@@ -262,16 +263,17 @@ class ServerManagerApp(QMainWindow):
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0)
+        functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
 
         # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QHBoxLayout()
         self.dropdown = QComboBox()
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         functions_layout.addLayout(dropdown_layout, 1, 1)
+        functions_layout.addWidget(self.world_version_label, 2, 1)
 
-        functions_layout.addWidget(self.stop_button, 2, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(self.restart_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -378,7 +380,7 @@ class ServerManagerApp(QMainWindow):
                     self.close_threads.set()
                     break
 
-                messages += message.split("SERVER-MESSAGE:")[1:]
+                messages += message.split("SERVER-MESSAGE~~>")[1:]
                 if "CLOSING" in messages:
                     break
 
@@ -387,7 +389,7 @@ class ServerManagerApp(QMainWindow):
                     if not message.startswith("DATA-RETURN"):
                         self.log_queue.put(message)
                     else:
-                        data = message.split(':')
+                        data = message.split('~~>')
                         key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
                         if key == "status":
                             self.set_status_signal.emit(args)
@@ -411,7 +413,7 @@ class ServerManagerApp(QMainWindow):
             label.setText(self.connection_delay_messages[i])
     
     def send(self, message):
-        self.client.sendall(f"CLIENT-MESSAGE:{message}".encode("utf-8"))
+        self.client.sendall(f"CLIENT-MESSAGE~~>{message}".encode("utf-8"))
 
     def switch_to_name_prompt(self):
         self.stacked_layout.setCurrentIndex(1) # Show the second page (Name Prompt)
@@ -436,7 +438,7 @@ class ServerManagerApp(QMainWindow):
             self.message_thread.join()
         if self.client:
             self.client.close()
-        self.set_worlds_list([])
+        self.set_worlds_list({})
         self.stacked_layout.setCurrentIndex(0)
         self.connecting_label.setText("Lost Connection")
         self.close_threads.clear()
@@ -455,22 +457,22 @@ class ServerManagerApp(QMainWindow):
 
     def get_status(self):
         self.set_status(["pinging",None,None])
-        self.send("MANAGER-REQUEST:get-status")
+        self.send("MANAGER-REQUEST~~>get-status")
 
     def get_players(self):
-        self.send("MANAGER-REQUEST:get-players")
+        self.send("MANAGER-REQUEST~~>get-players")
 
     def get_worlds_list(self):
-        self.send("MANAGER-REQUEST:get-worlds-list")
+        self.send("MANAGER-REQUEST~~>get-worlds-list")
     
     def start_server(self, world):
-        self.send(f"MANAGER-REQUEST:start-server,{world}")
+        self.send(f"MANAGER-REQUEST~~>start-server,{world}")
     
     def stop_server(self):
-        self.send("MANAGER-REQUEST:stop-server")
+        self.send("MANAGER-REQUEST~~>stop-server")
     
     def restart_server(self):
-        self.send("MANAGER-REQUEST:restart-server")
+        self.send("MANAGER-REQUEST~~>restart-server")
     
     def set_status(self, info):
         status, version, world = info
@@ -525,7 +527,7 @@ class ServerManagerApp(QMainWindow):
     
     def set_worlds_list(self, worlds):
         self.dropdown.clear()
-        self.dropdown.addItems(worlds)
+        self.dropdown.addItems(worlds.keys())
     
     def update_log(self, message):
         self.log_box.append(message)

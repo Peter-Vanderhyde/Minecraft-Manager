@@ -302,7 +302,7 @@ class ServerManagerApp(QMainWindow):
                         client.close()
                         return
 
-                    messages += message.split("CLIENT-MESSAGE:")[1:]
+                    messages += message.split("CLIENT-MESSAGE~~>")[1:]
                     if "CLOSING" in messages:
                         client.close()
                         return
@@ -334,7 +334,7 @@ class ServerManagerApp(QMainWindow):
                 if not new_message:
                     break
 
-                messages += new_message.split("CLIENT-MESSAGE:")[1:]
+                messages += new_message.split("CLIENT-MESSAGE~~>")[1:]
 
                 if "CLOSING" in messages:
                     break
@@ -347,7 +347,7 @@ class ServerManagerApp(QMainWindow):
                         self.log_queue.put(f'<font color="blue">{self.clients[client]}: {message}</font>')
                         self.broadcast(message, client)
                     else:
-                        data = message.split(':')[-1].split(',')
+                        data = message.split('~~>')[-1].split(',')
                         request, args = data[0], data[1:]
                         if request == "get-status":
                             # self.log_queue.put(f"{self.clients[client]} queried the server status.")
@@ -367,7 +367,7 @@ class ServerManagerApp(QMainWindow):
                                 self.tell(client, "The server has closed.")
                                 self.send_data("status", status)
                         elif request == "get-worlds-list":
-                            self.send_data("worlds-list", self.query_worlds_list(), client)
+                            self.send_data("worlds-list", self.query_worlds(), client)
                         elif request in ["start-server", "stop-server", "restart-server"]:
                             self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
                             if request in ["stop-server", "restart-server"]:
@@ -407,13 +407,12 @@ class ServerManagerApp(QMainWindow):
         self.clients.pop(client)
 
     def send_data(self, topic, data, client=None):
-        if not isinstance(data, (list, tuple)):
+        if not isinstance(data, (list, tuple, dict)):
             data = [data]
-        
         if client:
-            self.tell(client, f"DATA-RETURN({topic}):{json.dumps(data)}")
+            self.tell(client, f"DATA-RETURN({topic})~~>{json.dumps(data)}")
         else:
-            self.broadcast(f"DATA-RETURN({topic}):{json.dumps(data)}")
+            self.broadcast(f"DATA-RETURN({topic})~~>{json.dumps(data)}")
     
     def broadcast(self, message, owner=None):
         for client, name in self.clients.items():
@@ -429,7 +428,7 @@ class ServerManagerApp(QMainWindow):
                 pass
     
     def tell(self, client, message):
-        client.sendall(f"SERVER-MESSAGE:{message}".encode("utf-8"))
+        client.sendall(f"SERVER-MESSAGE~~>{message}".encode("utf-8"))
     
     def check_messages(self):
         while not self.log_queue.empty():
@@ -576,8 +575,8 @@ class ServerManagerApp(QMainWindow):
     def query_players(self):
         return queries.players(self.host_ip, self.server_port)
     
-    def query_worlds_list(self):
-        return list(self.worlds.keys())
+    def query_worlds(self):
+        return self.worlds
 
     def get_status(self):
         self.set_status(["pinging",None,None])
