@@ -72,6 +72,7 @@ class ServerManagerApp(QMainWindow):
         self.connection_thread = None
         self.status = ""
         self.server_version = ""
+        self.worlds = {}
         self.log_queue = queue.Queue()
         self.connection_delay_messages = ["Having trouble connecting? Either",
                                      "1. Your Hamachi is not open",
@@ -268,6 +269,7 @@ class ServerManagerApp(QMainWindow):
         # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QHBoxLayout()
         self.dropdown = QComboBox()
+        self.dropdown.currentTextChanged.connect(self.set_current_world_version)
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         functions_layout.addLayout(dropdown_layout, 1, 1)
         functions_layout.addWidget(self.world_version_label, 2, 1)
@@ -526,8 +528,17 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.append(f"<font color='blue'>{player}</font>")
     
     def set_worlds_list(self, worlds):
+        self.worlds.clear()
+        self.worlds.update(worlds)
         self.dropdown.clear()
         self.dropdown.addItems(worlds.keys())
+        self.set_current_world_version(self.dropdown.currentText())
+
+    def set_current_world_version(self, world):
+        if world:
+            self.world_version_label.setText(f'v{self.worlds[world]["version"]}')
+        else:
+            self.world_version_label.setText("")
     
     def update_log(self, message):
         self.log_box.append(message)
