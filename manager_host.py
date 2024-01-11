@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = True
+TESTING = False
 VERSION = "v2.3"
 
 if TESTING:
@@ -354,6 +354,7 @@ class ServerManagerApp(QMainWindow):
         self.default_ip_check.setChecked(False)
         self.host_button = QPushButton("Host")
         self.host_button.clicked.connect(self.set_ip)
+        self.hosting_ip_entry.returnPressed.connect(self.set_ip)
 
         input_layout.addWidget(host_ip_label)
         input_layout.addWidget(self.hosting_ip_entry)
@@ -938,6 +939,7 @@ class ServerManagerApp(QMainWindow):
                     shutil.copytree(world_path, f"{new_path}({str(index)})")
                 else:
                     shutil.copytree(world_path, new_path)
+                self.log_queue.put(f"Saved backup of '{os.path.basename(world_path)}'.")
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
         elif world_path:
