@@ -29,7 +29,11 @@ Run the `Host_manager.exe` file. The first time you run the manager, it will pro
 ![Server Path Prompt Image](Images/server_path.png)
 If you set up the folder automatically, it will also prompt you to accept the eula.txt.
 ![EULA Prompt Image](Images/eula.png)
-If you see the error. Once you have run the program, it will have created a file called `manager_settings.json`. Inside this settings file, it will save the IP you are hosting from (defaults to localhost), the displayed names of the clients connecting to your manager, the server path, and will store the names of the server worlds you choose. 
+Your manager is now ready to start hosting a server, but first it will prompt you to enter the hosting ip. This is what the clients will use to connect.
+![IP Prompt Image](Images/ip.png)
+If you set an IP as the default, it will attempt to use that IP address without ever prompting you again.
+  
+Once you have run the program, it will have created a file called `manager_settings.json`. Inside this settings file, it will save the IP you are hosting from (defaults to localhost), the displayed names of the clients connecting to your manager, the server path, and will store the names of the server worlds you choose. 
 
 #### Example manager_settings.json
 ``` json
@@ -56,8 +60,7 @@ If you see the error. Once you have run the program, it will have created a file
 
 ### Step 3
 **<u>Changing the Host IP</u>**  
-To change the ip that you are hosting from, simply change the `ip` value in the created manager settings. If you get an error `Unable to Start Manager` while starting the program, this means the manager was unable to host a server on the given IP address.
-![Bad IP Error Image](Images/bad_ip.png)
+To change the ip that you are hosting from, simply change the `ip` value in the created manager settings. If the server is unable to use the set ip to host, it will prompt you again to, either set a new IP this time, or set a new default.
 
 **<u>Adding a World</u>**  
 In order to add a world to the manager, you can either use an existing world folder, or the world folder that was created in the server directory when running the server for the first time. Place the world folder in the `worlds` directory created in your server directory. Next, add the world folder name in the `"worlds"` section of the settings file. Include the version number. Optionally, specify whether it is a fabric server (defaults to false).
@@ -81,7 +84,7 @@ If you want to run a fabric world through the manager, go to [This Link](https:/
 You can add as many worlds as you would like to the worlds folder. The manager will run each of them in their own version.
 
 ### Step 4
-**<u>\*Optional\* Creating the Batch File</u>**  
+**<u>\*Optional\* Customizing the Batch File</u>**  
 There are several arguments that can be given in the server run command such as defining memory space for the server, etc. Feel free to add any extra arguments to the `run.bat` file command. If the run batch file has not already been created, the program will create it upon starting a world. 
 
 ### You're all set now. Enjoy!
