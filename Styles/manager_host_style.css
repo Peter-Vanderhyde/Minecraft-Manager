@@ -81,8 +81,8 @@ QLabel {
 }
 
 #error {
-    color: black;
-    font-size: 30px;
+    color: white;
+    font-size: 25px;
     font-family: "Arial";
 }
 

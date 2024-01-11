@@ -14,7 +14,7 @@ Through this manager both the host and clients will have the ability to
 - Query the current status of the server including the version and the world name
 - Chat with others connected to the manager
   
-The host has the ability to choose what worlds he would like the clients to be able to choose from, including worlds running fabric mods.
+The host has the ability to choose what worlds he would like the clients to be able to choose from, including worlds running fabric mods. There is a button to quickly backup server worlds for convenience.
 
 ## Host Instructions
 If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.

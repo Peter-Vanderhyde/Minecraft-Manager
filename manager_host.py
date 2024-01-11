@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
