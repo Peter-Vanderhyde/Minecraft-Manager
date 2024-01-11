@@ -8,7 +8,10 @@ import json
 import sys
 import queue
 import subprocess
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox
+import glob
+import shutil
+from datetime import datetime
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
@@ -181,6 +184,14 @@ class ServerManagerApp(QMainWindow):
         self.restart_button.clicked.connect(self.restart_server)
         self.restart_button.setObjectName("blueButton")
 
+        separator = QFrame(self)
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Raised)
+
+        self.backup_button = QPushButton("Save Backup")
+        self.backup_button.clicked.connect(self.backup_world)
+        self.backup_button.setObjectName("yellowButton")
+
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
         functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
@@ -195,6 +206,8 @@ class ServerManagerApp(QMainWindow):
 
         functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
         functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(separator, 5, 0, 1, 2)
+        functions_layout.addWidget(self.backup_button, 6, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -270,7 +283,7 @@ class ServerManagerApp(QMainWindow):
         self.server_folder_path_entry.textChanged.connect(self.check_server_path)
         self.browse_button = QPushButton("Browse")
         self.browse_button.setObjectName("browseButton")
-        self.browse_button.clicked.connect(lambda: self.server_folder_path_entry.setText(file_funcs.show_folder_dialog(self) or
+        self.browse_button.clicked.connect(lambda: self.server_folder_path_entry.setText(file_funcs.pick_folder(self) or
                                                                                          self.server_folder_path_entry.text()))
 
         side_by_side.addWidget(self.server_folder_path_entry, 8)
@@ -403,7 +416,7 @@ class ServerManagerApp(QMainWindow):
         self.setStyleSheet(style_str)
     
     def open_server_folder(self):
-        file_funcs.open_folder(self.server_path)
+        file_funcs.open_folder_explorer(self.server_path)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
@@ -909,6 +922,26 @@ class ServerManagerApp(QMainWindow):
             if self.default_ip_check.isChecked():
                 file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, ip=self.host_ip)
             self.start_manager_server()
+    
+    def backup_world(self):
+        world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        world_path = os.path.normpath(world_path)
+        world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
+        if world_path in world_folders:
+            try:
+                current_date = datetime.now().strftime("%m-%d-%y")
+                new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                if os.path.exists(new_path):
+                    index = 1
+                    while os.path.exists(f"{new_path}({str(index)})"):
+                        index += 1
+                    shutil.copytree(world_path, f"{new_path}({str(index)})")
+                else:
+                    shutil.copytree(world_path, new_path)
+            except:
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
+        elif world_path:
+            self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
     
     @pyqtSlot()
     def onWindowStateChanged(self):

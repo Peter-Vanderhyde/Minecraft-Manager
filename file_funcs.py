@@ -209,17 +209,17 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
     except:
         return False
 
-def show_folder_dialog(parent):
+def pick_folder(parent, starting_path=""):
     # Show the file dialog for selecting a folder
     selected_folder = QFileDialog.getExistingDirectory(
         parent,                     # Parent widget
         "Open Folder",              # Dialog title
-        ""                          # Default directory (empty for no specific directory)
+        starting_path               # Default directory (empty for no specific directory)
     )
 
     # If a folder was selected, return it's path
     if selected_folder:
         return selected_folder
 
-def open_folder(folder_path):
+def open_folder_explorer(folder_path):
     QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))
