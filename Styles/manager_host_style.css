@@ -108,6 +108,21 @@ QLabel {
     font-size: 12px;
 }
 
+#checkbox {
+    color: white;
+    font-size: 15px;
+}
+
+#connectingText {
+    color: #4285f4;
+    font-size: 28px;
+}
+
+#messageText {
+    color: white;
+    font-size: 18px;
+}
+
 #statusOnline {
     color: lightgreen; /* Text color */
     background-color: darkgreen; /* Background color of the text outline */

@@ -8,14 +8,14 @@ import json
 import sys
 import queue
 import subprocess
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -85,14 +85,13 @@ class ServerManagerApp(QMainWindow):
         self.set_players_signal.connect(self.set_players)
 
         self.init_ui()
-        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
         if self.server_path == "" or not os.path.isdir(self.server_path):
             self.message_timer.stop()
             self.show_server_entry_page()
             # self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
         else:
             self.start_manager_server()
-            self.first_load()
 
     def init_ui(self):
         # Central widget to hold everything
@@ -225,9 +224,9 @@ class ServerManagerApp(QMainWindow):
         self.folder_button = QPushButton("Open Server Folder")
         self.folder_button.clicked.connect(self.open_server_folder)
         bot_box.addWidget(self.folder_button)
-        self.ok_button = QPushButton("OK")
-        self.ok_button.clicked.connect(self.accepted_eula)
-        bot_box.addWidget(self.ok_button)
+        self.eula_ok_button = QPushButton("OK")
+        self.eula_ok_button.clicked.connect(self.accepted_eula)
+        bot_box.addWidget(self.eula_ok_button)
 
         center_column_layout.addLayout(top_box)
         center_column_layout.addLayout(bot_box)
@@ -248,7 +247,7 @@ class ServerManagerApp(QMainWindow):
         error_page = QWidget()
         error_page.setLayout(error_layout)
 
-        # Page 3: Connect to Server
+        # Page 3: Server Path Prompt
         server_path_layout = QGridLayout()
         center_column_layout = QVBoxLayout()
         input_layout = QVBoxLayout()
@@ -321,10 +320,71 @@ class ServerManagerApp(QMainWindow):
         server_path_page = QWidget()
         server_path_page.setLayout(server_path_layout)
 
+        # Page 4: IP Prompt Page
+        connect_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        input_layout = QVBoxLayout()
+        input_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+
+        host_ip_label = QLabel("Hosting IP:")
+        host_ip_label.setObjectName("mediumText")
+        host_ip_label.setFont(QFont(host_ip_label.font().family(), int(host_ip_label.font().pointSize() * 1.5)))
+        host_ip_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.hosting_ip_entry = QLineEdit(self.default_ip)  # Set default IP
+        self.hosting_ip_entry.setMinimumWidth(self.width() // 2)
+        self.hosting_ip_entry.setMaximumWidth(self.width() // 2)
+        self.hosting_ip_entry.setFont(QFont(self.hosting_ip_entry.font().family(), int(self.hosting_ip_entry.font().pointSize() * 1.5)))
+        self.hosting_ip_entry.setPlaceholderText(self.host_ip or self.default_ip)
+        self.default_ip_check = QCheckBox("Set as default")
+        self.default_ip_check.setObjectName("checkbox")
+        self.default_ip_check.setChecked(False)
+        self.host_button = QPushButton("Host")
+        self.host_button.clicked.connect(self.set_ip)
+
+        input_layout.addWidget(host_ip_label)
+        input_layout.addWidget(self.hosting_ip_entry)
+        input_layout.addWidget(self.host_button)
+        input_layout.addWidget(self.default_ip_check)
+
+        # Shown when server host failure
+        message_layout = QVBoxLayout()
+        message_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.connecting_label = QLabel("Connecting")
+        self.connecting_label.setObjectName("connectingText")
+        self.connecting_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        message_layout.addWidget(self.connecting_label)
+        self.connecting_label.setText("")
+        self.connecting_label.setFont(QFont("Tahoma", self.connecting_label.font().pointSize()))
+
+        self.connection_delabel = QLabel("Is Hamachi Offline?")
+        self.connection_delabel.setObjectName("messageText")
+        self.connection_delabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.connection_delabel.setText("")
+        message_layout.addWidget(self.connection_delabel)
+
+        center_column_layout.addLayout(input_layout)
+        center_column_layout.addLayout(message_layout)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        connect_layout.setColumnStretch(0, 1)
+        connect_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        connect_layout.addLayout(right_column_layout, 0, 9)
+        connect_layout.setColumnStretch(9, 1)
+
+        connect_page = QWidget()
+        connect_page.setLayout(connect_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
         self.stacked_layout.addWidget(server_path_page)
+        self.stacked_layout.addWidget(connect_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -351,22 +411,25 @@ class ServerManagerApp(QMainWindow):
             QApplication.processEvents()
     
     def show_main_page(self):
-        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.default_ip, self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.stacked_layout.setCurrentIndex(0)
     
-    def show_error_page(self, error, info, ok_button=False):
+    def show_error_page(self, error, info, eula_ok_button=False):
         self.error_label.setText(error)
         self.info_label.setText(info)
-        if ok_button:
-            self.ok_button.show()
+        if eula_ok_button:
+            self.eula_ok_button.show()
             self.folder_button.show()
         else:
-            self.ok_button.hide()
+            self.eula_ok_button.hide()
             self.folder_button.hide()
         self.stacked_layout.setCurrentIndex(1)
     
     def show_server_entry_page(self):
         self.stacked_layout.setCurrentIndex(2)
+    
+    def show_ip_entry_page(self):
+        self.stacked_layout.setCurrentIndex(3)
     
     def check_server_path(self, new_text):
         self.existing_server_button.setEnabled(os.path.isdir(new_text))
@@ -375,13 +438,23 @@ class ServerManagerApp(QMainWindow):
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if self.host_ip == "":
+            self.show_ip_entry_page()
+            self.default_ip_check.setChecked(False)
+            return
         try:
             self.server.bind((self.host_ip, self.port))
             self.server.listen()
             self.server.setblocking(False)
         except:
-            self.show_error_page("Unable to Start Manager", "Is Hamachi open?")
+            self.hosting_ip_entry.setText(self.host_ip)
+            self.connecting_label.setText("Unable to Bind to IP")
+            self.connection_delabel.setText("Is Hamachi offline?")
+            self.show_ip_entry_page()
+            self.default_ip_check.setChecked(False)
             return
+        self.show_main_page()
+        self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
         self.message_timer.start(1000)
@@ -432,7 +505,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, self.server_path, self.worlds)
+                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -785,10 +858,8 @@ class ServerManagerApp(QMainWindow):
             while not self.log_queue.empty():
                 self.log_queue.get()
             self.message_timer.start(1000)
-            file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, path, self.worlds)
-            self.show_main_page()
+            file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
             self.start_manager_server()
-            self.first_load()
     
     def create_server_folder(self):
         path = self.server_folder_path_entry.text()
@@ -808,7 +879,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.get()
         self.message_timer.start(1000)
             
-        file_funcs.update_settings(self.file_lock, self.host_ip, self.ips, path, self.worlds)
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
         
         self.log_queue.put("Downloading latest server.jar file...")
         self.delay(0.5)
@@ -827,9 +898,17 @@ class ServerManagerApp(QMainWindow):
             self.show_error_page("You must agree to the EULA in order to run the server.",
                                     "Please open 'eula.txt' in the server folder.", True)
         elif "eula=true" in content:
-            self.show_main_page()
             self.start_manager_server()
-            self.first_load()
+    
+    def set_ip(self):
+        ip = self.hosting_ip_entry.text()
+        if ip:
+            self.connecting_label.setText("Connecting...")
+            self.host_ip = ip
+            self.delay(0.5)
+            if self.default_ip_check.isChecked():
+                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, ip=self.host_ip)
+            self.start_manager_server()
     
     @pyqtSlot()
     def onWindowStateChanged(self):

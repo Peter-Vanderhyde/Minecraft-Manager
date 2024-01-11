@@ -8,9 +8,9 @@ from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 
-def load_settings(default_ip, log_queue, file_lock):
+def load_settings(log_queue, file_lock):
     data = {
-        "ip": f"{default_ip}",
+        "ip": f"",
         "names": {},
         "server folder": {
             "path": "",
@@ -25,17 +25,12 @@ def load_settings(default_ip, log_queue, file_lock):
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return default_ip, {}, "", {}
+        return "", {}, "", {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
     server_path = data["server folder"].get("path")
     worlds = data["server folder"].get("worlds")
-
-    # Check batch file exists
-    # if not os.path.isfile(os.path.join(server_path, "run.bat")):
-    #     log_queue.put(f"<font color='red'>ERROR: Unable to find .bat file at '{server_path}'.</font>")
-    #     worlds = {}
     
     if worlds is not None:
         if server_path:
@@ -48,8 +43,8 @@ def load_settings(default_ip, log_queue, file_lock):
         if ips is None:
             ips = {}
         if host_ip is None:
-            host_ip = default_ip
-        update_settings(file_lock, host_ip, ips, server_path, worlds)
+            host_ip = ""
+        update_settings(file_lock, ips, server_path, worlds, ip=host_ip)
     
     return host_ip, ips, server_path, worlds
 
@@ -121,10 +116,10 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_settings(file_lock, host_ip, ips, server_path, worlds):
+def update_settings(file_lock, ips, server_path, worlds, ip=""):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
-            json.dump({"ip": host_ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}}, f, indent=4)
+            json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}}, f, indent=4)
 
 def prepare_server_settings(world, version, fabric, server_path, log_queue):
     # Change the properties
