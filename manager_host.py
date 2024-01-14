@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -926,6 +926,9 @@ class ServerManagerApp(QMainWindow):
     
     def backup_world(self):
         world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        if world_path is None:
+            return
+        
         world_path = os.path.normpath(world_path)
         world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
         if world_path in world_folders:
