@@ -192,6 +192,9 @@ class ServerManagerApp(QMainWindow):
         self.backup_button.clicked.connect(self.backup_world)
         self.backup_button.setObjectName("yellowButton")
 
+        self.add_world_button = QPushButton("Add World")
+        self.add_world_button.clicked.connect(self.show_add_world_page)
+
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
         functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
@@ -208,6 +211,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.addWidget(separator, 5, 0, 1, 2)
         functions_layout.addWidget(self.backup_button, 6, 0, 1, 2)
+        functions_layout.addWidget(self.add_world_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -361,7 +365,7 @@ class ServerManagerApp(QMainWindow):
         input_layout.addWidget(self.host_button)
         input_layout.addWidget(self.default_ip_check)
 
-        # Shown when server host failure
+        # Shown when attempting to host
         message_layout = QVBoxLayout()
         message_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.connecting_label = QLabel("Connecting")
@@ -394,11 +398,40 @@ class ServerManagerApp(QMainWindow):
         connect_page = QWidget()
         connect_page.setLayout(connect_layout)
 
+        # Page 5: Add world page
+        world_layout = QVBoxLayout()
+        world_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        top_box = QHBoxLayout()
+        top_box.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        bot_box = QHBoxLayout()
+        bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        create_new_button = QPushButton("Create New")
+        create_new_button.setEnabled(False)
+        select_existing_button = QPushButton("Select Existing")
+        select_existing_button.setObjectName("yellowButton")
+        # select_existing_button.clicked.connect(self.add_existing_world)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("smallRedButton")
+        cancel_button.clicked.connect(self.show_main_page)
+
+        top_box.addWidget(create_new_button)
+        top_box.addWidget(select_existing_button)
+        bot_box.addWidget(cancel_button)
+
+        world_layout.addLayout(top_box)
+        world_layout.addLayout(bot_box)
+
+        add_world_page = QWidget()
+        add_world_page.setLayout(world_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
         self.stacked_layout.addWidget(server_path_page)
         self.stacked_layout.addWidget(connect_page)
+        self.stacked_layout.addWidget(add_world_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -444,6 +477,9 @@ class ServerManagerApp(QMainWindow):
     
     def show_ip_entry_page(self):
         self.stacked_layout.setCurrentIndex(3)
+    
+    def show_add_world_page(self):
+        self.stacked_layout.setCurrentIndex(4)
     
     def check_server_path(self, new_text):
         self.existing_server_button.setEnabled(os.path.isdir(new_text))

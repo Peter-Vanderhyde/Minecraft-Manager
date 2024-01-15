@@ -14,16 +14,16 @@ QPushButton {
     border-radius: 8px;
 }
 
-#yellowButton {
+#yellowButton, #smallYellowButton {
     background-color: #d4af37;  /* Yellow background color */
 }
 
-#redButton {
+#redButton, #smallRedButton {
     color: lightcoral; /* Text color */
     background-color: darkred; /* Background color of the text outline */
 }
 
-#blueButton {
+#blueButton, #smallBlueButton {
     background-color: #3b5998; /* Blue variant */
     color: #4285f4;
 }
@@ -32,15 +32,15 @@ QPushButton:hover {
     background-color: #45a049; /* Change background color on hover */
 }
 
-#yellowButton:hover {
+#yellowButton:hover, #smallYellowButton:hover {
     background-color: #ba9827; /* Darker yellow on hover */
 }
 
-#redButton:hover {
+#redButton:hover, #smallRedButton:hover {
     background-color: #780000; /* Darker red on hover */
 }
 
-#blueButton:hover {
+#blueButton:hover, #smallBlueButton:hover {
     background-color: #2d4278; /* Darker blue on hover */
 }
 
@@ -48,15 +48,15 @@ QPushButton:pressed {
     background-color: #3c9039; /* Change background color when pressed */
 }
 
-#yellowButton:pressed {
+#yellowButton:pressed, #smallYellowButton:pressed {
     background-color: #997e24; /* Even darker yellow when pressed */
 }
 
-#redButton:pressed {
+#redButton:pressed, #smallRedButton:pressed {
     background-color: #660000; /* Even darker red when pressed */
 }
 
-#blueButton:pressed {
+#blueButton:pressed, #smallBlueButton:pressed {
     background-color: #1d2951; /* Even darker blue when pressed */
 }
 
@@ -65,9 +65,14 @@ QPushButton:disabled {
     color: #d0d0d0; /* Lighter text color for disabled */
 }
 
-#yellowButton:disabled, #redButton:disabled, #blueButton:disabled {
+#yellowButton:disabled, #redButton:disabled, #blueButton:disabled,
+#smallYellowButton:disabled, #smallRedButton:disabled, #smallBlueButton:disabled {
     background-color: #a0a0a0; /* Slightly lighter gray for disabled */
     color: #d0d0d0; /* Lighter text color for disabled */
+}
+
+#smallYellowButton, #smallRedButton, #smallBlueButton {
+    font-size: 12px;
 }
 
 QLineEdit, QTextEdit {
