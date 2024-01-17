@@ -140,7 +140,6 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
         with open(os.path.join(server_path, "server.properties"), 'w') as properties:
             properties.writelines(lines)
         
-        # TODO Change the .jar
         if not fabric:
             source_path = os.path.join(server_path, "versions", version, f"server-{version}.jar")
             if not os.path.isfile(source_path):
@@ -152,9 +151,7 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
             
             jars = glob.glob(os.path.join(server_path, "*.jar"))
             for jar in jars:
-                # Avoid deleting existing fabric server jar files
-                if f"fabric-server-mc" not in jar:
-                    os.remove(jar)
+                os.remove(jar)
             
             queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
             time.sleep(1)
@@ -179,13 +176,11 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
             time.sleep(1)
         
         else:
-            jars = glob.glob(os.path.join(server_path, f"fabric-server-mc.{version}-loader*.jar"))
-            if len(jars) == 0:
-                log_queue.put(f"<font color='red'>ERROR: Unable to find fabric-server-{version}.jar.</font>")
-                return False
+            jars = glob.glob(os.path.join(server_path, f"fabric-server-*.jar"))
             while len(jars) > 1:
                 os.remove(os.path.join(server_path, jars[0]))
-            jar_file = jars[0]
+            
+            queries.download_fabric_server_jar(version, server_path, log_queue)
             
             time.sleep(1)
             # Delete libraries and re-extract them
@@ -200,7 +195,7 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
                 line = " -jar "
             command, file = line.split(" -jar ")
             command.replace("java", "javaw") # Ensure using javaw instead of java
-            new_command = f"{command} -jar {jar_file}"
+            new_command = f"{command} -jar fabric-server-{version}.jar"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
                 b.write(new_command)
             time.sleep(1)

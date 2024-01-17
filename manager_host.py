@@ -644,11 +644,11 @@ class ServerManagerApp(QMainWindow):
                 
                 time.sleep(1)
         
-        self.log_queue.put(f"{self.clients[client]} has joined the room!")
+        self.log_queue.put(f"<font color='blue'>{self.clients[client]} has joined the room!</font>")
         self.tell(client, "You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
-                self.tell(send_client, f"{self.clients[client]} has joined the room!")
+                self.tell(send_client, f"<font color='blue'>{self.clients[client]} has joined the room!</font>")
         
         self.delay(1)
 
