@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -409,7 +409,7 @@ class ServerManagerApp(QMainWindow):
         bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         create_new_button = QPushButton("Create New World")
-        create_new_button.setEnabled(False)
+        create_new_button.clicked.connect(self.add_new_world)
         select_existing_button = QPushButton("Add Existing World")
         select_existing_button.clicked.connect(self.add_existing_world)
         backup_button = QPushButton("Save Backup")
@@ -454,6 +454,14 @@ class ServerManagerApp(QMainWindow):
 
         self.add_world_label = QLabel("")
         self.add_world_label.setObjectName("largeText")
+        self.new_world_name_edit = QLineEdit("")
+        self.new_world_name_edit.setObjectName("lineEdit")
+        self.new_world_name_edit.setPlaceholderText("World Name")
+        self.new_world_name_edit.hide()
+        self.new_world_seed_edit = QLineEdit("")
+        self.new_world_seed_edit.setObjectName("lineEdit")
+        self.new_world_seed_edit.setPlaceholderText("(Optional) World Seed")
+        self.new_world_seed_edit.hide()
         self.mc_version = QLineEdit("")
         self.mc_version.setPlaceholderText("Version")
         self.mc_version.setObjectName("lineEdit")
@@ -472,6 +480,8 @@ class ServerManagerApp(QMainWindow):
         self.add_world_error.setObjectName("messageText")
 
         top_box.addWidget(self.add_world_label)
+        top_box.addWidget(self.new_world_name_edit)
+        top_box.addWidget(self.new_world_seed_edit)
         top_box.addWidget(self.mc_version)
         temp = QHBoxLayout()
         temp.addWidget(self.is_fabric_check, 1, Qt.AlignmentFlag.AlignCenter)
@@ -786,6 +796,7 @@ class ServerManagerApp(QMainWindow):
         if self.worlds.get(world):
             version = self.worlds[world].get("version")
             fabric = self.worlds[world].get("fabric")
+            seed = self.worlds[world].get("seed", None)
         if not version:
             self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
             return f"<font color='red'>ERROR: World {world} is missing version.</font>"
@@ -798,23 +809,33 @@ class ServerManagerApp(QMainWindow):
         if not data:
             self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
             return f"<font color='red'>Manager doesn't recognize that world.</font>"
-        elif not os.path.exists(path):
+        elif not os.path.exists(path) and self.worlds[world].get("seed") is None:
             error = f"<font color='red'>Uh oh. Path to world '{world}' no longer exists.</font>"
             self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
             return error
         else:
             try:
                 if not restart:
-                    self.log_queue.put(f"Preparing for version {version}.")
+                    self.log_queue.put(f"Preparing for {'fabric ' if fabric else ''} version {version}.")
+                    if seed is not None:
+                        self.log_queue.put(f"Generating world with seed '{seed or 'random'}'...")
                     self.delay(1)
-                    if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue):
+                    if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
                         raise RuntimeError("Failed to prepare settings.")
+                    else:
+                        if seed is not None:
+                            self.worlds[world].pop("seed")
+                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
                 
                 os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
                 loop = True
                 window = None
                 ignition_window = None
-                end_time = time.time() + 30
+                if seed is not None:
+                    timer_amount = 60
+                else:
+                    timer_amount = 30
+                end_time = time.time() + timer_amount
                 while loop and not self.stop_threads.is_set():
                     QApplication.processEvents()
                     windows = pgw.getAllTitles()
@@ -1076,20 +1097,36 @@ class ServerManagerApp(QMainWindow):
                     self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
                     self.show_main_page()
                     return
-                self.add_world(os.path.basename(world_path), new=False)
+                self.add_world(world=os.path.basename(world_path), new=False)
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to add world folder.</font>")
         elif world_path:
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
     
-    def add_world(self, world, new=False):
-        self.add_world_label.setText(world)
+    def add_new_world(self):
+        self.add_world(new=True)
+    
+    def add_world(self, world="", new=False):
         if new:
             self.add_existing_world_button.hide()
             self.create_new_world_button.show()
+            self.new_world_name_edit.show()
+            self.new_world_seed_edit.show()
+            self.add_world_label.setText("Create World")
+
+            self.mc_version.setText("")
+            self.new_world_seed_edit.setText("")
+            self.new_world_name_edit.setText("")
+            self.is_fabric_check.setChecked(False)
         else:
             self.add_existing_world_button.show()
             self.create_new_world_button.hide()
+            self.new_world_name_edit.hide()
+            self.new_world_seed_edit.hide()
+            self.add_world_label.setText(world)
+
+            self.mc_version.setText("")
+            self.is_fabric_check.setChecked(False)
         
         self.add_world_error.setText("")
         self.show_add_world_page()
@@ -1100,6 +1137,8 @@ class ServerManagerApp(QMainWindow):
                 return queries.verify_fabric_version(version)
             else:
                 return queries.verify_mc_version(version)
+        else:
+            return False
 
     def confirm_add_world(self):
         result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
@@ -1117,8 +1156,20 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page()
 
     def confirm_create_world(self):
-        result = self.verify_version(self.mc_version, self.is_fabric_check.isChecked())
+        if self.new_world_name_edit.text() == "" or self.new_world_name_edit.text() in self.worlds.keys():
+            self.add_world_error.setText(f"Name invalid or already exists.")
+            return
+        
+        result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
         if result is True:
+            self.worlds[self.new_world_name_edit.text()] = {
+                "version": self.mc_version.text(),
+                "fabric": self.is_fabric_check.isChecked(),
+                "seed": self.new_world_seed_edit.text()
+            }
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+            self.set_worlds_list()
+            self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
             self.show_main_page()
         elif result is False:

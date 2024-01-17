@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3"
 
 if TESTING:
@@ -89,6 +89,7 @@ class ServerManagerApp(QMainWindow):
         
         self.init_ui()
         self.connect_button.clicked.connect(self.start_connection_thread)
+        self.host_ip_entry.returnPressed.connect(self.start_connection_thread)
 
     def init_ui(self):
 
