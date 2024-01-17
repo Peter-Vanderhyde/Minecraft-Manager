@@ -1,7 +1,6 @@
 import os
 import requests
 from mcstatus import JavaServer
-import queue
 
 def status(ip, port):
     try:
