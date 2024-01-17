@@ -10,15 +10,19 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
 TESTING = False
-VERSION = "v2.2"
+VERSION = "v2.3"
+
+if TESTING:
+    STYLE_PATH = "Styles"
+    IMAGE_PATH = "Images"
+else:
+    STYLE_PATH = sys._MEIPASS
+    IMAGE_PATH = sys._MEIPASS
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        if TESTING:
-            self.background_image = QPixmap("block_background.png")
-        else:
-            self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
+        self.background_image = QPixmap(os.path.join(IMAGE_PATH, "block_background.png"))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -50,7 +54,7 @@ class ConnectionWorker(QObject):
 class ServerManagerApp(QMainWindow):
     set_status_signal = pyqtSignal(list)
     set_players_signal = pyqtSignal(list)
-    set_worlds_list_signal = pyqtSignal(list)
+    set_worlds_list_signal = pyqtSignal(dict)
     get_status_signal = pyqtSignal()
     update_log_signal = pyqtSignal(str)
     switch_to_connect_signal = pyqtSignal()
@@ -68,6 +72,7 @@ class ServerManagerApp(QMainWindow):
         self.connection_thread = None
         self.status = ""
         self.server_version = ""
+        self.worlds = {}
         self.log_queue = queue.Queue()
         self.connection_delay_messages = ["Having trouble connecting? Either",
                                      "1. Your Hamachi is not open",
@@ -84,6 +89,7 @@ class ServerManagerApp(QMainWindow):
         
         self.init_ui()
         self.connect_button.clicked.connect(self.start_connection_thread)
+        self.host_ip_entry.returnPressed.connect(self.start_connection_thread)
 
     def init_ui(self):
 
@@ -249,6 +255,9 @@ class ServerManagerApp(QMainWindow):
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
+        self.world_version_label = QLabel("")
+        self.world_version_label.setObjectName("world_version")
+        self.world_version_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
@@ -258,16 +267,18 @@ class ServerManagerApp(QMainWindow):
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0)
+        functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
 
         # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QHBoxLayout()
         self.dropdown = QComboBox()
+        self.dropdown.currentTextChanged.connect(self.set_current_world_version)
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         functions_layout.addLayout(dropdown_layout, 1, 1)
+        functions_layout.addWidget(self.world_version_label, 2, 1)
 
-        functions_layout.addWidget(self.stop_button, 2, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(self.restart_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -295,123 +306,14 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        if TESTING:
-            icon = QIcon("block_icon.png")
-        else:
-            icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
+        icon = QIcon(os.path.join(IMAGE_PATH, "block_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        self.setStyleSheet(
-            """
-            text {
-                color: white;
-            }
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                color: white;
-                padding: 5px 15px;
-                text-align: center;
-                text-decoration: none;
-                font-size: 16px;
-                margin: 4px 2px;
-                border-radius: 8px;
-            }
-                           
-            QPushButton:hover {
-                background-color: #45a049; /* Change background color on hover */
-            }
-
-            QPushButton:pressed {
-                background-color: #3c9039; /* Change background color when pressed */
-            }
-                           
-            QPushButton:disabled {
-                background-color: #d3d3d3; /* Light gray */
-            }
-
-            #stopButton {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-            }
-
-            #stopButton:hover {
-                background-color: #780000; /* Darker red on hover */
-            }
-
-            #stopButton:pressed {
-                background-color: #660000; /* Even darker red when pressed */
-            }
-
-            #restartButton {
-                background-color: #3b5998; /* Blue variant */
-                color: #4285f4;
-            }
-
-            #restartButton:hover {
-                background-color: #2d4278; /* Darker blue on hover */
-            }
-
-            #restartButton:pressed {
-                background-color: #1d2951; /* Even darker blue when pressed */
-            }
-
-            #stopButton:disabled,
-            #restartButton:disabled {
-                background-color: #a0a0a0; /* Slightly lighter gray for disabled */
-                color: #d0d0d0; /* Lighter text color for disabled */
-            }
-
-            QLineEdit, QTextEdit {
-                border: 4px solid #4CAF50;
-                border-radius: 8px;
-                padding: 0px;
-            }
-
-            QLabel {
-                color: white;
-            }
-
-            #mediumText {
-                font-size: 27px;
-            }
-                           
-            #connectingText {
-                color: #4285f4;
-                font-size: 28px;
-            }
-
-            #messageText {
-                color: white;
-                font-size: 18px;
-            }
-
-            #details {
-                font-size: 16px;
-            }
-
-            #version_num {
-                color: #4285f4;
-                font-size: 16px;
-            }
-                           
-            #statusOnline {
-                color: lightgreen; /* Text color */
-                background-color: darkgreen; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-            
-            #statusOffline {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-        """)
+        with open(os.path.join(STYLE_PATH, "manager_style.css"), 'r') as stylesheet:
+            style_str = stylesheet.read()
+        
+        self.setStyleSheet(style_str)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
@@ -483,7 +385,7 @@ class ServerManagerApp(QMainWindow):
                     self.close_threads.set()
                     break
 
-                messages += message.split("SERVER-MESSAGE:")[1:]
+                messages += message.split("SERVER-MESSAGE~~>")[1:]
                 if "CLOSING" in messages:
                     break
 
@@ -492,7 +394,7 @@ class ServerManagerApp(QMainWindow):
                     if not message.startswith("DATA-RETURN"):
                         self.log_queue.put(message)
                     else:
-                        data = message.split(':')
+                        data = message.split('~~>')
                         key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
                         if key == "status":
                             self.set_status_signal.emit(args)
@@ -516,7 +418,7 @@ class ServerManagerApp(QMainWindow):
             label.setText(self.connection_delay_messages[i])
     
     def send(self, message):
-        self.client.sendall(f"CLIENT-MESSAGE:{message}".encode("utf-8"))
+        self.client.sendall(f"CLIENT-MESSAGE~~>{message}".encode("utf-8"))
 
     def switch_to_name_prompt(self):
         self.stacked_layout.setCurrentIndex(1) # Show the second page (Name Prompt)
@@ -541,6 +443,7 @@ class ServerManagerApp(QMainWindow):
             self.message_thread.join()
         if self.client:
             self.client.close()
+        self.set_worlds_list({})
         self.stacked_layout.setCurrentIndex(0)
         self.connecting_label.setText("Lost Connection")
         self.close_threads.clear()
@@ -559,22 +462,22 @@ class ServerManagerApp(QMainWindow):
 
     def get_status(self):
         self.set_status(["pinging",None,None])
-        self.send("MANAGER-REQUEST:get-status")
+        self.send("MANAGER-REQUEST~~>get-status")
 
     def get_players(self):
-        self.send("MANAGER-REQUEST:get-players")
+        self.send("MANAGER-REQUEST~~>get-players")
 
     def get_worlds_list(self):
-        self.send("MANAGER-REQUEST:get-worlds-list")
+        self.send("MANAGER-REQUEST~~>get-worlds-list")
     
     def start_server(self, world):
-        self.send(f"MANAGER-REQUEST:start-server,{world}")
+        self.send(f"MANAGER-REQUEST~~>start-server,{world}")
     
     def stop_server(self):
-        self.send("MANAGER-REQUEST:stop-server")
+        self.send("MANAGER-REQUEST~~>stop-server")
     
     def restart_server(self):
-        self.send("MANAGER-REQUEST:restart-server")
+        self.send("MANAGER-REQUEST~~>restart-server")
     
     def set_status(self, info):
         status, version, world = info
@@ -583,7 +486,7 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            self.version_label.setText(f"Version: {version}")
+            self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
             self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
             self.get_players()
@@ -628,8 +531,17 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.append(f"<font color='blue'>{player}</font>")
     
     def set_worlds_list(self, worlds):
+        self.worlds.clear()
+        self.worlds.update(worlds)
         self.dropdown.clear()
-        self.dropdown.addItems(worlds)
+        self.dropdown.addItems(worlds.keys())
+        self.set_current_world_version(self.dropdown.currentText())
+
+    def set_current_world_version(self, world):
+        if world:
+            self.world_version_label.setText(f'v{self.worlds[world]["version"]} {"Fabric" * self.worlds[world]["fabric"]}')
+        else:
+            self.world_version_label.setText("")
     
     def update_log(self, message):
         self.log_box.append(message)

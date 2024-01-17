@@ -5,28 +5,53 @@ import pyautogui as pag
 import pygetwindow as pgw
 import time
 import json
-from mcstatus import JavaServer
-
 import sys
 import queue
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser
+import subprocess
+import glob
+import shutil
+from datetime import datetime
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 
+import queries
+import file_funcs
+
 TESTING = False
-VERSION = "v2.2"
+VERSION = "v2.3"
+
+if TESTING:
+    STYLE_PATH = "Styles"
+    IMAGE_PATH = "Images"
+else:
+    STYLE_PATH = sys._MEIPASS
+    IMAGE_PATH = sys._MEIPASS
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        if TESTING:
-            self.background_image = QPixmap("block_background.png")
-        else:
-            self.background_image = QPixmap(os.path.join(sys._MEIPASS, "block_background.png"))
+        self.background_image = QPixmap(os.path.join(IMAGE_PATH, "block_background.png"))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
         painter.drawPixmap(QRect(0, 0, self.width(), self.height()), self.background_image)
+
+class HoverButton(QPushButton):
+    changeHovering = pyqtSignal(bool)
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        self.setMouseTracking(True)  # Enable mouse tracking to receive enter and leave events
+
+    def enterEvent(self, event):
+        # This is triggered when the mouse enters the button
+        self.changeHovering.emit(True)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        # This is triggered when the mouse leaves the button
+        self.changeHovering.emit(False)
+        super().leaveEvent(event)
 
 class ServerManagerApp(QMainWindow):
     get_status_signal = pyqtSignal()
@@ -38,6 +63,7 @@ class ServerManagerApp(QMainWindow):
 
         # Default IP
         self.default_ip = "127.0.0.1"
+        self.saved_ip = ""
         self.host_ip = ""
         self.port = 5555
         self.server_port = "25565"
@@ -48,8 +74,9 @@ class ServerManagerApp(QMainWindow):
         self.ips = {}
         self.clients = {}
         self.status = ""
+        self.server_path = ""
         self.previous_world = ""
-        self.world_paths = {}
+        self.worlds = {}
         self.log_queue = queue.Queue()
 
         self.no_clients = True
@@ -62,9 +89,13 @@ class ServerManagerApp(QMainWindow):
         self.set_players_signal.connect(self.set_players)
 
         self.init_ui()
-        self.load_settings()
-        self.start_manager_server()
-        self.first_load()
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+        if self.server_path == "" or not os.path.isdir(self.server_path):
+            self.message_timer.stop()
+            self.show_server_entry_page()
+            # self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
+        else:
+            self.start_manager_server()
 
     def init_ui(self):
         # Central widget to hold everything
@@ -144,25 +175,42 @@ class ServerManagerApp(QMainWindow):
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
+        self.world_version_label = QLabel("")
+        self.world_version_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.world_version_label.setObjectName("world_version")
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
-        self.stop_button.setObjectName("stopButton")
+        self.stop_button.setObjectName("redButton")
         self.restart_button = QPushButton("Restart")
         self.restart_button.clicked.connect(self.restart_server)
-        self.restart_button.setObjectName("restartButton")
+        self.restart_button.setObjectName("blueButton")
+
+        separator = QFrame(self)
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setFrameShadow(QFrame.Shadow.Raised)
+
+        self.world_options = QPushButton("World Options")
+        self.world_options.clicked.connect(self.show_world_options_page)
+        open_folder_button = QPushButton("Server Folder")
+        open_folder_button.clicked.connect(self.open_server_folder)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0)
+        functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
 
         # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QHBoxLayout()
         self.dropdown = QComboBox()
+        self.dropdown.currentTextChanged.connect(self.set_selected_world_version)
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         functions_layout.addLayout(dropdown_layout, 1, 1)
+        functions_layout.addWidget(self.world_version_label, 2, 1)
 
-        functions_layout.addWidget(self.stop_button, 2, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(self.restart_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
+        functions_layout.addWidget(separator, 5, 0, 1, 2)
+        functions_layout.addWidget(self.world_options, 6, 0, 1, 2)
+        functions_layout.addWidget(open_folder_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -180,15 +228,21 @@ class ServerManagerApp(QMainWindow):
         center_column_layout = QVBoxLayout()
 
         top_box = QVBoxLayout()
-        self.error_label = QLabel("Unable to start manager")
+        self.error_label = QLabel("")
         self.error_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
         self.error_label.setObjectName("error")
         top_box.addWidget(self.error_label)
         bot_box = QVBoxLayout()
-        self.info_label = QLabel("Is Hamachi running?")
+        self.info_label = QLabel("")
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.info_label.setObjectName("details")
         bot_box.addWidget(self.info_label)
+        self.folder_button = QPushButton("Open Server Folder")
+        self.folder_button.clicked.connect(self.open_server_folder)
+        bot_box.addWidget(self.folder_button)
+        self.eula_ok_button = QPushButton("OK")
+        self.eula_ok_button.clicked.connect(self.accepted_eula)
+        bot_box.addWidget(self.eula_ok_button)
 
         center_column_layout.addLayout(top_box)
         center_column_layout.addLayout(bot_box)
@@ -209,9 +263,260 @@ class ServerManagerApp(QMainWindow):
         error_page = QWidget()
         error_page.setLayout(error_layout)
 
+        # Page 3: Server Path Prompt
+        server_path_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        input_layout = QVBoxLayout()
+        input_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
+
+        server_folder_label = QLabel("Server Folder Path:")
+        server_folder_label.setObjectName("mediumText")
+        server_folder_label.setFont(QFont(server_folder_label.font().family(), int(server_folder_label.font().pointSize() * 1.5)))
+        server_folder_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        side_by_side = QHBoxLayout()
+        side_by_side.setContentsMargins(0, 0, 0, 0)
+
+        self.server_folder_path_entry = QLineEdit("")
+        self.server_folder_path_entry.setObjectName("serverEntry")
+        self.server_folder_path_entry.setMinimumWidth(self.width() // 2)
+        self.server_folder_path_entry.setMaximumWidth(self.width() // 2)
+        self.server_folder_path_entry.setFont(QFont(self.server_folder_path_entry.font().family(), int(self.server_folder_path_entry.font().pointSize() * 1.5)))
+        self.server_folder_path_entry.setPlaceholderText("Server Path")
+        self.server_folder_path_entry.textChanged.connect(self.check_server_path)
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.setObjectName("browseButton")
+        self.browse_button.clicked.connect(lambda: self.server_folder_path_entry.setText(file_funcs.pick_folder(self) or
+                                                                                         self.server_folder_path_entry.text()))
+
+        side_by_side.addWidget(self.server_folder_path_entry, 8)
+        side_by_side.addWidget(self.browse_button, 2)
+
+        input_layout.addWidget(server_folder_label)
+        input_layout.addLayout(side_by_side)
+
+        self.server_path_hover_label = QLabel("")
+        self.server_path_hover_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.server_path_hover_label.setObjectName("smallText")
+
+        options_layout = QHBoxLayout()
+        options_layout.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        self.create_server_button = HoverButton("Create New")
+        self.create_server_button.setEnabled(False)
+        self.create_server_button.changeHovering.connect(lambda hovering: self.server_path_hover_label.setText(
+            "Automatically download and set up a server in the specified empty folder." if hovering else ""
+        ))
+        self.create_server_button.clicked.connect(self.create_server_folder)
+        self.existing_server_button = HoverButton("Use Existing")
+        self.existing_server_button.setObjectName("yellowButton")
+        self.existing_server_button.setEnabled(False)
+        self.existing_server_button.changeHovering.connect(lambda hovering: self.server_path_hover_label.setText(
+            "Use the specified path of a previously created server folder." if hovering else ""
+        ))
+        self.existing_server_button.clicked.connect(self.set_server_path)
+        options_layout.addWidget(self.create_server_button)
+        options_layout.addWidget(self.existing_server_button)
+
+        center_column_layout.addLayout(input_layout)
+        center_column_layout.addLayout(options_layout)
+
+        center_column_layout.addWidget(self.server_path_hover_label)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        server_path_layout.setColumnStretch(0, 1)
+        server_path_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        server_path_layout.addLayout(right_column_layout, 0, 9)
+        server_path_layout.setColumnStretch(9, 1)
+
+        server_path_page = QWidget()
+        server_path_page.setLayout(server_path_layout)
+
+        # Page 4: IP Prompt Page
+        connect_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        input_layout = QVBoxLayout()
+        input_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+
+        host_ip_label = QLabel("Hosting IP:")
+        host_ip_label.setObjectName("mediumText")
+        host_ip_label.setFont(QFont(host_ip_label.font().family(), int(host_ip_label.font().pointSize() * 1.5)))
+        host_ip_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.hosting_ip_entry = QLineEdit(self.default_ip)  # Set default IP
+        self.hosting_ip_entry.setMinimumWidth(self.width() // 2)
+        self.hosting_ip_entry.setMaximumWidth(self.width() // 2)
+        self.hosting_ip_entry.setFont(QFont(self.hosting_ip_entry.font().family(), int(self.hosting_ip_entry.font().pointSize() * 1.5)))
+        self.hosting_ip_entry.setPlaceholderText(self.host_ip or self.default_ip)
+        self.default_ip_check = QCheckBox("Set as default")
+        self.default_ip_check.setObjectName("checkbox")
+        self.default_ip_check.setChecked(False)
+        self.host_button = QPushButton("Host")
+        self.host_button.clicked.connect(self.set_ip)
+        self.hosting_ip_entry.returnPressed.connect(self.set_ip)
+
+        input_layout.addWidget(host_ip_label)
+        input_layout.addWidget(self.hosting_ip_entry)
+        input_layout.addWidget(self.host_button)
+        input_layout.addWidget(self.default_ip_check)
+
+        # Shown when attempting to host
+        message_layout = QVBoxLayout()
+        message_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.connecting_label = QLabel("Connecting")
+        self.connecting_label.setObjectName("connectingText")
+        self.connecting_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        message_layout.addWidget(self.connecting_label)
+        self.connecting_label.setText("")
+        self.connecting_label.setFont(QFont("Tahoma", self.connecting_label.font().pointSize()))
+
+        self.connection_delabel = QLabel("Is Hamachi Offline?")
+        self.connection_delabel.setObjectName("messageText")
+        self.connection_delabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.connection_delabel.setText("")
+        message_layout.addWidget(self.connection_delabel)
+
+        center_column_layout.addLayout(input_layout)
+        center_column_layout.addLayout(message_layout)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        connect_layout.setColumnStretch(0, 1)
+        connect_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        connect_layout.addLayout(right_column_layout, 0, 9)
+        connect_layout.setColumnStretch(9, 1)
+
+        connect_page = QWidget()
+        connect_page.setLayout(connect_layout)
+
+        # Page 5: Worlds page
+        world_layout = QGridLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        top_box = QVBoxLayout()
+        top_box.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        bot_box = QHBoxLayout()
+        bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        create_new_button = QPushButton("Create New World")
+        create_new_button.clicked.connect(self.add_new_world)
+        select_existing_button = QPushButton("Add Existing World")
+        select_existing_button.clicked.connect(self.add_existing_world)
+        backup_button = QPushButton("Save Backup")
+        backup_button.clicked.connect(self.backup_world)
+        backup_button.setObjectName("yellowButton")
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("smallRedButton")
+        cancel_button.clicked.connect(self.show_main_page)
+
+        top_box.addWidget(create_new_button)
+        top_box.addWidget(select_existing_button)
+        top_box.addWidget(backup_button)
+        bot_box.addWidget(cancel_button)
+
+        center_layout.addLayout(top_box)
+        center_layout.addLayout(bot_box)
+
+        right_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        world_layout.setColumnStretch(0, 1)
+        world_layout.addLayout(center_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        world_layout.addLayout(right_layout, 0, 9)
+        world_layout.setColumnStretch(9, 1)
+
+        worlds_page = QWidget()
+        worlds_page.setLayout(world_layout)
+
+        # Page 6: Add world page
+        add_world_layout = QGridLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        top_box = QVBoxLayout()
+        top_box.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        bot_box = QHBoxLayout()
+        bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.add_world_label = QLabel("")
+        self.add_world_label.setObjectName("largeText")
+        self.new_world_name_edit = QLineEdit("")
+        self.new_world_name_edit.setObjectName("lineEdit")
+        self.new_world_name_edit.setPlaceholderText("World Name")
+        self.new_world_name_edit.hide()
+        self.new_world_seed_edit = QLineEdit("")
+        self.new_world_seed_edit.setObjectName("lineEdit")
+        self.new_world_seed_edit.setPlaceholderText("(Optional) World Seed")
+        self.new_world_seed_edit.hide()
+        self.mc_version = QLineEdit("")
+        self.mc_version.setPlaceholderText("Version")
+        self.mc_version.setObjectName("lineEdit")
+        self.is_fabric_check = QCheckBox("Fabric")
+        self.is_fabric_check.setObjectName("checkbox")
+        self.add_existing_world_button = QPushButton("Add World")
+        self.add_existing_world_button.hide()
+        self.add_existing_world_button.clicked.connect(self.confirm_add_world)
+        self.create_new_world_button = QPushButton("Create World")
+        self.create_new_world_button.hide()
+        self.create_new_world_button.clicked.connect(self.confirm_create_world)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("redButton")
+        cancel_button.clicked.connect(self.show_world_options_page)
+        self.add_world_error = QLabel("")
+        self.add_world_error.setObjectName("messageText")
+
+        top_box.addWidget(self.add_world_label)
+        top_box.addWidget(self.new_world_name_edit)
+        top_box.addWidget(self.mc_version)
+        top_box.addWidget(self.new_world_seed_edit)
+        temp = QHBoxLayout()
+        temp.addWidget(self.is_fabric_check, 1, Qt.AlignmentFlag.AlignCenter)
+        top_box.addLayout(temp)
+        bot_box.addWidget(self.add_existing_world_button)
+        bot_box.addWidget(self.create_new_world_button)
+        bot_box.addWidget(cancel_button)
+
+        center_layout.addLayout(top_box)
+        center_layout.addLayout(bot_box)
+        center_layout.addWidget(self.add_world_error)
+        center_layout.setStretch(0, 1)
+        center_layout.setStretch(2, 1)
+
+        right_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        add_world_layout.setColumnStretch(0, 1)
+        add_world_layout.addLayout(center_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        add_world_layout.addLayout(right_layout, 0, 9)
+        add_world_layout.setColumnStretch(9, 1)
+
+        add_world_page = QWidget()
+        add_world_page.setLayout(add_world_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
+        self.stacked_layout.addWidget(server_path_page)
+        self.stacked_layout.addWidget(connect_page)
+        self.stacked_layout.addWidget(worlds_page)
+        self.stacked_layout.addWidget(add_world_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -220,256 +525,74 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        if TESTING:
-            icon = QIcon("block_icon.png")
-        else:
-            icon = QIcon(os.path.join(sys._MEIPASS, "block_icon.png"))
+        icon = QIcon(os.path.join(IMAGE_PATH, "block_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        self.setStyleSheet(
-            """
-            text {
-                color: white;
-            }
-
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-                color: white;
-                padding: 5px 15px;
-                text-align: center;
-                text-decoration: none;
-                font-size: 16px;
-                margin: 4px 2px;
-                border-radius: 8px;
-            }
-
-            QPushButton:hover {
-                background-color: #45a049; /* Change background color on hover */
-            }
-
-            QPushButton:pressed {
-                background-color: #3c9039; /* Change background color when pressed */
-            }
-
-            QPushButton:disabled {
-                background-color: #a0a0a0; /* Slightly lighter gray for disabled */
-                color: #d0d0d0; /* Lighter text color for disabled */
-            }
-
-            #stopButton:disabled,
-            #restartButton:disabled {
-                background-color: #a0a0a0; /* Slightly lighter gray for disabled */
-                color: #d0d0d0; /* Lighter text color for disabled */
-            }
-
-            #stopButton {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-            }
-
-            #stopButton:hover {
-                background-color: #780000; /* Darker red on hover */
-            }
-
-            #stopButton:pressed {
-                background-color: #660000; /* Even darker red when pressed */
-            }
-
-            #restartButton {
-                background-color: #3b5998; /* Blue variant */
-                color: #4285f4;
-            }
-
-            #restartButton:hover {
-                background-color: #2d4278; /* Darker blue on hover */
-            }
-
-            #restartButton:pressed {
-                background-color: #1d2951; /* Even darker blue when pressed */
-            }
-
-            QLineEdit, QTextEdit {
-                border: 4px solid #4CAF50;
-                border-radius: 8px;
-                padding: 0px;
-            }
-
-            QLabel {
-                color: white;
-            }
-
-            #error {
-                color: black;
-                font-size: 30px;
-                font-family: "Arial";
-            }
-
-            #details {
-                font-size: 16px;
-            }
-
-            #version_num {
-                color: #4285f4;
-                font-size: 16px;
-            }
-
-            #statusOnline {
-                color: lightgreen; /* Text color */
-                background-color: darkgreen; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-
-            #statusOffline {
-                color: lightcoral; /* Text color */
-                background-color: darkred; /* Background color of the text outline */
-                padding: 3px; /* Adjust padding as needed */
-                border-radius: 5px;
-                text-align: center;
-            }
-
-        """)
-
-    def load_settings(self):
-        data = {"ip": f"{self.default_ip}", "names": {}, "worlds": {}}
-        try:
-            with open("manager_settings.json", 'r') as f:
-                data = json.load(f)
-        except:
-            with open("manager_settings.json", 'w') as f:
-                json.dump(data, f)
-            self.log_queue.put("Settings file not found.")
-            self.log_queue.put("Created new manager_settings.json file.")
-            return
+        with open(os.path.join(STYLE_PATH, "manager_host_style.css"), 'r') as stylesheet:
+            style_str = stylesheet.read()
         
-        self.host_ip = data.get("ip")
-        self.ips = data.get("names")
-        self.world_paths = data.get("worlds")
-        if self.world_paths is not None:
-            self.load_worlds()
-        else:
-            self.world_paths = {}
-            self.log_queue.put(f"<font color='red'>Unable to find worlds in the settings.</font>")
-        
-        if self.host_ip is None or self.ips is None:
-            if self.ips is None:
-                self.ips = {}
-            if self.host_ip is None:
-                self.host_ip = self.default_ip
-            self.update_names()
+        self.setStyleSheet(style_str)
     
-    def update_names(self):
-        with self.file_lock:
-            with open("manager_settings.json", 'w') as f:
-                json.dump({"ip":f"{self.host_ip}", "names":self.ips, "worlds":self.world_paths}, f)
-    
-    def load_worlds(self):
-        worlds_to_ignore = []
-        for world, path in self.world_paths.items():
-            # Check batch file exists
-            if not os.path.isfile(path):
-                self.log_queue.put(f"<font color='red'>ERROR: Unable to find file '{path}'.</font>")
-                worlds_to_ignore.append(world)
-                continue
-            else:
-                # Make sure the command uses javaw instead of java
-                try:
-                    with open(path, 'r') as batch_file:
-                        command = batch_file.read()
-                    
-                    new_command = command.replace("java ", "javaw ")
-                    if command != new_command:
-                        with open(path, 'w') as batch_file:
-                            batch_file.write(new_command)
-                except:
-                    self.log_queue.put(f"<font color='red'>ERROR: Unable to inspect batch file at {path}.</font>")
-                    worlds_to_ignore.append(world)
-
-            directory = os.path.dirname(path)
-            world_folder_path = f"{directory}\\{world}"
-            properties_path = f"{directory}\\server.properties"
-            # Look for server properties file
-            if os.path.isfile(properties_path):
-                try:
-                    with open(properties_path, 'r') as f:
-                        lines = f.readlines()
-                    
-                    # Make sure the properties are correctly set up for queries
-                    edited = False
-                    found_query = False
-                    found_port = False
-                    for i, line in enumerate(lines):
-                        compare = None
-                        if line.startswith("enable-query="):
-                            found_query = True
-                            compare = "enable-query=true\n"
-                        elif line.startswith("query.port="):
-                            found_port = True
-                            compare = "query.port=25565\n"
-                        elif line.startswith("level-name="):
-                            compare = f"level-name={world}\n"
-                            if line != compare:
-                                other_world_name = line.split('=')[1].strip()
-                                other_world_folder = f"{directory}\\{other_world_name}"
-                                if os.path.isdir(world_folder_path):
-                                    # Will switch to reference this folder
-                                    pass
-                                elif os.path.isdir(other_world_folder):
-                                    try:
-                                        os.rename(other_world_folder, world_folder_path)
-                                    except:
-                                        self.log_queue.put(f"<font color='red'>ERROR: Unable to rename world folder '{other_world_name}' to '{world}'.</font>")
-                                        if not os.path.isdir(world_folder_path):
-                                            worlds_to_ignore.append(world)
-                            else:
-                                if not os.path.isdir(world_folder_path):
-                                    self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' folder at '{directory}'.</font>")
-                                    worlds_to_ignore.append(world)
-                        
-                        if compare and line != compare:
-                            lines[i] = compare
-                            edited = True
-                    
-                    if not found_query:
-                        lines.append("\nenable-query=true")
-                        edited = True
-                    if not found_port:
-                        lines.append("\nquery.port=25565")
-                        edited = True
-                    
-                    if edited:
-                        with open(properties_path, 'w') as f:
-                            f.writelines(lines)
-                except IOError:
-                    self.log_queue.put(f"<font color='orange'>WARNING: Was unable to check if '{path}' has query enabled \
-                                        while server.properties is being accessed.</font>")
-            else:
-                self.log_queue.put(f"<font color='orange'>WARNING: Unable to find 'server.properties' in folder at '{directory}'. \
-                                   Make sure the server's .bat file is placed in the server folder.</font>")
-        
-        for world in worlds_to_ignore:
-            self.world_paths.pop(world)
+    def open_server_folder(self):
+        file_funcs.open_folder_explorer(self.server_path)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
         while time.time() < end_time:
             QApplication.processEvents()
     
-    def show_error_page(self):
+    def show_main_page(self):
+        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.stacked_layout.setCurrentIndex(0)
+    
+    def show_error_page(self, error, info, eula_ok_button=False):
+        self.error_label.setText(error)
+        self.info_label.setText(info)
+        if eula_ok_button:
+            self.eula_ok_button.show()
+            self.folder_button.show()
+        else:
+            self.eula_ok_button.hide()
+            self.folder_button.hide()
         self.stacked_layout.setCurrentIndex(1)
+    
+    def show_server_entry_page(self):
+        self.stacked_layout.setCurrentIndex(2)
+    
+    def show_ip_entry_page(self):
+        self.stacked_layout.setCurrentIndex(3)
+    
+    def show_world_options_page(self):
+        self.stacked_layout.setCurrentIndex(4)
+    
+    def show_add_world_page(self):
+        self.stacked_layout.setCurrentIndex(5)
+    
+    def check_server_path(self, new_text):
+        self.existing_server_button.setEnabled(os.path.isdir(new_text))
+        self.create_server_button.setEnabled(new_text != "")
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        if self.host_ip == "":
+            self.show_ip_entry_page()
+            self.default_ip_check.setChecked(False)
+            return
         try:
             self.server.bind((self.host_ip, self.port))
             self.server.listen()
             self.server.setblocking(False)
         except:
-            self.show_error_page()
+            self.saved_ip = self.host_ip
+            self.hosting_ip_entry.setText(self.host_ip)
+            self.connecting_label.setText("Unable to Bind to IP")
+            self.connection_delabel.setText("Is Hamachi offline?")
+            self.show_ip_entry_page()
+            self.default_ip_check.setChecked(False)
             return
+        self.show_main_page()
+        self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
         self.message_timer.start(1000)
@@ -513,14 +636,14 @@ class ServerManagerApp(QMainWindow):
                         client.close()
                         return
 
-                    messages += message.split("CLIENT-MESSAGE:")[1:]
+                    messages += message.split("CLIENT-MESSAGE~~>")[1:]
                     if "CLOSING" in messages:
                         client.close()
                         return
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    self.update_names()
+                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -531,11 +654,11 @@ class ServerManagerApp(QMainWindow):
                 
                 time.sleep(1)
         
-        self.log_queue.put(f"{self.clients[client]} has joined the room!")
+        self.log_queue.put(f"<font color='blue'>{self.clients[client]} has joined the room!</font>")
         self.tell(client, "You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
-                self.tell(send_client, f"{self.clients[client]} has joined the room!")
+                self.tell(send_client, f"<font color='blue'>{self.clients[client]} has joined the room!</font>")
         
         self.delay(1)
 
@@ -545,7 +668,7 @@ class ServerManagerApp(QMainWindow):
                 if not new_message:
                     break
 
-                messages += new_message.split("CLIENT-MESSAGE:")[1:]
+                messages += new_message.split("CLIENT-MESSAGE~~>")[1:]
 
                 if "CLOSING" in messages:
                     break
@@ -558,7 +681,7 @@ class ServerManagerApp(QMainWindow):
                         self.log_queue.put(f'<font color="blue">{self.clients[client]}: {message}</font>')
                         self.broadcast(message, client)
                     else:
-                        data = message.split(':')[-1].split(',')
+                        data = message.split('~~>')[-1].split(',')
                         request, args = data[0], data[1:]
                         if request == "get-status":
                             # self.log_queue.put(f"{self.clients[client]} queried the server status.")
@@ -578,7 +701,7 @@ class ServerManagerApp(QMainWindow):
                                 self.tell(client, "The server has closed.")
                                 self.send_data("status", status)
                         elif request == "get-worlds-list":
-                            self.send_data("worlds-list", self.query_worlds_list(), client)
+                            self.send_data("worlds-list", self.query_worlds(), client)
                         elif request in ["start-server", "stop-server", "restart-server"]:
                             self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
                             if request in ["stop-server", "restart-server"]:
@@ -618,13 +741,12 @@ class ServerManagerApp(QMainWindow):
         self.clients.pop(client)
 
     def send_data(self, topic, data, client=None):
-        if not isinstance(data, (list, tuple)):
+        if not isinstance(data, (list, tuple, dict)):
             data = [data]
-        
         if client:
-            self.tell(client, f"DATA-RETURN({topic}):{json.dumps(data)}")
+            self.tell(client, f"DATA-RETURN({topic})~~>{json.dumps(data)}")
         else:
-            self.broadcast(f"DATA-RETURN({topic}):{json.dumps(data)}")
+            self.broadcast(f"DATA-RETURN({topic})~~>{json.dumps(data)}")
     
     def broadcast(self, message, owner=None):
         for client, name in self.clients.items():
@@ -640,7 +762,7 @@ class ServerManagerApp(QMainWindow):
                 pass
     
     def tell(self, client, message):
-        client.sendall(f"SERVER-MESSAGE:{message}".encode("utf-8"))
+        client.sendall(f"SERVER-MESSAGE~~>{message}".encode("utf-8"))
     
     def check_messages(self):
         while not self.log_queue.empty():
@@ -660,7 +782,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f'<font color="green">You: {message}</font>')
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
-    def start_server(self, world):
+    def start_server(self, world, restart=False):
         if world == "":
             self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
             return f"<font color='red'>There is no world selected.</font>"
@@ -670,23 +792,50 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("Server is already online.")
             return "already online"
         
+        version, fabric = None, None
+        if self.worlds.get(world):
+            version = self.worlds[world].get("version")
+            fabric = self.worlds[world].get("fabric")
+            seed = self.worlds[world].get("seed", None)
+        if not version:
+            self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
+            return f"<font color='red'>ERROR: World {world} is missing version.</font>"
+        
         self.broadcast("Starting server...")
         self.log_queue.put("Starting server...")
-        path = self.world_paths.get(world)
-        if not path:
+        QApplication.processEvents()
+        data = self.worlds.get(world)
+        path = os.path.join(os.path.join(self.server_path, "worlds"), world)
+        if not data:
             self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
             return f"<font color='red'>Manager doesn't recognize that world.</font>"
-        elif not os.path.exists(path):
+        elif not os.path.exists(path) and self.worlds[world].get("seed") is None:
             error = f"<font color='red'>Uh oh. Path to world '{world}' no longer exists.</font>"
             self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
             return error
         else:
             try:
-                dirname = os.path.dirname(os.path.abspath(path))
-                os.system(f'start cmd /C "title Server Ignition && cd /d {dirname} && \"{path}\""')
+                if not restart:
+                    self.log_queue.put(f"Preparing for {'fabric ' if fabric else ''} version {version}.")
+                    if seed is not None:
+                        self.log_queue.put(f"Generating world with seed '{seed or 'random'}'...")
+                    self.delay(1)
+                    if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
+                        raise RuntimeError("Failed to prepare settings.")
+                    else:
+                        if seed is not None:
+                            self.worlds[world].pop("seed")
+                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+                
+                os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
                 loop = True
                 window = None
                 ignition_window = None
+                if seed is not None:
+                    timer_amount = 60
+                else:
+                    timer_amount = 30
+                end_time = time.time() + timer_amount
                 while loop and not self.stop_threads.is_set():
                     QApplication.processEvents()
                     windows = pgw.getAllTitles()
@@ -696,6 +845,10 @@ class ServerManagerApp(QMainWindow):
                             window = pgw.getWindowsWithTitle(w)[0]
                         elif ignition_window is None and "Server Ignition" in w:
                             ignition_window = pgw.getWindowsWithTitle(w)[0]
+                    
+                    if time.time() > end_time:
+                        self.log_queue.put("<font color='red'>Timed out waiting for the server to start up.</font>")
+                        return "<font color='red'>Timed out waiting for the server to start.</font>"
                 
                 if self.stop_threads.is_set():
                     return
@@ -712,7 +865,7 @@ class ServerManagerApp(QMainWindow):
                 self.send_data("start", "refresh")
             except:
                 error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
-                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}' at path '{path}'!</font>")
+                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
                 return error
     
     def stop_server(self):
@@ -751,32 +904,24 @@ class ServerManagerApp(QMainWindow):
     def restart_server(self):
         self.stop_server()
         self.delay(5)
-        self.start_server(self.previous_world)
+        self.start_server(self.previous_world, True)
 
     def query_status(self):
-        try:
-            query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
-            if query.map:
-                self.previous_world = query.map
+        status, brand, version, world = queries.status(self.host_ip, self.server_port)
+        if status == "offline":
+            return status, "", ""
+        else:
+            if world:
+                world = world.removeprefix("worlds/")
             
-            # Check for possible fabric presence
-            server_dir = os.path.dirname(self.world_paths.get(query.map))
-            if os.path.isdir(server_dir) and os.path.isfile(os.path.join(server_dir, "fabric-server-launch.jar")):
-                return "online", f"{query.software.brand}/fabric {query.software.version}", query.map
-            else:
-                return "online", f"{query.software.brand} {query.software.version}", query.map
-        except:
-            return "offline", "", ""
+            self.previous_world = world or self.previous_world
+            return status, f"{brand} {version}", world
     
     def query_players(self):
-        try:
-            query = JavaServer.lookup(f"{self.host_ip}:{self.server_port}", 1).query()
-            return query.players.names
-        except TimeoutError:
-            return []
+        return queries.players(self.host_ip, self.server_port)
     
-    def query_worlds_list(self):
-        return list(self.world_paths.keys())
+    def query_worlds(self):
+        return self.worlds
 
     def get_status(self):
         self.set_status(["pinging",None,None])
@@ -801,7 +946,7 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            self.version_label.setText(f"Version: {version}")
+            self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
             self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
             self.get_players()
@@ -847,7 +992,198 @@ class ServerManagerApp(QMainWindow):
     
     def set_worlds_list(self):
         self.dropdown.clear()
-        self.dropdown.addItems(self.world_paths.keys())
+        self.dropdown.addItems(self.worlds.keys())
+        self.set_selected_world_version(self.dropdown.currentText())
+    
+    def set_selected_world_version(self, world):
+        if world:
+            self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
+        else:
+            self.world_version_label.setText("")
+    
+    def set_server_path(self):
+        path = self.server_folder_path_entry.text()
+        if os.path.isdir(path):
+            while not self.log_queue.empty():
+                self.log_queue.get()
+            self.message_timer.start(1000)
+            self.server_path = path
+            file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
+            self.start_manager_server()
+    
+    def create_server_folder(self):
+        path = self.server_folder_path_entry.text()
+        def create_path(path):
+            if path == "" or os.path.exists(path):
+                return
+            
+            parent = os.path.join(path, os.path.pardir)
+            create_path(parent)
+            os.mkdir(path)
+
+        if not os.path.isdir(path):
+            # Build up directories to the requested one
+            create_path(path)
+        
+        while not self.log_queue.empty():
+            self.log_queue.get()
+        self.message_timer.start(1000)
+            
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
+        
+        self.log_queue.put("Downloading latest server.jar file...")
+        self.delay(0.5)
+        version = queries.download_latest_server_jar(path, self.log_queue)
+        if version:
+            self.log_queue.put("Generating server files...")
+            self.delay(0.5)
+            subprocess.run(["java", "-jar", f"server-{version}.jar"], cwd=path)
+            self.server_path = path
+            self.accepted_eula()
+    
+    def accepted_eula(self):
+        with open(os.path.join(self.server_path, "eula.txt")) as f:
+            content = f.read()
+        if "eula=false" in content:
+            self.show_error_page("You must agree to the EULA in order to run the server.",
+                                    "Please open 'eula.txt' in the server folder.", True)
+        elif "eula=true" in content:
+            self.start_manager_server()
+    
+    def set_ip(self):
+        ip = self.hosting_ip_entry.text()
+        if ip:
+            self.connecting_label.setText("Connecting...")
+            self.host_ip = ip
+            self.delay(0.5)
+            if self.default_ip_check.isChecked():
+                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, ip=self.host_ip)
+            self.start_manager_server()
+    
+    def backup_world(self):
+        world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        if world_path is None:
+            return
+        
+        world_path = os.path.normpath(world_path)
+        world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
+        if world_path in world_folders:
+            try:
+                if self.previous_world == os.path.basename(world_path):
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder while world is being run.</font>")
+                    self.show_main_page()
+                
+                current_date = datetime.now().strftime("%m-%d-%y")
+                new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                if os.path.exists(new_path):
+                    index = 1
+                    while os.path.exists(f"{new_path}({str(index)})"):
+                        index += 1
+                    shutil.copytree(world_path, f"{new_path}({str(index)})")
+                else:
+                    shutil.copytree(world_path, new_path)
+                self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
+                self.show_main_page()
+            except:
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
+                self.show_main_page()
+        elif world_path:
+            self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+            self.show_main_page()
+    
+    def add_existing_world(self):
+        world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        if world_path is None:
+            return
+        
+        world_path = os.path.normpath(world_path)
+        world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
+        if world_path in world_folders:
+            try:
+                if os.path.basename(world_path) in self.worlds.keys():
+                    self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
+                    self.show_main_page()
+                    return
+                self.add_world(world=os.path.basename(world_path), new=False)
+            except:
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to add world folder.</font>")
+        elif world_path:
+            self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+    
+    def add_new_world(self):
+        self.add_world(new=True)
+    
+    def add_world(self, world="", new=False):
+        if new:
+            self.add_existing_world_button.hide()
+            self.create_new_world_button.show()
+            self.new_world_name_edit.show()
+            self.new_world_seed_edit.show()
+            self.add_world_label.setText("Create World")
+
+            self.mc_version.setText("")
+            self.new_world_seed_edit.setText("")
+            self.new_world_name_edit.setText("")
+            self.is_fabric_check.setChecked(False)
+        else:
+            self.add_existing_world_button.show()
+            self.create_new_world_button.hide()
+            self.new_world_name_edit.hide()
+            self.new_world_seed_edit.hide()
+            self.add_world_label.setText(world)
+
+            self.mc_version.setText("")
+            self.is_fabric_check.setChecked(False)
+        
+        self.add_world_error.setText("")
+        self.show_add_world_page()
+    
+    def verify_version(self, version, fabric):
+        if version != "":
+            if fabric:
+                return queries.verify_fabric_version(version)
+            else:
+                return queries.verify_mc_version(version)
+        else:
+            return False
+
+    def confirm_add_world(self):
+        result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
+        if result is True:
+            self.worlds[self.add_world_label.text()] = {"version": self.mc_version.text(), "fabric": self.is_fabric_check.isChecked()}
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+            self.set_worlds_list()
+            self.send_data("worlds-list", self.query_worlds())
+            self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
+            self.show_main_page()
+        elif result is False:
+            self.add_world_error.setText(f"Invalid {'Fabric ' * self.is_fabric_check.isChecked()}Minecraft version.")
+        elif result is None:
+            self.log_queue.put(f"<font color='red'>ERROR: Unable to download from {'Fabric' if self.is_fabric_check.isChecked() else 'MCVersions'}.</font>")
+            self.show_main_page()
+
+    def confirm_create_world(self):
+        if self.new_world_name_edit.text() == "" or self.new_world_name_edit.text() in self.worlds.keys():
+            self.add_world_error.setText(f"Name invalid or already exists.")
+            return
+        
+        result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
+        if result is True:
+            self.worlds[self.new_world_name_edit.text()] = {
+                "version": self.mc_version.text(),
+                "fabric": self.is_fabric_check.isChecked(),
+                "seed": self.new_world_seed_edit.text()
+            }
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+            self.set_worlds_list()
+            self.send_data("worlds-list", self.query_worlds())
+            self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
+            self.show_main_page()
+        elif result is False:
+            self.add_world_error.setText(f"Invalid {'Fabric' * self.is_fabric_check.isChecked()} Minecraft version.")
+        elif result is None:
+            self.log_queue.put(f"<font color='red'>ERROR: Unable to download from {'Fabric' if self.is_fabric_check.isChecked() else 'MCVersions'}.</font>")
+            self.show_main_page()
     
     @pyqtSlot()
     def onWindowStateChanged(self):

@@ -1,3 +1,6 @@
 /.vscode
 /Server
 /manager_settings.json
+/package_host.bat
+/package_manager.bat
+/__pycache__
