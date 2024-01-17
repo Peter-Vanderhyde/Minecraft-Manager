@@ -170,7 +170,7 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
                 line = b.read()
         except:
             # No run.bat but will create new one with default "java -jar <file>" commands
-            line = " -jar "
+            line = "javaw -jar "
         command, previous_file = line.split(" -jar ")
         command.replace("java", "javaw") # Ensure using javaw instead of java
         new_command = f"{command or 'javaw'} -jar {new_name}"
@@ -195,7 +195,7 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
                 line = b.read()
         except:
             # No run.bat but will create new one with default "java -jar <file>" commands
-            line = " -jar "
+            line = "javaw -jar "
         command, file = line.split(" -jar ")
         command.replace("java", "javaw") # Ensure using javaw instead of java
         new_command = f"{command} -jar fabric-server-{version}.jar"

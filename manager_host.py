@@ -481,8 +481,8 @@ class ServerManagerApp(QMainWindow):
 
         top_box.addWidget(self.add_world_label)
         top_box.addWidget(self.new_world_name_edit)
-        top_box.addWidget(self.new_world_seed_edit)
         top_box.addWidget(self.mc_version)
+        top_box.addWidget(self.new_world_seed_edit)
         temp = QHBoxLayout()
         temp.addWidget(self.is_fabric_check, 1, Qt.AlignmentFlag.AlignCenter)
         top_box.addLayout(temp)
@@ -1068,6 +1068,10 @@ class ServerManagerApp(QMainWindow):
         world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
         if world_path in world_folders:
             try:
+                if self.previous_world == os.path.basename(world_path):
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder while world is being run.</font>")
+                    self.show_main_page()
+                
                 current_date = datetime.now().strftime("%m-%d-%y")
                 new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
                 if os.path.exists(new_path):
@@ -1077,12 +1081,14 @@ class ServerManagerApp(QMainWindow):
                     shutil.copytree(world_path, f"{new_path}({str(index)})")
                 else:
                     shutil.copytree(world_path, new_path)
-                self.log_queue.put(f"Saved backup of '{os.path.basename(world_path)}'.")
+                self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
                 self.show_main_page()
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
+                self.show_main_page()
         elif world_path:
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+            self.show_main_page()
     
     def add_existing_world(self):
         world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
