@@ -63,6 +63,7 @@ class ServerManagerApp(QMainWindow):
 
         # Default IP
         self.default_ip = "127.0.0.1"
+        self.saved_ip = ""
         self.host_ip = ""
         self.port = 5555
         self.server_port = "25565"
@@ -188,12 +189,10 @@ class ServerManagerApp(QMainWindow):
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Raised)
 
-        self.backup_button = QPushButton("Save Backup")
-        self.backup_button.clicked.connect(self.backup_world)
-        self.backup_button.setObjectName("yellowButton")
-
-        self.add_world_button = QPushButton("Add World")
-        self.add_world_button.clicked.connect(self.show_add_world_page)
+        self.world_options = QPushButton("World Options")
+        self.world_options.clicked.connect(self.show_world_options_page)
+        open_folder_button = QPushButton("Server Folder")
+        open_folder_button.clicked.connect(self.open_server_folder)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -210,8 +209,8 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
         functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.addWidget(separator, 5, 0, 1, 2)
-        functions_layout.addWidget(self.backup_button, 6, 0, 1, 2)
-        functions_layout.addWidget(self.add_world_button, 7, 0, 1, 2)
+        functions_layout.addWidget(self.world_options, 6, 0, 1, 2)
+        functions_layout.addWidget(open_folder_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -398,39 +397,115 @@ class ServerManagerApp(QMainWindow):
         connect_page = QWidget()
         connect_page.setLayout(connect_layout)
 
-        # Page 5: Add world page
-        world_layout = QVBoxLayout()
-        world_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Page 5: Worlds page
+        world_layout = QGridLayout()
 
-        top_box = QHBoxLayout()
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        top_box = QVBoxLayout()
         top_box.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
         bot_box = QHBoxLayout()
         bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        create_new_button = QPushButton("Create New")
+        create_new_button = QPushButton("Create New World")
         create_new_button.setEnabled(False)
-        select_existing_button = QPushButton("Select Existing")
-        select_existing_button.setObjectName("yellowButton")
-        # select_existing_button.clicked.connect(self.add_existing_world)
+        select_existing_button = QPushButton("Add Existing World")
+        select_existing_button.clicked.connect(self.add_existing_world)
+        backup_button = QPushButton("Save Backup")
+        backup_button.clicked.connect(self.backup_world)
+        backup_button.setObjectName("yellowButton")
         cancel_button = QPushButton("Cancel")
         cancel_button.setObjectName("smallRedButton")
         cancel_button.clicked.connect(self.show_main_page)
 
         top_box.addWidget(create_new_button)
         top_box.addWidget(select_existing_button)
+        top_box.addWidget(backup_button)
         bot_box.addWidget(cancel_button)
 
-        world_layout.addLayout(top_box)
-        world_layout.addLayout(bot_box)
+        center_layout.addLayout(top_box)
+        center_layout.addLayout(bot_box)
+
+        right_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        world_layout.setColumnStretch(0, 1)
+        world_layout.addLayout(center_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        world_layout.addLayout(right_layout, 0, 9)
+        world_layout.setColumnStretch(9, 1)
+
+        worlds_page = QWidget()
+        worlds_page.setLayout(world_layout)
+
+        # Page 6: Add world page
+        add_world_layout = QGridLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        top_box = QVBoxLayout()
+        top_box.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+        bot_box = QHBoxLayout()
+        bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        self.add_world_label = QLabel("")
+        self.add_world_label.setObjectName("largeText")
+        self.mc_version = QLineEdit("")
+        self.mc_version.setPlaceholderText("Version")
+        self.mc_version.setObjectName("lineEdit")
+        self.is_fabric_check = QCheckBox("Fabric")
+        self.is_fabric_check.setObjectName("checkbox")
+        self.add_existing_world_button = QPushButton("Add World")
+        self.add_existing_world_button.hide()
+        self.add_existing_world_button.clicked.connect(self.confirm_add_world)
+        self.create_new_world_button = QPushButton("Create World")
+        self.create_new_world_button.hide()
+        self.create_new_world_button.clicked.connect(self.confirm_create_world)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("redButton")
+        cancel_button.clicked.connect(self.show_world_options_page)
+        self.add_world_error = QLabel("")
+        self.add_world_error.setObjectName("messageText")
+
+        top_box.addWidget(self.add_world_label)
+        top_box.addWidget(self.mc_version)
+        temp = QHBoxLayout()
+        temp.addWidget(self.is_fabric_check, 1, Qt.AlignmentFlag.AlignCenter)
+        top_box.addLayout(temp)
+        bot_box.addWidget(self.add_existing_world_button)
+        bot_box.addWidget(self.create_new_world_button)
+        bot_box.addWidget(cancel_button)
+
+        center_layout.addLayout(top_box)
+        center_layout.addLayout(bot_box)
+        center_layout.addWidget(self.add_world_error)
+        center_layout.setStretch(0, 1)
+        center_layout.setStretch(2, 1)
+
+        right_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        add_world_layout.setColumnStretch(0, 1)
+        add_world_layout.addLayout(center_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        add_world_layout.addLayout(right_layout, 0, 9)
+        add_world_layout.setColumnStretch(9, 1)
 
         add_world_page = QWidget()
-        add_world_page.setLayout(world_layout)
+        add_world_page.setLayout(add_world_layout)
 
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
         self.stacked_layout.addWidget(server_path_page)
         self.stacked_layout.addWidget(connect_page)
+        self.stacked_layout.addWidget(worlds_page)
         self.stacked_layout.addWidget(add_world_page)
 
         # Set the main layout to the stacked layout
@@ -478,13 +553,15 @@ class ServerManagerApp(QMainWindow):
     def show_ip_entry_page(self):
         self.stacked_layout.setCurrentIndex(3)
     
-    def show_add_world_page(self):
+    def show_world_options_page(self):
         self.stacked_layout.setCurrentIndex(4)
+    
+    def show_add_world_page(self):
+        self.stacked_layout.setCurrentIndex(5)
     
     def check_server_path(self, new_text):
         self.existing_server_button.setEnabled(os.path.isdir(new_text))
         self.create_server_button.setEnabled(new_text != "")
-
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -497,6 +574,7 @@ class ServerManagerApp(QMainWindow):
             self.server.listen()
             self.server.setblocking(False)
         except:
+            self.saved_ip = self.host_ip
             self.hosting_ip_entry.setText(self.host_ip)
             self.connecting_label.setText("Unable to Bind to IP")
             self.connection_delabel.setText("Is Hamachi offline?")
@@ -979,10 +1057,75 @@ class ServerManagerApp(QMainWindow):
                 else:
                     shutil.copytree(world_path, new_path)
                 self.log_queue.put(f"Saved backup of '{os.path.basename(world_path)}'.")
+                self.show_main_page()
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
         elif world_path:
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+    
+    def add_existing_world(self):
+        world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        if world_path is None:
+            return
+        
+        world_path = os.path.normpath(world_path)
+        world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
+        if world_path in world_folders:
+            try:
+                if os.path.basename(world_path) in self.worlds.keys():
+                    self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
+                    self.show_main_page()
+                    return
+                self.add_world(os.path.basename(world_path), new=False)
+            except:
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to add world folder.</font>")
+        elif world_path:
+            self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+    
+    def add_world(self, world, new=False):
+        self.add_world_label.setText(world)
+        if new:
+            self.add_existing_world_button.hide()
+            self.create_new_world_button.show()
+        else:
+            self.add_existing_world_button.show()
+            self.create_new_world_button.hide()
+        
+        self.add_world_error.setText("")
+        self.show_add_world_page()
+    
+    def verify_version(self, version, fabric):
+        if version != "":
+            if fabric:
+                return queries.verify_fabric_version(version)
+            else:
+                return queries.verify_mc_version(version)
+
+    def confirm_add_world(self):
+        result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
+        if result is True:
+            self.worlds[self.add_world_label.text()] = {"version": self.mc_version.text(), "fabric": self.is_fabric_check.isChecked()}
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+            self.set_worlds_list()
+            self.send_data("worlds-list", self.query_worlds())
+            self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
+            self.show_main_page()
+        elif result is False:
+            self.add_world_error.setText(f"Invalid {'Fabric ' * self.is_fabric_check.isChecked()}Minecraft version.")
+        elif result is None:
+            self.log_queue.put(f"<font color='red'>ERROR: Unable to download from {'Fabric' if self.is_fabric_check.isChecked() else 'MCVersions'}.</font>")
+            self.show_main_page()
+
+    def confirm_create_world(self):
+        result = self.verify_version(self.mc_version, self.is_fabric_check.isChecked())
+        if result is True:
+            self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
+            self.show_main_page()
+        elif result is False:
+            self.add_world_error.setText(f"Invalid {'Fabric' * self.is_fabric_check.isChecked()} Minecraft version.")
+        elif result is None:
+            self.log_queue.put(f"<font color='red'>ERROR: Unable to download from {'Fabric' if self.is_fabric_check.isChecked() else 'MCVersions'}.</font>")
+            self.show_main_page()
     
     @pyqtSlot()
     def onWindowStateChanged(self):

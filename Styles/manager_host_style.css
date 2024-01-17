@@ -105,8 +105,20 @@ QLabel {
     font-size: 14px;
 }
 
+#largerText {
+    font-size: 40px;
+}
+
+#largeText {
+    font-size: 35px;
+}
+
 #mediumText {
     font-size: 27px;
+}
+
+#lineEdit {
+    font-size: 16px;
 }
 
 #smallText {

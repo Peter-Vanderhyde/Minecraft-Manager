@@ -1,6 +1,7 @@
 import os
 import requests
 from mcstatus import JavaServer
+import queue
 
 def status(ip, port):
     try:
@@ -47,7 +48,7 @@ def download_server_jar(version, output_directory, log_queue):
         log_queue.put(f"Failed to fetch version manifest. Status code: {response.status_code}")
 
 def download_latest_server_jar(server_path, log_queue):
-    version_url = f'https://launchermeta.mojang.com/mc/game/version_manifest.json'
+    version_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
 
     # Fetch the version manifest
     try:
@@ -62,5 +63,77 @@ def download_latest_server_jar(server_path, log_queue):
 
         download_server_jar(lastest_version, server_path, log_queue)
         return lastest_version
+    
+    return False
+
+def download_fabric_server_jar(version, server_path, log_queue):
+    loader_versions_url = f'https://meta.fabricmc.net/v2/versions/loader'
+    installer_versions_url = f'https://meta.fabricmc.net/v2/versions/installer'
+
+    # Fetch the version manifest
+    try:
+        loader_response = requests.get(loader_versions_url)
+        installer_response = requests.get(installer_versions_url)
+
+        if loader_response.status_code == 200 and installer_response.status_code == 200:
+            loader_versions = loader_response.json()
+            installer_versions = installer_response.json()
+
+            mc_version = version
+            loader_version = loader_versions[0]["version"]
+            installer_version = installer_versions[0]["version"]
+
+            jar_url = f'https://meta.fabricmc.net/v2/versions/loader/{mc_version}/{loader_version}/{installer_version}/server/jar'
+
+            jar_response = requests.get(jar_url)
+            if jar_response.status_code == 200:
+                output_path = os.path.join(server_path, f"fabric-server-{mc_version}.jar")
+                with open(output_path, 'wb') as file:
+                    file.write(jar_response.content)
+
+                return True
+            else:
+                raise RuntimeError("Unable to download")
+        else:
+            raise RuntimeError("Unable to download")
+    except:
+        log_queue.put(f"Failed to download necessary jar file.")
+        return False
+
+def verify_mc_version(version):
+    game_versions_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
+    try:
+        response = requests.get(game_versions_url)
+    except:
+        return None
+    
+    if response.status_code == 200:
+        versions = response.json()["versions"]
+        found_version = False
+        for version_object in versions:
+            if version_object["id"] == version:
+                found_version = True
+        
+        if found_version:
+            return True
+    
+    return False
+
+def verify_fabric_version(version):
+    game_versions_url = 'https://meta.fabricmc.net/v2/versions/game'
+    try:
+        response = requests.get(game_versions_url)
+    except:
+        return None
+    
+    if response.status_code == 200:
+        versions = response.json()
+        found_version = False
+        for version_object in versions:
+            if version_object["version"] == version:
+                found_version = True
+        
+        if found_version:
+            return True
     
     return False

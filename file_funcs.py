@@ -181,7 +181,7 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue):
         else:
             jars = glob.glob(os.path.join(server_path, f"fabric-server-mc.{version}-loader*.jar"))
             if len(jars) == 0:
-                log_queue.put(f"<font color='red'>ERROR: Unable to find fabric launcher .jar for version {version}.</font>")
+                log_queue.put(f"<font color='red'>ERROR: Unable to find fabric-server-{version}.jar.</font>")
                 return False
             while len(jars) > 1:
                 os.remove(os.path.join(server_path, jars[0]))
