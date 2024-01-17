@@ -2,7 +2,7 @@
 ***Peter Vanderhyde, 2024***
 
 ## Description
-This is a Java Minecraft server manager that allows for basic control of the server being run on a host's machine by the host and others on the same network. If the host has multiple server worlds available on their machine, clients can select a world to run. It will even handle worlds that are different versions and running worlds in fabric.
+This is a Java Minecraft server manager that allows for basic control of the server being run on a host's machine by the host and others on the same network. If the host has multiple server worlds available on their machine, clients can select a world to run. It will even handle worlds that are different versions or using fabric.
   
 ![Manager Window](Images/window.png)
 
@@ -16,8 +16,9 @@ Through this manager both the host and clients will have the ability to
   
 The host has the ability to
 - Choose what worlds he would like the clients to be able to choose from (including worlds running fabric.)
-- Quickly backup server worlds.
 - Easily add existing worlds to the available worlds.
+- Create new worlds from scratch to be directly added to the list. Use any version, and optionally set a seed and/or set the world as using fabric.
+- Quickly backup server worlds.
 
 ## Host Instructions
 If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
@@ -31,7 +32,7 @@ If you wish to manually create a server folder for the program, you will need to
 Run the `Host_manager.exe` file. The first time you run the manager, it will prompt you to enter the path of the server folder. This can either be the server folder you created in the previous optional step, or you can let the program download and run the latest server file automatically.
 ![Server Path Prompt Image](Images/server_path.png)
 If you set up the folder automatically, it will also prompt you to accept the eula.txt.
-![EULA Prompt Image](Images/eula.png)
+![EULA Image](Images/eula.png)
 Your manager is now ready to start hosting a server, but first it will prompt you to enter the hosting ip. This is what the clients will use to connect.
 ![IP Prompt Image](Images/ip.png)
 If you set an IP as the default, it will attempt to use that IP address without ever prompting you again.
@@ -66,11 +67,20 @@ Once you have run the program, it will have created a file called `manager_setti
 If you wish to change the ip that you are hosting from but you have already set a default IP, simply change the `ip` value in the created manager settings. If the server is unable to use the set ip to host from, it will prompt you again to, either set a new IP just this time, or set a new default.
 
 **<u>Adding a World</u>**  
-In order to add a world to the manager, you can use an existing world folder. Place the world folder in the `worlds` directory created in your server directory. Next, go to `World Options` in the manager and hit `Add Existing`. Include the correct version number. Optionally, mark whether it is a fabric server or not.
+In order to add a world to the manager, you can either generate a new world, or use an existing world folder.
 
-> Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version. However, it will never be able to be downgraded again. If you wish to do this, creating a backup of the world first may be recommended.  
+#### Using an Existing World
+Place the world folder in the `worlds` directory created in your server directory. Next, go to `World Options` in the manager and hit `Add Existing`. Include the correct version number. Optionally, mark whether it is a fabric server or not.
+
+> Note:  
+Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version. However, it will never be able to be downgraded again. If you wish to do this, creating a backup of the world first may be recommended.  
 
 After you have added the new world, it will automatically update the list of worlds for yourself and all clients.
+
+#### Generating a New World
+Go to the `World Options` in the manager and hit `Create New World`. Enter the world name, a valid version, a seed, and specify if it is a fabric server. Once you hit `Create World`, the world will be added to the list. However, the world itself will not be generated until the first time the server starts the world.
+
+#
   
 You can add as many worlds as you would like to the worlds folder. The manager will run each of them in their own version.
 
