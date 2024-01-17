@@ -2,19 +2,22 @@
 ***Peter Vanderhyde, 2024***
 
 ## Description
-This is a Java Minecraft server manager that allows for basic control of the server being run on a host's machine by the host and others on the same network. If the host has multiple server worlds available on their machine, clients can select a world to run. It will even handle worlds that are different versions.
+This is a Java Minecraft server manager that allows for basic control of the server being run on a host's machine by the host and others on the same network. If the host has multiple server worlds available on their machine, clients can select a world to run. It will even handle worlds that are different versions and running worlds in fabric.
   
 ![Manager Window](Images/window.png)
 
 ## Features
 Through this manager both the host and clients will have the ability to
-- Start an available world in the dropdown
-- Stop or restart a currently running server
-- Query the current players on the server
-- Query the current status of the server including the version and the world name
-- Chat with others connected to the manager
+- Start an available world in the dropdown.
+- Stop or restart a currently running server.
+- Query the current players on the server.
+- Query the current status of the server including the version and the world name.
+- Chat with others connected to the manager.
   
-The host has the ability to choose what worlds he would like the clients to be able to choose from, including worlds running fabric mods. There is a button to quickly backup server worlds for convenience.
+The host has the ability to
+- Choose what worlds he would like the clients to be able to choose from (including worlds running fabric.)
+- Quickly backup server worlds.
+- Easily add existing worlds to the available worlds.
 
 ## Host Instructions
 If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
@@ -60,26 +63,14 @@ Once you have run the program, it will have created a file called `manager_setti
 
 ### Step 3
 **<u>Changing the Host IP</u>**  
-To change the ip that you are hosting from, simply change the `ip` value in the created manager settings. If the server is unable to use the set ip to host, it will prompt you again to, either set a new IP this time, or set a new default.
+If you wish to change the ip that you are hosting from but you have already set a default IP, simply change the `ip` value in the created manager settings. If the server is unable to use the set ip to host from, it will prompt you again to, either set a new IP just this time, or set a new default.
 
 **<u>Adding a World</u>**  
-In order to add a world to the manager, you can either use an existing world folder, or the world folder that was created in the server directory when running the server for the first time. Place the world folder in the `worlds` directory created in your server directory. Next, add the world folder name in the `"worlds"` section of the settings file. Include the version number. Optionally, specify whether it is a fabric server (defaults to false).
+In order to add a world to the manager, you can use an existing world folder. Place the world folder in the `worlds` directory created in your server directory. Next, go to `World Options` in the manager and hit `Add Existing`. Include the correct version number. Optionally, mark whether it is a fabric server or not.
 
-#### Example
-``` json
+> Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version. However, it will never be able to be downgraded again. If you wish to do this, creating a backup of the world first may be recommended.  
 
-"worlds": {
-    "My World": {
-        "version": "1.20.4",
-        "fabric": true
-    },
-    "First Survival": {
-        "version": "1.16.1"
-    }
-}
-```
-#### Setting up Fabric
-If you want to run a fabric world through the manager, go to [This Link](https://fabricmc.net/use/server/) to download the correct fabric-server.jar file version. After downloading the file, leave the name as is and move it to your server folder. The manager can now find the file and use it for fabric worlds of that version.  
+After you have added the new world, it will automatically update the list of worlds for yourself and all clients.
   
 You can add as many worlds as you would like to the worlds folder. The manager will run each of them in their own version.
 
