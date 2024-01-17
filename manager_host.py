@@ -1007,6 +1007,7 @@ class ServerManagerApp(QMainWindow):
             while not self.log_queue.empty():
                 self.log_queue.get()
             self.message_timer.start(1000)
+            self.server_path = path
             file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
             self.start_manager_server()
     
