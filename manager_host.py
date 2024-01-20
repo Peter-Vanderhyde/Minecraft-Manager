@@ -19,7 +19,7 @@ import queries
 import file_funcs
 
 TESTING = False
-VERSION = "v2.3"
+VERSION = "v2.3.1"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -755,7 +755,7 @@ class ServerManagerApp(QMainWindow):
                     if client is owner:
                         self.tell(client, f'<font color="green">You: {message}</font>')
                     else:
-                        self.tell(client, f'<font color="blue">{name}: {message}</font>')
+                        self.tell(client, f'<font color="blue">{self.clients[owner]}: {message}</font>')
                 else:
                     self.tell(client, message)
             except Exception as e:
