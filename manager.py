@@ -354,7 +354,7 @@ class ServerManagerApp(QMainWindow):
         self.client.sendall("connection request".encode("utf-8"))
         accepted = self.client.recv(1024).decode("utf-8")
         if accepted == "accept" or accepted == "identify":
-            self.client.setblocking(False)
+            # self.client.setblocking(False)
             self.receive_thread = threading.Thread(target=self.receive)
             self.receive_thread.start()
             self.message_thread = threading.Thread(target=self.check_messages)
@@ -379,37 +379,37 @@ class ServerManagerApp(QMainWindow):
     def receive(self):
         messages = []
         while not self.close_threads.is_set():
-            try:
-                message = self.client.recv(1024).decode("utf-8")
-                if not message:
-                    self.close_threads.set()
-                    break
+            # try:
+            message = self.client.recv(1024).decode("utf-8")
+            if not message:
+                self.close_threads.set()
+                break
 
-                messages += message.split("SERVER-MESSAGE~~>")[1:]
-                if "CLOSING" in messages:
-                    break
+            messages += message.split("SERVER-MESSAGE~~>")[1:]
+            if "CLOSING" in messages:
+                break
 
-                while len(messages) != 0:
-                    message = messages.pop(0)
-                    if not message.startswith("DATA-RETURN"):
-                        self.log_queue.put(message)
-                    else:
-                        data = message.split('~~>')
-                        key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
-                        if key == "status":
-                            self.set_status_signal.emit(args)
-                        elif key == "players":
-                            self.set_players_signal.emit(args)
-                        elif key == "worlds-list":
-                            self.set_worlds_list_signal.emit(args)
-                        elif key in ["start", "stop"] and args == ["refresh"]:
-                            self.get_status_signal.emit()
-            except socket.error as e:
-                if e.errno == 10035:
-                    time.sleep(0.1)
+            while len(messages) != 0:
+                message = messages.pop(0)
+                if not message.startswith("DATA-RETURN"):
+                    self.log_queue.put(message)
                 else:
-                    self.close_threads.set()
-                    break
+                    data = message.split('~~>')
+                    key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
+                    if key == "status":
+                        self.set_status_signal.emit(args)
+                    elif key == "players":
+                        self.set_players_signal.emit(args)
+                    elif key == "worlds-list":
+                        self.set_worlds_list_signal.emit(args)
+                    elif key in ["start", "stop"] and args == ["refresh"]:
+                        self.get_status_signal.emit()
+            # except socket.error as e:
+            #     if e.errno == 10035:
+            #         time.sleep(0.1)
+            #     else:
+            #         self.close_threads.set()
+            #         break
         
         self.switch_to_connect_signal.emit()
 
