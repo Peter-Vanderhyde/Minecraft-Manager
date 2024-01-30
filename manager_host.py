@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3.1"
 
 if TESTING:
@@ -709,7 +709,9 @@ class ServerManagerApp(QMainWindow):
                                 if error:
                                     if error == "already offline":
                                         self.tell(client, "Server already stopped.")
-                                        self.send_data("status", ["offline", "", ""])
+                                        updated_status = self.query_status()
+                                        self.set_status_signal.emit(updated_status)
+                                        self.send_data("status", updated_status)
                                     else:
                                         self.tell(client, error)
                             if request in ["start-server", "restart-server"]:
@@ -721,7 +723,9 @@ class ServerManagerApp(QMainWindow):
                                 if error:
                                     if error == "already online":
                                         self.tell(client, "Server already running.")
-                                        self.send_data("start", "refresh")
+                                        updated_status = self.query_status()
+                                        self.set_status_signal.emit(updated_status)
+                                        self.send_data("status", updated_status)
                                     else:
                                         self.tell(client, error)
 
