@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3.1"
 
 if TESTING:
@@ -830,7 +830,10 @@ class ServerManagerApp(QMainWindow):
                 if not restart:
                     self.log_queue.put(f"Preparing for {'fabric ' if fabric else ''} version {version}.")
                     if seed is not None:
-                        self.log_queue.put(f"Generating world with seed '{seed or 'random'}'...")
+                        if seed != "":
+                            self.log_queue.put(f"Generating world with seed '{seed}'...")
+                        else:
+                            self.log_queue.put(f"Generating world with random seed...")
                     self.delay(1)
                     if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
                         raise RuntimeError("Failed to prepare settings.")
@@ -958,7 +961,10 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
+            if world in self.worlds:
+                self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
+            else:
+                self.version_label.setText(f"Version: {version}")
             self.world_label.setText(f"World: {world}")
             self.refresh_button.setEnabled(True)
             self.get_players()
@@ -1088,9 +1094,10 @@ class ServerManagerApp(QMainWindow):
         world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
         if world_path in world_folders:
             try:
-                if self.previous_world == os.path.basename(world_path):
+                if self.previous_world == os.path.basename(world_path) and self.query_status()[0] == "online":
                     self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder while world is being run.</font>")
                     self.show_main_page()
+                    return
                 
                 current_date = datetime.now().strftime("%m-%d-%y")
                 new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
@@ -1105,6 +1112,11 @@ class ServerManagerApp(QMainWindow):
                 self.show_main_page()
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
+                try:
+                    new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                    shutil.rmtree(new_path)
+                except:
+                    pass
                 self.show_main_page()
         elif world_path:
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
