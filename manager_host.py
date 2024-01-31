@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = True
+TESTING = False
 VERSION = "v2.3.1"
 
 if TESTING:
@@ -1022,6 +1022,7 @@ class ServerManagerApp(QMainWindow):
             if self.server_path:
                 file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
                 self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+                self.clear_log()
             else:
                 self.server_path = path
                 file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
