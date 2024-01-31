@@ -748,8 +748,8 @@ class ServerManagerApp(QMainWindow):
             time.sleep(0.5)
         
         client.close()
-        self.log_queue.put(f"{self.clients[client]} has left the room.")
-        self.broadcast(f"{self.clients[client]} has left the room.")
+        self.log_queue.put(f"<font color='blue'>{self.clients[client]} has left the room.</font>")
+        self.broadcast(f"<font color='blue'>{self.clients[client]} has left the room.</font>")
         self.clients.pop(client)
 
     def send_data(self, topic, data, client=None):
