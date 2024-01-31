@@ -846,10 +846,7 @@ class ServerManagerApp(QMainWindow):
                 loop = True
                 window = None
                 ignition_window = None
-                if seed is not None:
-                    timer_amount = 60
-                else:
-                    timer_amount = 30
+                timer_amount = 60
                 end_time = time.time() + timer_amount
                 while loop and not self.stop_threads.is_set():
                     QApplication.processEvents()
@@ -872,7 +869,13 @@ class ServerManagerApp(QMainWindow):
                 if ignition_window:
                     ignition_window.close()
 
-                self.delay(8)
+                check_status = 5
+                while check_status != 0:
+                    self.delay(5)
+                    if self.query_status()[0] == "online":
+                        check_status = 0
+                    else:
+                        check_status -= 1
 
                 self.get_status_signal.emit()
                 self.log_queue.put(f"Server world '{world}' has been started.")
