@@ -90,6 +90,7 @@ class ServerManagerApp(QMainWindow):
 
         self.init_ui()
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.clear_log()
         
         if self.server_path == "" or not os.path.isdir(self.server_path):
             self.message_timer.stop()
@@ -543,8 +544,14 @@ class ServerManagerApp(QMainWindow):
         while time.time() < end_time:
             QApplication.processEvents()
     
-    def show_main_page(self):
-        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+    def clear_log(self):
+        while not self.log_queue.empty():
+            self.log_queue.get()
+    
+    def show_main_page(self, ignore_load=False):
+        if not ignore_load:
+            self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+        
         self.stacked_layout.setCurrentIndex(0)
     
     def show_error_page(self, error, info, eula_ok_button=False):
@@ -1036,10 +1043,11 @@ class ServerManagerApp(QMainWindow):
         
         while not self.log_queue.empty():
             self.log_queue.get()
-        self.message_timer.start(1000)
+        self.message_timer.start(200)
             
         file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
         
+        self.show_main_page(ignore_load=True)
         self.log_queue.put("Downloading latest server.jar file...")
         self.delay(0.5)
         version = queries.download_latest_server_jar(path, self.log_queue)
@@ -1048,6 +1056,7 @@ class ServerManagerApp(QMainWindow):
             self.delay(0.5)
             subprocess.run(["java", "-jar", f"server-{version}.jar"], cwd=path)
             self.server_path = path
+            self.message_timer.start(1000)
             self.accepted_eula()
     
     def accepted_eula(self):
