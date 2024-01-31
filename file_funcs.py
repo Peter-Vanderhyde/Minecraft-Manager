@@ -53,7 +53,7 @@ def load_worlds(server_path, worlds, log_queue):
     if not os.path.isdir(os.path.join(server_path, "worlds")):
         try:
             if not os.path.isdir(server_path):
-                return {}
+                return worlds
             os.mkdir(os.path.join(server_path, "worlds"))
         except:
             return {}

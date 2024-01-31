@@ -18,7 +18,7 @@ from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
 import queries
 import file_funcs
 
-TESTING = False
+TESTING = True
 VERSION = "v2.3.1"
 
 if TESTING:
@@ -90,6 +90,7 @@ class ServerManagerApp(QMainWindow):
 
         self.init_ui()
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+        
         if self.server_path == "" or not os.path.isdir(self.server_path):
             self.message_timer.stop()
             self.show_server_entry_page()
@@ -1011,8 +1012,12 @@ class ServerManagerApp(QMainWindow):
             while not self.log_queue.empty():
                 self.log_queue.get()
             self.message_timer.start(1000)
-            self.server_path = path
-            file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
+            if self.server_path:
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
+                self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+            else:
+                self.server_path = path
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
             self.start_manager_server()
     
     def create_server_folder(self):
@@ -1033,7 +1038,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.get()
         self.message_timer.start(1000)
             
-        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds)
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
         
         self.log_queue.put("Downloading latest server.jar file...")
         self.delay(0.5)
