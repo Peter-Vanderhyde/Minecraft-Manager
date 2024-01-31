@@ -62,7 +62,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        self.default_ip = "127.0.0.1"
+        self.default_ip = "25.6.72.126"
         self.saved_ip = ""
         self.host_ip = ""
         self.port = 5555
