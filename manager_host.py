@@ -119,7 +119,7 @@ class ServerManagerApp(QMainWindow):
         temp_box = QHBoxLayout()
         self.change_ip_button = QPushButton("Change IP")
         self.change_ip_button.setObjectName("smallYellowButton")
-        self.change_ip_button.clicked.connect(self.prepare_ip_prompt)
+        self.change_ip_button.clicked.connect(self.prepare_ip_page)
         self.host_ip_label = QLabel(f"IP: {self.host_ip}")
         self.current_players_label = QLabel("Current Players")
         self.current_players_label.setFont(QFont(self.current_players_label.font().family(), int(self.current_players_label.font().pointSize() * 1.5)))
@@ -423,6 +423,9 @@ class ServerManagerApp(QMainWindow):
         create_new_button.clicked.connect(self.add_new_world)
         select_existing_button = QPushButton("Add Existing World")
         select_existing_button.clicked.connect(self.add_existing_world)
+        remove_world_button = QPushButton("Remove World")
+        remove_world_button.clicked.connect(self.prepare_remove_world_page)
+        remove_world_button.setObjectName("redButton")
         backup_button = QPushButton("Save Backup")
         backup_button.clicked.connect(self.backup_world)
         backup_button.setObjectName("yellowButton")
@@ -432,6 +435,7 @@ class ServerManagerApp(QMainWindow):
 
         top_box.addWidget(create_new_button)
         top_box.addWidget(select_existing_button)
+        top_box.addWidget(remove_world_button)
         top_box.addWidget(backup_button)
         bot_box.addWidget(cancel_button)
 
@@ -521,6 +525,55 @@ class ServerManagerApp(QMainWindow):
         add_world_page = QWidget()
         add_world_page.setLayout(add_world_layout)
 
+        # Page 7: Remove World Page
+
+        remove_world_layout = QGridLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        remove_world_label = QLabel("Remove World")
+        remove_world_label.setObjectName("largeText")
+        temp_box1 = QHBoxLayout()
+        world_label = QLabel("World: ")
+        world_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        world_label.setObjectName("details")
+        self.worlds_dropdown = QComboBox()
+        self.delete_world_checkbox = QCheckBox("Delete world folder")
+        self.delete_world_checkbox.setObjectName("cautionCheckbox")
+        self.delete_world_checkbox.setChecked(False)
+        temp_box2 = QHBoxLayout()
+        remove_world_cancel_button = QPushButton("Cancel")
+        remove_world_cancel_button.setObjectName("redButton")
+        remove_world_cancel_button.clicked.connect(self.show_world_options_page)
+        remove_world_confirm_button = QPushButton("Remove")
+        remove_world_confirm_button.clicked.connect(self.remove_world)
+
+        temp_box1.addWidget(world_label)
+        temp_box1.addWidget(self.worlds_dropdown)
+
+        temp_box2.addWidget(remove_world_cancel_button)
+        temp_box2.addWidget(remove_world_confirm_button)
+
+        center_layout.addWidget(remove_world_label)
+        center_layout.addLayout(temp_box1)
+        center_layout.addWidget(self.delete_world_checkbox)
+        center_layout.addLayout(temp_box2)
+
+        right_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        remove_world_layout.setColumnStretch(0, 1)
+        remove_world_layout.addLayout(center_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        remove_world_layout.addLayout(right_layout, 0, 9)
+        remove_world_layout.setColumnStretch(9, 1)
+
+        remove_world_page = QWidget()
+        remove_world_page.setLayout(remove_world_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
@@ -528,6 +581,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(connect_page)
         self.stacked_layout.addWidget(worlds_page)
         self.stacked_layout.addWidget(add_world_page)
+        self.stacked_layout.addWidget(remove_world_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -580,6 +634,17 @@ class ServerManagerApp(QMainWindow):
     def show_server_entry_page(self):
         self.stacked_layout.setCurrentIndex(2)
     
+    def prepare_ip_page(self, failed=False):
+        if failed:
+            self.connecting_label.setText("Unable to Bind to IP")
+            self.connection_delabel.setText("Is Hamachi offline?")
+        else:
+            self.connecting_label.setText("")
+            self.connection_delabel.setText("")
+        self.default_ip_check.setChecked(False)
+        self.hosting_ip_entry.setText(self.host_ip)
+        self.show_ip_entry_page()
+    
     def show_ip_entry_page(self):
         self.stacked_layout.setCurrentIndex(3)
     
@@ -588,6 +653,16 @@ class ServerManagerApp(QMainWindow):
     
     def show_add_world_page(self):
         self.stacked_layout.setCurrentIndex(5)
+    
+    def prepare_remove_world_page(self):
+        worlds = self.worlds.keys()
+        self.worlds_dropdown.clear()
+        self.worlds_dropdown.addItems(worlds)
+        self.delete_world_checkbox.setChecked(False)
+        self.show_remove_world_page()
+
+    def show_remove_world_page(self):
+        self.stacked_layout.setCurrentIndex(6)
     
     def check_server_path(self, new_text):
         self.existing_server_button.setEnabled(os.path.isdir(new_text))
@@ -604,7 +679,7 @@ class ServerManagerApp(QMainWindow):
             self.server.listen()
             self.server.setblocking(False)
         except:
-            self.prepare_ip_prompt(failed=True)
+            self.prepare_ip_page(failed=True)
             return
         self.host_ip_label.setText(f"IP: {self.host_ip}")
         self.show_main_page()
@@ -1105,17 +1180,6 @@ class ServerManagerApp(QMainWindow):
         elif "eula=true" in content:
             self.start_manager_server()
     
-    def prepare_ip_prompt(self, failed=False):
-        if failed:
-            self.connecting_label.setText("Unable to Bind to IP")
-            self.connection_delabel.setText("Is Hamachi offline?")
-        else:
-            self.connecting_label.setText("")
-            self.connection_delabel.setText("")
-        self.default_ip_check.setChecked(False)
-        self.hosting_ip_entry.setText(self.host_ip)
-        self.show_ip_entry_page()
-
     def set_ip(self):
         ip = self.hosting_ip_entry.text()
         if ip:
@@ -1268,6 +1332,25 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>ERROR: Unable to download from {'Fabric' if self.is_fabric_check.isChecked() else 'MCVersions'}.</font>")
             self.show_main_page()
     
+    def remove_world(self):
+        world = self.worlds_dropdown.currentText()
+        if not world:
+            return
+        
+        if self.delete_world_checkbox.isChecked():
+            try:
+                folder_path = os.path.join(self.server_path, "worlds", world)
+                shutil.rmtree(folder_path)
+            except:
+                pass
+        
+        self.worlds.pop(world)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+        self.set_worlds_list()
+        self.send_data("worlds-list", self.query_worlds())
+        self.log_queue.put(f"<font color='green'>Successfully removed world.</font>")
+        self.show_main_page()
+
     @pyqtSlot()
     def onWindowStateChanged(self):
         if self.windowState() == Qt.WindowMinimized:
