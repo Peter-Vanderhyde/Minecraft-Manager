@@ -112,9 +112,11 @@ def load_worlds(server_path, worlds, log_queue):
             worlds_to_ignore.append(world)
         elif not data.get("fabric") or data.get("fabric") != True:
             worlds[world]["fabric"] = False
-    
+        
     for world in worlds_to_ignore:
         worlds.pop(world)
+    
+    save_world_versions(server_path, worlds)
     
     return worlds
 
@@ -122,6 +124,7 @@ def update_settings(file_lock, ips, server_path, worlds, ip=""):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
             json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}}, f, indent=4)
+    save_world_versions(server_path, worlds)
 
 def prepare_server_settings(world, version, fabric, server_path, log_queue, seed=None):
     # Change the properties
@@ -229,3 +232,25 @@ def open_file(path):
         return True
     except FileNotFoundError:
         return False
+
+def save_version(folder_path, version):
+    try:
+        with open(os.path.join(folder_path, "version.txt"), 'w') as f:
+            f.write(version)
+    except:
+        pass
+
+def load_version(folder_path):
+    try:
+        with open(os.path.join(folder_path, "version.txt"), 'r') as f:
+            line = f.readline()
+        
+        return line.strip()
+    except FileNotFoundError:
+        return None
+
+def save_world_versions(server_path, worlds):
+    for world, data in worlds.items():
+        world_folder = os.path.join(server_path, "worlds", world)
+        if os.path.isdir(world_folder) and data.get("version"):
+            save_version(world_folder, data.get("version"))

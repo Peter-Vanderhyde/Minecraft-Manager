@@ -158,7 +158,7 @@ QLabel {
 
 #cautionCheckbox {
     color: white; /* Text color */
-    background-color: darkorange; /* Background color of the text outline */
+    background-color: orangered; /* Background color of the text outline */
     padding: 3px; /* Adjust padding as needed */
     border-radius: 5px;
     text-align: center;

@@ -961,7 +961,12 @@ class ServerManagerApp(QMainWindow):
                 if ignition_window:
                     ignition_window.close()
 
-                check_status = 5
+                if seed:
+                    # Wait longer
+                    check_status = 5
+                else:
+                    check_status = 10
+                
                 while check_status != 0:
                     self.delay(5)
                     if self.query_status()[0] == "online":
@@ -1262,6 +1267,10 @@ class ServerManagerApp(QMainWindow):
                     self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
                     self.show_main_page()
                     return
+                self.mc_version_dropdown.setCurrentIndex(0)
+                version = file_funcs.load_version(world_path)
+                if version:
+                    self.mc_version_dropdown.setCurrentText(version)
                 self.add_world(world=os.path.basename(world_path), new=False)
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to add world folder.</font>")
@@ -1290,7 +1299,6 @@ class ServerManagerApp(QMainWindow):
             self.new_world_seed_edit.hide()
             self.add_world_label.setText(world)
 
-            self.mc_version_dropdown.setCurrentIndex(0)
             self.is_fabric_check.setChecked(False)
         
         self.add_world_error.setText("")
