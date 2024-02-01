@@ -90,7 +90,8 @@ class ServerManagerApp(QMainWindow):
 
         self.init_ui()
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
-        self.clear_log()
+        self.saved_ip = self.host_ip
+        self.clear_log_queue()
         
         if self.server_path == "" or not os.path.isdir(self.server_path):
             self.message_timer.stop()
@@ -115,12 +116,20 @@ class ServerManagerApp(QMainWindow):
 
         # Left column
         left_column_layout = QVBoxLayout()
+        temp_box = QHBoxLayout()
+        self.change_ip_button = QPushButton("Change IP")
+        self.change_ip_button.setObjectName("smallYellowButton")
+        self.change_ip_button.clicked.connect(self.prepare_ip_prompt)
+        self.host_ip_label = QLabel(f"IP: {self.host_ip}")
         self.current_players_label = QLabel("Current Players")
         self.current_players_label.setFont(QFont(self.current_players_label.font().family(), int(self.current_players_label.font().pointSize() * 1.5)))
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.get_players)
         self.players_info_box = QTextBrowser()
 
+        temp_box.addWidget(self.change_ip_button)
+        temp_box.addWidget(self.host_ip_label)
+        left_column_layout.addLayout(temp_box)
         left_column_layout.addWidget(self.current_players_label)
         left_column_layout.addWidget(self.refresh_button)
         left_column_layout.addWidget(self.players_info_box)
@@ -544,13 +553,16 @@ class ServerManagerApp(QMainWindow):
         while time.time() < end_time:
             QApplication.processEvents()
     
-    def clear_log(self):
+    def clear_log_queue(self):
         while not self.log_queue.empty():
             self.log_queue.get()
     
+    def clear_log(self):
+        self.log_box.clear()
+    
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+            saved_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.stacked_layout.setCurrentIndex(0)
     
@@ -592,13 +604,9 @@ class ServerManagerApp(QMainWindow):
             self.server.listen()
             self.server.setblocking(False)
         except:
-            self.saved_ip = self.host_ip
-            self.hosting_ip_entry.setText(self.host_ip)
-            self.connecting_label.setText("Unable to Bind to IP")
-            self.connection_delabel.setText("Is Hamachi offline?")
-            self.show_ip_entry_page()
-            self.default_ip_check.setChecked(False)
+            self.prepare_ip_prompt(failed=True)
             return
+        self.host_ip_label.setText(f"IP: {self.host_ip}")
         self.show_main_page()
         self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
@@ -651,7 +659,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds)
+                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -840,7 +848,7 @@ class ServerManagerApp(QMainWindow):
                     else:
                         if seed is not None:
                             self.worlds[world].pop("seed")
-                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
                 
                 os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
                 loop = True
@@ -1029,12 +1037,12 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.get()
             self.message_timer.start(1000)
             if self.server_path:
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
-                self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
-                self.clear_log()
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
+                saved_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+                self.clear_log_queue()
             else:
                 self.server_path = path
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
             self.start_manager_server()
     
     def create_server_folder(self):
@@ -1055,7 +1063,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.get()
         self.message_timer.start(200)
             
-        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.host_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
         
         self.show_main_page(ignore_load=True)
         self.log_queue.put("Downloading latest server.jar file...")
@@ -1078,9 +1086,31 @@ class ServerManagerApp(QMainWindow):
         elif "eula=true" in content:
             self.start_manager_server()
     
+    def prepare_ip_prompt(self, failed=False):
+        if failed:
+            self.connecting_label.setText("Unable to Bind to IP")
+            self.connection_delabel.setText("Is Hamachi offline?")
+        else:
+            self.connecting_label.setText("")
+            self.connection_delabel.setText("")
+        self.default_ip_check.setChecked(False)
+        self.hosting_ip_entry.setText(self.host_ip)
+        self.show_ip_entry_page()
+
     def set_ip(self):
         ip = self.hosting_ip_entry.text()
         if ip:
+            if ip == self.host_ip and self.receive_thread.is_alive():
+                self.show_main_page(ignore_load=True)
+                return
+            elif self.receive_thread.is_alive():
+                self.stop_server_threads()
+                self.stop_threads.clear()
+                self.clear_log_queue()
+                self.clear_log()
+            else:
+                self.clear_log_queue()
+                self.clear_log()
             self.connecting_label.setText("Connecting...")
             self.host_ip = ip
             self.delay(0.5)
@@ -1185,7 +1215,7 @@ class ServerManagerApp(QMainWindow):
         result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
         if result is True:
             self.worlds[self.add_world_label.text()] = {"version": self.mc_version.text(), "fabric": self.is_fabric_check.isChecked()}
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -1208,7 +1238,7 @@ class ServerManagerApp(QMainWindow):
                 "fabric": self.is_fabric_check.isChecked(),
                 "seed": self.new_world_seed_edit.text()
             }
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip or self.host_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -1226,16 +1256,19 @@ class ServerManagerApp(QMainWindow):
         else:
             self.message_timer.start(1000)
     
-    def closeEvent(self, event):
-        try:
-            self.broadcast("CLOSING")
-        except:
-            pass
+    def stop_server_threads(self):
         self.stop_threads.set()
         if self.receive_thread.is_alive():
             self.receive_thread.join()
         if self.server:
             self.server.close()
+
+    def closeEvent(self, event):
+        try:
+            self.broadcast("CLOSING")
+        except:
+            pass
+        self.stop_server_threads()
         event.accept()
 
 if __name__ == "__main__":
