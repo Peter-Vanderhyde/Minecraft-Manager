@@ -202,8 +202,8 @@ class ServerManagerApp(QMainWindow):
 
         self.world_options = QPushButton("World Options")
         self.world_options.clicked.connect(self.show_world_options_page)
-        open_folder_button = QPushButton("Server Folder")
-        open_folder_button.clicked.connect(self.open_server_folder)
+        self.open_folder_button = QPushButton("Server Folder")
+        self.open_folder_button.clicked.connect(self.open_server_folder)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -221,7 +221,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.addWidget(separator, 5, 0, 1, 2)
         functions_layout.addWidget(self.world_options, 6, 0, 1, 2)
-        functions_layout.addWidget(open_folder_button, 7, 0, 1, 2)
+        functions_layout.addWidget(self.open_folder_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -1065,6 +1065,15 @@ class ServerManagerApp(QMainWindow):
             
         file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
         
+        self.change_ip_button.setEnabled(False)
+        self.refresh_button.setEnabled(False)
+        self.refresh_status_button.setEnabled(False)
+        self.start_button.setEnabled(False)
+        self.stop_button.setEnabled(False)
+        self.restart_button.setEnabled(False)
+        self.world_options.setEnabled(False)
+        self.open_folder_button.setEnabled(False)
+
         self.show_main_page(ignore_load=True)
         self.log_queue.put("Downloading latest server.jar file...")
         self.delay(0.5)
@@ -1075,6 +1084,16 @@ class ServerManagerApp(QMainWindow):
             subprocess.run(["java", "-jar", f"server-{version}.jar"], cwd=path)
             self.server_path = path
             self.message_timer.start(1000)
+
+            self.change_ip_button.setEnabled(True)
+            self.refresh_button.setEnabled(True)
+            self.refresh_status_button.setEnabled(True)
+            self.start_button.setEnabled(True)
+            self.stop_button.setEnabled(True)
+            self.restart_button.setEnabled(True)
+            self.world_options.setEnabled(True)
+            self.open_folder_button.setEnabled(True)
+            
             self.accepted_eula()
     
     def accepted_eula(self):
