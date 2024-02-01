@@ -480,9 +480,13 @@ class ServerManagerApp(QMainWindow):
         self.new_world_seed_edit.setObjectName("lineEdit")
         self.new_world_seed_edit.setPlaceholderText("(Optional) World Seed")
         self.new_world_seed_edit.hide()
-        self.mc_version = QLineEdit("")
-        self.mc_version.setPlaceholderText("Version")
-        self.mc_version.setObjectName("lineEdit")
+        temp_box = QHBoxLayout()
+        self.mc_version_label = QLabel("Version: ")
+        self.mc_version_label.setObjectName("details")
+        self.mc_version_dropdown = QComboBox()
+        versions = queries.get_mc_versions()
+        if versions:
+            self.mc_version_dropdown.addItems(versions)
         self.is_fabric_check = QCheckBox("Fabric")
         self.is_fabric_check.setObjectName("checkbox")
         self.add_existing_world_button = QPushButton("Add World")
@@ -499,7 +503,9 @@ class ServerManagerApp(QMainWindow):
 
         top_box.addWidget(self.add_world_label)
         top_box.addWidget(self.new_world_name_edit)
-        top_box.addWidget(self.mc_version)
+        temp_box.addWidget(self.mc_version_label)
+        temp_box.addWidget(self.mc_version_dropdown, 1)
+        top_box.addLayout(temp_box)
         top_box.addWidget(self.new_world_seed_edit)
         temp = QHBoxLayout()
         temp.addWidget(self.is_fabric_check, 1, Qt.AlignmentFlag.AlignCenter)
@@ -538,7 +544,7 @@ class ServerManagerApp(QMainWindow):
         remove_world_label = QLabel("Remove World")
         remove_world_label.setObjectName("largeText")
         temp_box1 = QHBoxLayout()
-        world_label = QLabel("World: ")
+        world_label = QLabel("World Name: ")
         world_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         world_label.setObjectName("details")
         self.worlds_dropdown = QComboBox()
@@ -553,7 +559,7 @@ class ServerManagerApp(QMainWindow):
         remove_world_confirm_button.clicked.connect(self.remove_world)
 
         temp_box1.addWidget(world_label)
-        temp_box1.addWidget(self.worlds_dropdown)
+        temp_box1.addWidget(self.worlds_dropdown, 1)
 
         temp_box2.addWidget(remove_world_cancel_button)
         temp_box2.addWidget(remove_world_confirm_button)
@@ -1273,7 +1279,7 @@ class ServerManagerApp(QMainWindow):
             self.new_world_seed_edit.show()
             self.add_world_label.setText("Create World")
 
-            self.mc_version.setText("")
+            self.mc_version_dropdown.setCurrentIndex(0)
             self.new_world_seed_edit.setText("")
             self.new_world_name_edit.setText("")
             self.is_fabric_check.setChecked(False)
@@ -1284,7 +1290,7 @@ class ServerManagerApp(QMainWindow):
             self.new_world_seed_edit.hide()
             self.add_world_label.setText(world)
 
-            self.mc_version.setText("")
+            self.mc_version_dropdown.setCurrentIndex(0)
             self.is_fabric_check.setChecked(False)
         
         self.add_world_error.setText("")
@@ -1295,14 +1301,15 @@ class ServerManagerApp(QMainWindow):
             if fabric:
                 return queries.verify_fabric_version(version)
             else:
-                return queries.verify_mc_version(version)
+                # The version dropdown already uses verified versions
+                return True
         else:
             return False
 
     def confirm_add_world(self):
-        result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
+        result = self.verify_version(self.mc_version_dropdown.currentText(), self.is_fabric_check.isChecked())
         if result is True:
-            self.worlds[self.add_world_label.text()] = {"version": self.mc_version.text(), "fabric": self.is_fabric_check.isChecked()}
+            self.worlds[self.add_world_label.text()] = {"version": self.mc_version_dropdown.currentText(), "fabric": self.is_fabric_check.isChecked()}
             file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
@@ -1319,10 +1326,10 @@ class ServerManagerApp(QMainWindow):
             self.add_world_error.setText(f"Name invalid or already exists.")
             return
         
-        result = self.verify_version(self.mc_version.text(), self.is_fabric_check.isChecked())
+        result = self.verify_version(self.mc_version_dropdown.currentText(), self.is_fabric_check.isChecked())
         if result is True:
             self.worlds[self.new_world_name_edit.text()] = {
-                "version": self.mc_version.text(),
+                "version": self.mc_version_dropdown.currentText(),
                 "fabric": self.is_fabric_check.isChecked(),
                 "seed": self.new_world_seed_edit.text()
             }

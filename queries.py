@@ -99,25 +99,6 @@ def download_fabric_server_jar(version, server_path, log_queue):
         log_queue.put(f"Failed to download necessary jar file.")
         return False
 
-def verify_mc_version(version):
-    game_versions_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
-    try:
-        response = requests.get(game_versions_url)
-    except:
-        return None
-    
-    if response.status_code == 200:
-        versions = response.json()["versions"]
-        found_version = False
-        for version_object in versions:
-            if version_object["id"] == version:
-                found_version = True
-        
-        if found_version:
-            return True
-    
-    return False
-
 def verify_fabric_version(version):
     game_versions_url = 'https://meta.fabricmc.net/v2/versions/game'
     try:
@@ -136,3 +117,17 @@ def verify_fabric_version(version):
             return True
     
     return False
+
+def get_mc_versions():
+    versions_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
+    try:
+        response = requests.get(versions_url)
+    except:
+        return None
+    
+    if response.status_code == 200:
+        versions = response.json()["versions"]
+        versions = [version["id"] for version in versions if version["type"] == "release"]
+        return versions
+    else:
+        return None
