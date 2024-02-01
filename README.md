@@ -16,9 +16,10 @@ Through this manager both the host and clients will have the ability to
   
 The host has the ability to
 - Choose what worlds he would like the clients to be able to choose from (including worlds running fabric.)
-- Easily add existing worlds to the available worlds.
+- Easily add or remove worlds to the available worlds list.
 - Create new worlds from scratch to be directly added to the list. Use any version, and optionally set a seed and/or set the world as using fabric.
 - Quickly backup server worlds.
+- Quick server folder and properties access.
 
 ## Host Instructions
 If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
@@ -35,7 +36,7 @@ If you set up the folder automatically, it will also prompt you to accept the eu
 ![EULA Image](Images/eula.png)  
 Your manager is now ready to start hosting a server, but first it will prompt you to enter the hosting ip. This is what the clients will use to connect.  
 ![IP Prompt Image](Images/ip.png)  
-If you set an IP as the default, it will attempt to use that IP address without ever prompting you again.
+If you set an IP as the default, it will attempt to use that IP address on startup without ever prompting you again.
   
 Once you have run the program, it will have created a file called `manager_settings.json`. Inside this settings file, it will save the IP you are hosting from (defaults to localhost), the displayed names of the clients connecting to your manager, the server path, and will store the names of the server worlds you choose. 
 
@@ -62,23 +63,23 @@ Once you have run the program, it will have created a file called `manager_setti
 }
 ```
 
-### Step 3
+### Host Functionality
 **<u>Changing the Host IP</u>**  
-If you wish to change the ip that you are hosting from but you have already set a default IP, simply change the `ip` value in the created manager settings. If the server is unable to use the set ip to host from, it will prompt you again to, either set a new IP just this time, or set a new default.
+If you wish to change the ip that you are hosting from but you have already set a default IP, you can change the IP being used at any time with the `Change IP` button in the top left corner.
 
 **<u>Adding a World</u>**  
 In order to add a world to the manager, you can either generate a new world, or use an existing world folder.
 
 #### Using an Existing World
-Place the world folder in the `worlds` directory created in your server directory. Next, go to `World Options` in the manager and hit `Add Existing`. Include the correct version number. Optionally, mark whether it is a fabric server or not.
+Place the world folder in the `worlds` directory created in your server directory. Next, go to `World Options` in the manager and hit `Add Existing`. If this world has been used in the manager in the past, the version number should default to the previous version set. Otherwise, you can select the correct version for the world. Optionally, mark whether it is a fabric server or not.
 
 > Note:  
-Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version. However, it will never be able to be downgraded again. If you wish to do this, creating a backup of the world first may be recommended.  
+Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version (not guaranteed, though). However, it will never be able to be downgraded again. If you wish to do this, creating a backup of the world first may be recommended.  
 
 After you have added the new world, it will automatically update the list of worlds for yourself and all clients.
 
 #### Generating a New World
-Go to the `World Options` in the manager and hit `Create New World`. Enter the world name, a valid version, a seed, and specify if it is a fabric server. Once you hit `Create World`, the world will be added to the list. However, the world itself will not be generated until the first time the server starts the world.
+Go to the `World Options` in the manager and hit `Create New World`. Enter the world name, a version, a seed (optional), and specify if it is a fabric server. Once you hit `Create World`, the world will be added to the list. However, the world itself will not be generated until the first time the server starts the world.
 
 #
   
