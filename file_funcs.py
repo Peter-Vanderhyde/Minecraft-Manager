@@ -4,6 +4,7 @@ import shutil
 import queries
 import time
 import glob
+import subprocess
 from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -221,3 +222,10 @@ def pick_folder(parent, starting_path=""):
 
 def open_folder_explorer(folder_path):
     QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))
+
+def open_file(path):
+    try:
+        subprocess.run(['start', '', path], shell=True)
+        return True
+    except FileNotFoundError:
+        return False
