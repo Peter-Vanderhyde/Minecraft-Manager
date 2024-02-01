@@ -29,11 +29,11 @@ If you wish to manually create a server folder for the program, you will need to
 
 ### Step 2
 **<u>Initial Startup</u>**  
-Run the `Host_manager.exe` file. The first time you run the manager, it will prompt you to enter the path of the server folder. This can either be the server folder you created in the previous optional step, or you can let the program download and run the latest server file automatically.
+Run the `Host_manager.exe` file. The first time you run the manager, it will prompt you to enter the path of the server folder. This can either be the server folder you created in the previous optional step, or you can let the program download and run the latest server file automatically.  
 ![Server Path Prompt Image](Images/server_path.png)  
-If you set up the folder automatically, it will also prompt you to accept the eula.txt.
+If you set up the folder automatically, it will also prompt you to accept the eula.txt.  
 ![EULA Image](Images/eula.png)  
-Your manager is now ready to start hosting a server, but first it will prompt you to enter the hosting ip. This is what the clients will use to connect.
+Your manager is now ready to start hosting a server, but first it will prompt you to enter the hosting ip. This is what the clients will use to connect.  
 ![IP Prompt Image](Images/ip.png)  
 If you set an IP as the default, it will attempt to use that IP address without ever prompting you again.
   
