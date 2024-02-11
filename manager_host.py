@@ -19,7 +19,7 @@ import queries
 import file_funcs
 
 TESTING = False
-VERSION = "v2.3.1"
+VERSION = "v2.3.2"
 
 if TESTING:
     STYLE_PATH = "Styles"
