@@ -306,7 +306,7 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon(os.path.join(IMAGE_PATH, "block_icon.png"))
+        icon = QIcon(os.path.join(IMAGE_PATH, "app_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
