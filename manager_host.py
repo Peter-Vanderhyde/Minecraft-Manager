@@ -3,6 +3,7 @@ import threading
 import os
 import pyautogui as pag
 import pygetwindow as pgw
+import ctypes
 import time
 import json
 import sys
@@ -1000,6 +1001,14 @@ class ServerManagerApp(QMainWindow):
         pgw.getActiveWindow().title
         window.restore()
         window.activate()
+
+        # Check if caps lock is on
+        user32 = ctypes.WinDLL("user32")
+        caps_lock_state = user32.GetKeyState(0x14)
+        if bool(caps_lock_state):
+            pag.keyDown("capslock")
+            pag.keyUp("capslock")
+
         target_pos = pag.Point(window.bottomright.x - 30, window.bottomright.y - 30)
         while pag.position() != target_pos:
             pag.moveTo(target_pos.x, target_pos.y)
@@ -1007,6 +1016,10 @@ class ServerManagerApp(QMainWindow):
         pag.click()
         pag.typewrite("stop")
         pag.keyDown("enter")
+
+        if bool(caps_lock_state):
+            pag.keyDown("capslock")
+            pag.keyUp("capslock")
 
         self.delay(3)
 
