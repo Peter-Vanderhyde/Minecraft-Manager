@@ -628,6 +628,7 @@ class ServerManagerApp(QMainWindow):
         if not ignore_load:
             saved_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
         
+        self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
     
     def show_error_page(self, error, info, eula_ok_button=False):
@@ -1177,9 +1178,8 @@ class ServerManagerApp(QMainWindow):
         self.open_folder_button.setEnabled(False)
         self.open_properties_button.setEnabled(False)
 
-        self.show_main_page(ignore_load=True)
         self.log_queue.put("Downloading latest server.jar file...")
-        self.delay(0.5)
+        self.show_main_page(ignore_load=True)
         version = queries.download_latest_server_jar(path, self.log_queue)
         if version:
             self.log_queue.put("Generating server files...")
@@ -1253,12 +1253,10 @@ class ServerManagerApp(QMainWindow):
                     
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
-                    self.delay(0.5)
                     shutil.copytree(world_path, f"{new_path}({str(index)})")
                 else:
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
-                    self.delay(0.5)
                     shutil.copytree(world_path, new_path)
                 self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
             except:
