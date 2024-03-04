@@ -1180,6 +1180,7 @@ class ServerManagerApp(QMainWindow):
 
         self.log_queue.put("Downloading latest server.jar file...")
         self.show_main_page(ignore_load=True)
+        self.delay(0.5)
         version = queries.download_latest_server_jar(path, self.log_queue)
         if version:
             self.log_queue.put("Generating server files...")
@@ -1253,10 +1254,12 @@ class ServerManagerApp(QMainWindow):
                     
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
+                    self.delay(0.5)
                     shutil.copytree(world_path, f"{new_path}({str(index)})")
                 else:
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
+                    self.delay(0.5)
                     shutil.copytree(world_path, new_path)
                 self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
             except:
