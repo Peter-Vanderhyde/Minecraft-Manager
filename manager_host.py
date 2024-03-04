@@ -1238,31 +1238,37 @@ class ServerManagerApp(QMainWindow):
         world_path = os.path.normpath(world_path)
         world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
         if world_path in world_folders:
-            # try:
-            if self.previous_world == os.path.basename(world_path) and self.query_status()[0] == "online":
-                self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder while world is being run.</font>")
+            try:
+                if self.previous_world == os.path.basename(world_path) and self.query_status()[0] == "online":
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder while world is being run.</font>")
+                    self.show_main_page()
+                    return
+                
+                current_date = datetime.now().strftime("%m-%d-%y")
+                new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                if os.path.exists(new_path):
+                    index = 1
+                    while os.path.exists(f"{new_path}({str(index)})"):
+                        index += 1
+                    
+                    self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
+                    self.show_main_page()
+                    self.delay(0.5)
+                    shutil.copytree(world_path, f"{new_path}({str(index)})")
+                else:
+                    self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
+                    self.show_main_page()
+                    self.delay(0.5)
+                    shutil.copytree(world_path, new_path)
+                self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
+            except:
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
+                try:
+                    new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                    shutil.rmtree(new_path)
+                except:
+                    pass
                 self.show_main_page()
-                return
-            
-            current_date = datetime.now().strftime("%m-%d-%y")
-            new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
-            if os.path.exists(new_path):
-                index = 1
-                while os.path.exists(f"{new_path}({str(index)})"):
-                    index += 1
-                shutil.copytree(world_path, f"{new_path}({str(index)})")
-            else:
-                shutil.copytree(world_path, new_path)
-            self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
-            self.show_main_page()
-            # except:
-            #     self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
-            #     try:
-            #         new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
-            #         shutil.rmtree(new_path)
-            #     except:
-            #         pass
-            #     self.show_main_page()
         elif world_path:
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
             self.show_main_page()
