@@ -8,21 +8,21 @@ This is a Java Minecraft server manager that allows for basic control of the ser
 
 ## Features
 Through this manager both the host and clients will have the ability to
-- Start an available world in the dropdown.
-- Stop or restart a currently running server.
-- Query the current players on the server.
-- Query the current status of the server including the version and the world name.
-- Chat with others connected to the manager.
+- Start any world that the host has added
+- Stop or restart a currently running server
+- Query the current players on the server
+- Query the current status of the server including the version and the world name
+- Chat with others connected to the manager
   
 The host has the ability to
-- Choose what worlds he would like the clients to be able to choose from (including worlds running fabric.)
-- Easily add or remove worlds to the available worlds list.
-- Create new worlds from scratch to be directly added to the list. Use any version, and optionally set a seed and/or set the world as using fabric.
-- Quickly backup server worlds.
-- Quick server folder and properties access.
+- Choose what worlds he would like the clients to be able to run (including worlds running fabric)
+- Easily add or remove worlds in the available worlds list.
+- Generate new worlds from scratch that are then directly added to the list (Use any version, and optionally set a seed and/or set up the world to run fabric)
+- Easily backup server worlds
+- Easily access the server folder and properties file
 
 ## Host Instructions
-If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
+If you are hosting the server on your computer, you must have your `manager_host` program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
   
 ### Step 1
 **<u>\*Optional\* Creating the Server Folder</u>**  
@@ -71,10 +71,12 @@ If you wish to change the ip that you are hosting from but you have already set 
 In order to add a world to the manager, you can either generate a new world, or use an existing world folder.
 
 #### Using an Existing World
-Place the world folder in the `worlds` directory created in your server directory. Next, go to `World Options` in the manager and hit `Add Existing`. If this world has been used in the manager in the past, the version number should default to the previous version set. Otherwise, you can select the correct version for the world. Optionally, mark whether it is a fabric server or not.
+1. Place the world folder in the `worlds` directory created in your server directory.
+2. Next, go to `World Options` in the manager and hit `Add Existing`. If this world has been used in the manager in the past, the version number should default to the previous version set. Otherwise, you can select the correct version for the world.
+3. Optionally, mark whether it is a fabric server or not.
 
 > Note:  
-Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version (not guaranteed, though). However, it will never be able to be downgraded again. If you wish to do this, creating a backup of the world first may be recommended.  
+Setting the world to a higher version than it was created in will likely successfully upgrade the world to a higher version (not guaranteed, though). However, it will never be able to be downgraded again. If you wish to do this, perhaps create a backup of the world first.  
 
 After you have added the new world, it will automatically update the list of worlds for yourself and all clients.
 
@@ -87,6 +89,6 @@ You can add as many worlds as you would like to the worlds folder. The manager w
 
 ### Step 4
 **<u>\*Optional\* Customizing the Batch File</u>**  
-There are several arguments that can be given in the server run command such as defining memory space for the server, etc. Feel free to add any extra arguments to the `run.bat` file command. If the run batch file has not already been created, the program will create it upon starting a world. 
+There are several arguments that can be given in the server run command such as defining memory space for the server, etc. Feel free to add any extra arguments to the `run.bat` file command. If the `run.bat` file has not been created yet, the program will create it upon starting a world for the first time. 
 
 ### You're all set now. Enjoy!
