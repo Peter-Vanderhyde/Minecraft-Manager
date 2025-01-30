@@ -16,7 +16,7 @@ def players(ip, port):
     except TimeoutError:
         return []
 
-def download_server_jar(version, output_directory, log_queue):
+def get_json(version, log_queue):
     version_url = f'https://launchermeta.mojang.com/mc/game/version_manifest.json'
 
     # Fetch the version manifest
@@ -32,7 +32,13 @@ def download_server_jar(version, output_directory, log_queue):
         # Get the download URL for the server JAR
         server_json_url = version_info['url']
         server_json_response = requests.get(server_json_url).json()
-        server_jar_url = server_json_response["downloads"]["server"]["url"]
+        return True, server_json_response
+    return False, response
+
+def download_server_jar(version, output_directory, log_queue):
+    success, response = get_json(version, log_queue)
+    if success:
+        server_jar_url = response["downloads"]["server"]["url"]
         server_jar_response = requests.get(server_jar_url)
         
         if server_jar_response.status_code == 200:
@@ -46,7 +52,7 @@ def download_server_jar(version, output_directory, log_queue):
     else:
         log_queue.put(f"Failed to fetch version manifest. Status code: {response.status_code}")
 
-def download_latest_server_jar(server_path, log_queue):
+def get_latest_release(log_queue):
     version_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
 
     # Fetch the version manifest
@@ -58,12 +64,26 @@ def download_latest_server_jar(server_path, log_queue):
     
     if response.status_code == 200:
         manifest = response.json()
-        lastest_version = manifest["latest"]["release"]
+        latest_version = manifest["latest"]["release"]
+        return latest_version
 
-        download_server_jar(lastest_version, server_path, log_queue)
-        return lastest_version
-    
-    return False
+def download_latest_server_jar(server_path, log_queue):
+    latest_version = get_latest_release(log_queue)
+    if not latest_version:
+        return False
+
+    download_server_jar(latest_version, server_path, log_queue)
+    return latest_version
+
+def get_required_java_version(version, log_queue):
+    if int(version.split(".")[1]) < 7:
+        return 8
+    success, response = get_json(version, log_queue)
+    if success:
+        required_version = response["javaVersion"]["majorVersion"]
+        return required_version
+    else:
+        log_queue.put(f"Failed to fetch required Java version. Status code: {response.status_code}")
 
 def download_fabric_server_jar(version, server_path, log_queue):
     loader_versions_url = f'https://meta.fabricmc.net/v2/versions/loader'

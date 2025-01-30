@@ -22,7 +22,7 @@ The host has the ability to
 - Quick server folder and properties access.
 
 ## Host Instructions
-If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need a Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions.
+If you are hosting the server on your computer, you must have your manager_host program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).
   
 ### Step 1
 **<u>\*Optional\* Creating the Server Folder</u>**  

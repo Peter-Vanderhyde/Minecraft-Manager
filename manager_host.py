@@ -29,6 +29,29 @@ else:
     STYLE_PATH = sys._MEIPASS
     IMAGE_PATH = sys._MEIPASS
 
+def check_java_installed():
+    """Checks if Java is installed and meets the required version."""
+    try:
+        # Run 'java -version' and capture output
+        result = subprocess.run(["java", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        output = result.stderr if result.stderr else result.stdout  # Java version is printed to stderr
+
+        # Extract Java version
+        segments = output.split('"')
+        if len(segments) == 3:
+            ver_sub = segments[1]
+            if ver_sub.startswith("1."):
+                # Oracle formatting "1.x.__"
+                return int(ver_sub.split(".")[1])
+            else:
+                # Latest formatting "xx.___"
+                return int(ver_sub.split(".")[0])
+        else:
+            return False
+    
+    except FileNotFoundError:
+        return False
+
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -69,6 +92,7 @@ class ServerManagerApp(QMainWindow):
         self.port = 5555
         self.server_port = "25565"
         self.server = None
+        self.java_version = ""
         self.receive_thread = threading.Thread(target=self.receive)
         self.message_timer = QTimer(self)
         self.message_timer.timeout.connect(self.check_messages)
@@ -90,6 +114,36 @@ class ServerManagerApp(QMainWindow):
         self.set_players_signal.connect(self.set_players)
 
         self.init_ui()
+
+        # Check if Java is installed before anything else
+        version = check_java_installed()
+        if not version:
+            self.show_error_page(
+                "Java Runtime Not Found",
+                "Minecraft servers require a Java Runtime Environment (JRE) to run.<br>"
+                "Download it from:<br>"
+                "Adoptium Temurin JRE (www.adoptium.net/temurin/releases/)<br><br>"
+                "The latest versions of Minecraft will require the latest version of Java.",
+                eula_ok_button=False
+            )
+
+            return
+        else:
+            self.java_version = version
+        
+        latest_mc_version = queries.get_latest_release(self.log_queue)
+        required_java_version = queries.get_required_java_version(latest_mc_version, self.log_queue)
+        if required_java_version:
+            if required_java_version > self.java_version:
+                self.show_error_page("Your Java version is out of date!",
+                                    f"Minecraft version {latest_mc_version} requires Java version {required_java_version}.<br>"
+                                    f"You are currently running version {self.java_version}.<br>"
+                                    "Download an updated version from www.adoptium.net/temurin/releases/",
+                                    eula_ok_button=False)
+                
+                return
+
+
         self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
         self.clear_log_queue()
@@ -907,6 +961,17 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
             return f"<font color='red'>ERROR: World {world} is missing version.</font>"
         
+        required_java_version = queries.get_required_java_version(version, self.log_queue)
+        if required_java_version:
+            if required_java_version > self.java_version:
+                self.log_queue.put(f"<font color='red'>Your Java version is out of date!<br>"
+                                    f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
+                                    f"You are currently running version {self.java_version}.<br>"
+                                    "Download an updated version from www.adoptium.net/temurin/releases/</font>",
+                                    eula_ok_button=False)
+                
+                return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
+
         self.broadcast("Starting server...")
         self.log_queue.put("Starting server...")
         QApplication.processEvents()
