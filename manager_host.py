@@ -20,7 +20,7 @@ import queries
 import file_funcs
 
 TESTING = False
-VERSION = "v2.3.2"
+VERSION = "v2.3.3"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -30,7 +30,7 @@ else:
     IMAGE_PATH = sys._MEIPASS
 
 def check_java_installed():
-    """Checks if Java is installed and meets the required version."""
+    """Checks if Java is installed and returns the version."""
     try:
         # Run 'java -version' and capture output
         result = subprocess.run(["java", "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
