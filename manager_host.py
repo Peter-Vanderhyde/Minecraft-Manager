@@ -118,18 +118,9 @@ class ServerManagerApp(QMainWindow):
         self.update_players_list_signal.connect(self.update_players_list)
 
         # Minecraft Server Management Protocol Listener
-        self.bus = websock_mgmt.MgmtBus()
-        self.bus.log.connect(self.log_queue.put)
-        self.bus.recvd_result.connect(self.result_queue.put)
-        self.bus.connected.connect(self.api_connection)
-        self.bus.server_closed.connect(self.api_closed)
-        self.bus.set_players.connect(self.set_players)
-        self.bus.update_status.connect(self.update_status)
-        self.bus.player_join.connect(self.add_player)
-        self.bus.player_leave.connect(self.remove_player)
-
-        self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client) # Listens to server API
-        self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client) # Sends commands to server API
+        self.bus = None
+        self.bus_shutdown_complete = threading.Event()
+        self.bus_shutdown_complete.set()
 
         self.init_ui()
 
@@ -265,16 +256,13 @@ class ServerManagerApp(QMainWindow):
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("redButton")
-        self.restart_button = QPushButton("Restart")
-        self.restart_button.clicked.connect(self.restart_server)
-        self.restart_button.setObjectName("blueButton")
 
         separator = QFrame(self)
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Raised)
 
-        self.world_options = QPushButton("World Options")
-        self.world_options.clicked.connect(self.show_world_options_page)
+        self.world_manager = QPushButton("World Manager")
+        self.world_manager.clicked.connect(self.show_world_manager_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
         self.open_properties_button = QPushButton("Server Properties")
@@ -293,11 +281,10 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.world_version_label, 2, 1)
 
         functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(separator, 5, 0, 1, 2)
-        functions_layout.addWidget(self.world_options, 6, 0, 1, 2)
-        functions_layout.addWidget(self.open_folder_button, 7, 0, 1, 2)
-        functions_layout.addWidget(self.open_properties_button, 8, 0, 1, 2)
+        functions_layout.addWidget(separator, 4, 0, 1, 2)
+        functions_layout.addWidget(self.world_manager, 5, 0, 1, 2)
+        functions_layout.addWidget(self.open_folder_button, 6, 0, 1, 2)
+        functions_layout.addWidget(self.open_properties_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -557,7 +544,7 @@ class ServerManagerApp(QMainWindow):
         self.mc_version_label = QLabel("Version: ")
         self.mc_version_label.setObjectName("details")
         self.mc_version_dropdown = QComboBox()
-        versions = queries.get_mc_versions()
+        versions = queries.get_mc_versions(include_snapshots=True)
         if versions:
             self.mc_version_dropdown.addItems(versions)
         self.is_fabric_check = QCheckBox("Fabric")
@@ -570,7 +557,7 @@ class ServerManagerApp(QMainWindow):
         self.create_new_world_button.clicked.connect(self.confirm_create_world)
         cancel_button = QPushButton("Cancel")
         cancel_button.setObjectName("redButton")
-        cancel_button.clicked.connect(self.show_world_options_page)
+        cancel_button.clicked.connect(self.show_world_manager_page)
         self.add_world_error = QLabel("")
         self.add_world_error.setObjectName("messageText")
 
@@ -627,7 +614,7 @@ class ServerManagerApp(QMainWindow):
         temp_box2 = QHBoxLayout()
         remove_world_cancel_button = QPushButton("Cancel")
         remove_world_cancel_button.setObjectName("redButton")
-        remove_world_cancel_button.clicked.connect(self.show_world_options_page)
+        remove_world_cancel_button.clicked.connect(self.show_world_manager_page)
         remove_world_confirm_button = QPushButton("Remove")
         remove_world_confirm_button.clicked.connect(self.remove_world)
 
@@ -681,6 +668,70 @@ class ServerManagerApp(QMainWindow):
         
         self.setStyleSheet(style_str)
     
+    def create_bus(self):
+        self.bus = websock_mgmt.MgmtBus()
+        self.bus.log.connect(self.log_queue.put)
+        self.bus.recvd_result.connect(self.result_queue.put)
+        self.bus.connected.connect(self.api_connection)
+        self.bus.server_closing.connect(self.bus_shutdown_complete.clear)
+        self.bus.server_closed.connect(self.api_closed)
+        self.bus.set_players.connect(self.set_players)
+        self.bus.update_status.connect(self.update_status)
+        self.bus.player_join.connect(self.add_player)
+        self.bus.player_leave.connect(self.remove_player)
+
+        self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client) # Listens to server API
+        self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client) # Sends commands to server API
+
+    def disconnect_bus(self):
+        try:
+            self.bus.log.disconnect(self.log_queue.put)
+        except:
+            pass
+        try:
+            self.bus.recvd_result.disconnect(self.result_queue.put)
+        except:
+            pass
+        try:
+            self.bus.connected.disconnect(self.api_connection)
+        except:
+            pass
+        try:
+            self.bus.server_closing.disconnect(self.bus_shutdown_complete.clear)
+        except:
+            pass
+        try:
+            self.bus.server_closed.disconnect(self.api_closed)
+        except:
+            pass
+        try:
+            self.bus.set_players.disconnect(self.set_players)
+        except:
+            pass
+        try:
+            self.bus.update_status.disconnect(self.update_status)
+        except:
+            pass
+        try:
+            self.bus.player_join.disconnect(self.add_player)
+        except:
+            pass
+        try:
+            self.bus.player_leave.disconnect(self.remove_player)
+        except:
+            pass
+    
+    def shutdown_bus(self):
+        if self.bus is not None:
+            self.bus.shutdown()
+            if self.mgmt_listener_thread.is_alive():
+                self.mgmt_listener_thread.join(timeout=2.0)
+            if self.mgmt_sender_thread.is_alive():
+                self.mgmt_sender_thread.join(timeout=2.0)
+        self.disconnect_bus()
+        self.bus = None
+        self.bus_shutdown_complete.set()
+    
     def open_server_folder(self):
         file_funcs.open_folder_explorer(self.server_path)
     
@@ -731,7 +782,7 @@ class ServerManagerApp(QMainWindow):
     def show_ip_entry_page(self):
         self.stacked_layout.setCurrentIndex(3)
     
-    def show_world_options_page(self):
+    def show_world_manager_page(self):
         self.stacked_layout.setCurrentIndex(4)
     
     def show_add_world_page(self):
@@ -876,9 +927,9 @@ class ServerManagerApp(QMainWindow):
                                 self.send_data("status", status)
                         elif request == "get-worlds-list":
                             self.send_data("worlds-list", self.query_worlds(), client)
-                        elif request in ["start-server", "stop-server", "restart-server"]:
+                        elif request in ["start-server", "stop-server"]:
                             self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
-                            if request in ["stop-server", "restart-server"]:
+                            if request == "stop-server":
                                 error = self.stop_server()
                                 if error:
                                     if error == "already offline":
@@ -888,7 +939,7 @@ class ServerManagerApp(QMainWindow):
                                         self.send_data("status", updated_status)
                                     else:
                                         self.tell(client, error)
-                            if request in ["start-server", "restart-server"]:
+                            if request == "start-server":
                                 error = None
                                 if request == "start-server":
                                     error = self.start_server(args[0])
@@ -961,33 +1012,44 @@ class ServerManagerApp(QMainWindow):
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
     def is_api_compatible(self, version):
-        split_version = [int(num) for num in version.split(".")]
-        # Check if world is running on 1.21.9 or newer
-        # Older versions incompatible with new server API
-        return (split_version[0] > 1 or split_version[1] > 21 or split_version[2] > 8)
+        if "." in version:
+            split_version = [int(num) for num in version.split(".")]
+            # Check if world is running on 1.21.9 or newer
+            # Older versions incompatible with new server API
+            return (split_version[0] > 1 or split_version[1] > 21 or split_version[2] > 8)
+        else:
+            first = version.split("w")
+            second = first[1][:-1]
+            return (int(first[0]) >= 25 and int(second) >= 35)
 
     def api_connection(self, success):
         if success:
             self.get_status_signal.emit()
-            self.delay(1)
             self.log_queue.put(f"Server world '{self.world}' has been started.")
             self.broadcast(f"Server world '{self.world}' has been started.")
             self.send_data("start", "refresh")
         else:
+            self.shutdown_bus()
             error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
             self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{self.world}'!</font>")
             self.broadcast(error)
     
     def api_closed(self):
+        self.shutdown_bus()
         self.get_status_signal.emit()
         self.log_queue.put("Server has been stopped.")
         self.broadcast("Server has been stopped.")
         self.send_data("stop", "refresh")
     
-    def start_server(self, world, restart=False):
+    def start_server(self, world):
         if world == "":
             self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
             return f"<font color='red'>There is no world selected.</font>"
+        
+        if not self.bus_shutdown_complete.is_set():
+            self.bus_shutdown_complete.wait(timeout=5.0)
+            if not self.bus_shutdown_complete.is_set():
+                self.shutdown_bus()
         
         status, _, _ = self.query_status()
         if status == "online":
@@ -1028,22 +1090,24 @@ class ServerManagerApp(QMainWindow):
             return error
         else:
             try:
-                if not restart:
-                    self.log_queue.put(f"Preparing for {'fabric ' if fabric else ''} version {version}.")
-                    if seed is not None:
-                        if seed != "":
-                            self.log_queue.put(f"Generating world with seed '{seed}'...")
-                        else:
-                            self.log_queue.put(f"Generating world with random seed...")
-                    self.delay(1)
-                    if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
-                        raise RuntimeError("Failed to prepare settings.")
+                self.log_queue.put(f"Preparing for {'fabric ' if fabric else ''} version {version}.")
+                if seed is not None:
+                    if seed != "":
+                        self.log_queue.put(f"Generating world with seed '{seed}'...")
                     else:
-                        if seed is not None:
-                            self.worlds[world].pop("seed")
-                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
-                
-                os.system(f'start /min cmd /C "title Server Ignition && cd /d {self.server_path} && run.bat"')
+                        self.log_queue.put(f"Generating world with random seed...")
+                self.delay(1)
+                if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
+                    raise RuntimeError("Failed to prepare settings.")
+                else:
+                    if seed is not None:
+                        self.worlds[world].pop("seed")
+                        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+            
+                # The bus is the asynchronous threads that listen to the api
+                if self.is_api_compatible(version):
+                    self.create_bus()
+                os.system(f'start "" /min cmd /C "title Server Ignition && cd /d "{self.server_path}" && run.bat"')
                 loop = True
                 window = None
                 ignition_window = None
@@ -1153,11 +1217,6 @@ class ServerManagerApp(QMainWindow):
             self.send_data("stop", "refresh")
             return None
 
-    def restart_server(self):
-        self.stop_server()
-        self.delay(5)
-        self.start_server(self.world, True)
-
     def query_status(self):
         status, brand, version, world = queries.status(self.host_ip, self.server_port)
         if status == "offline":
@@ -1185,9 +1244,9 @@ class ServerManagerApp(QMainWindow):
         # Used with the player refresh button
         status = self.query_status()
         if status[0] == "online":
-            players = self.query_players()
-            self.update_players_list(players)
-            self.send_data("players", players)
+            self.curr_players = self.query_players()
+            self.update_players_list()
+            self.send_data("players", self.curr_players)
         else:
             self.set_status(status)
             self.send_data("status", status)
@@ -1206,7 +1265,6 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
-            self.restart_button.setEnabled(True)
         else:
             self.status = "offline"
             self.server_status_label.hide()
@@ -1219,11 +1277,12 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
-            self.restart_button.setEnabled(False)
     
     def set_status(self, info):
         # Used to update through refresh buttons
         status, version, world = info
+        if version and version.startswith("vanilla "):
+            version = version.removeprefix("vanilla ")
         if status == "online":
             self.status = "online"
             self.server_status_label.hide()
@@ -1239,7 +1298,6 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
-            self.restart_button.setEnabled(True)
         elif status == "offline":
             self.status = "offline"
             self.server_status_label.hide()
@@ -1252,7 +1310,6 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
-            self.restart_button.setEnabled(False)
         elif status == "pinging":
             self.status = "pinging"
             self.server_status_label.show()
@@ -1265,20 +1322,19 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(False)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(False)
-            self.restart_button.setEnabled(False)
     
     def set_players(self, new_player_list):
         # Sets the players through the API heartbeat
         self.curr_players = [player["name"] for player in new_player_list]
         self.update_players_list()
 
-    def update_players_list(self, players):
+    def update_players_list(self):
         self.players_info_box.clear()
-        if len(players) == 0:
+        if len(self.curr_players) == 0:
             self.players_info_box.append("<font color='red'>No players online</font>")
             return
         
-        for player in players:
+        for player in self.curr_players:
             self.players_info_box.append(f"<font color='blue'>{player}</font>")
     
     def remove_player(self, player_obj):
@@ -1340,8 +1396,7 @@ class ServerManagerApp(QMainWindow):
         self.refresh_status_button.setEnabled(False)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(False)
-        self.restart_button.setEnabled(False)
-        self.world_options.setEnabled(False)
+        self.world_manager.setEnabled(False)
         self.open_folder_button.setEnabled(False)
         self.open_properties_button.setEnabled(False)
 
@@ -1361,8 +1416,7 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(True)
-            self.restart_button.setEnabled(True)
-            self.world_options.setEnabled(True)
+            self.world_manager.setEnabled(True)
             self.open_folder_button.setEnabled(True)
             self.open_properties_button.setEnabled(True)
             
@@ -1570,12 +1624,9 @@ class ServerManagerApp(QMainWindow):
     
     def stop_server_threads(self):
         self.stop_threads.set()
+        self.shutdown_bus()
         if self.receive_thread.is_alive():
-            self.receive_thread.join()
-        if self.mgmt_listener_thread.is_alive():
-            self.mgmt_listener_thread.join()
-        if self.mgmt_sender_thread.is_alive():
-            self.mgmt_sender_thread.join()
+            self.receive_thread.join(timeout=2.0)
         if self.server:
             self.server.close()
 

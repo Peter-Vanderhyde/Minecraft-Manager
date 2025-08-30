@@ -261,9 +261,6 @@ class ServerManagerApp(QMainWindow):
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
-        self.restart_button = QPushButton("Restart")
-        self.restart_button.clicked.connect(self.restart_server)
-        self.restart_button.setObjectName("restartButton")
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -278,7 +275,6 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.world_version_label, 2, 1)
 
         functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(self.restart_button, 4, 0, 1, 2)  # Spanning two columns
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -476,9 +472,6 @@ class ServerManagerApp(QMainWindow):
     def stop_server(self):
         self.send("MANAGER-REQUEST~~>stop-server")
     
-    def restart_server(self):
-        self.send("MANAGER-REQUEST~~>restart-server")
-    
     def set_status(self, info):
         status, version, world = info
         if status == "online":
@@ -493,7 +486,6 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(True)
-            self.restart_button.setEnabled(True)
         elif status == "offline":
             self.status = "offline"
             self.server_status_label.hide()
@@ -506,7 +498,6 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
-            self.restart_button.setEnabled(False)
         elif status == "pinging":
             self.status = "pinging"
             self.server_status_label.show()
@@ -519,7 +510,6 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(False)
             self.start_button.setEnabled(False)
             self.stop_button.setEnabled(False)
-            self.restart_button.setEnabled(False)
 
     def set_players(self, players):
         self.players_info_box.clear()

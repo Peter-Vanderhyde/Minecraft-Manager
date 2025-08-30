@@ -234,6 +234,8 @@ def get_api_settings(server_path):
                 if not port:
                     port = "25585"
                     lines[i] = "management-server-port=25585\n"
+            elif line.startswith("status-heartbeat-interval="):
+                lines[i] = "status-heartbeat-interval=10\n"
         
         with open(os.path.join(server_path, "server.properties"), "w") as f:
             f.writelines(lines)
