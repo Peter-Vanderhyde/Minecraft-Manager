@@ -214,6 +214,34 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
     except:
         return False
 
+def get_api_settings(server_path):
+    try:
+        with open(os.path.join(server_path, "server.properties"), "r") as f:
+            lines = f.readlines()
+        
+        host = ""
+        port = ""
+        for i, line in enumerate(lines):
+            if line.startswith("management-server-enabled="):
+                lines[i] = "management-server-enabled=true\n"
+            elif line.startswith("management-server-host="):
+                host = line.strip().split("=")[1]
+                if not host:
+                    host = "localhost"
+                    lines[i] = "management-server-host=localhost\n"
+            elif line.startswith("management-server-port="):
+                port = line.strip().split("=")[1]
+                if not port:
+                    port = "25585"
+                    lines[i] = "management-server-port=25585\n"
+        
+        with open(os.path.join(server_path, "server.properties"), "w") as f:
+            f.writelines(lines)
+        
+        return (host, port)
+    except:
+        return ("localhost", "25585")
+
 def pick_folder(parent, starting_path=""):
     # Show the file dialog for selecting a folder
     selected_folder = QFileDialog.getExistingDirectory(

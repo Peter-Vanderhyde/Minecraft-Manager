@@ -9,8 +9,8 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
-TESTING = False
-VERSION = "v2.3.3"
+TESTING = True
+VERSION = "v2.4.0"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -63,7 +63,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        self.host_ip = "25.6.72.126"
+        self.host_ip = ""
         self.port = 5555
         self.client = None
         self.close_threads = threading.Event()

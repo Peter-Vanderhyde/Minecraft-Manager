@@ -16,17 +16,18 @@ def updatePlayers(players):
 
 def handle_response(response):
     response = json.loads(response)
-    # print(response)
+    #print(response)
     if "result" in response:
         result = response["result"]
         if type(result) not in [list, dict]:
             log(str(result))
         elif "methods" in result:
-            # schemas = result["components"]["schemas"]
-            # print(json.dumps(schemas, indent=2))
+            schemas = result["components"]["schemas"]
+            print(json.dumps(schemas, indent=2))
             # print(json.dumps(schemas.get("player"), indent=2))
             # print(json.dumps(result["methods"], indent=2))
             for method in result["methods"]:
+                #if "server/" in method["name"]:
                 for key, value in method.items():
                     print(key + ": " + str(value))
                 print()
@@ -40,6 +41,7 @@ def handle_response(response):
             topic, action = notification.split("/")
             if topic == "server":
                 if action == "status":
+                    print(response["params"])
                     params = response["params"][0]
                     if "players" in params:
                         updatePlayers(params["players"])
