@@ -680,8 +680,13 @@ class ServerManagerApp(QMainWindow):
         self.bus.player_join.connect(self.add_player)
         self.bus.player_leave.connect(self.remove_player)
 
-        self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client) # Listens to server API
-        self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client) # Sends commands to server API
+        # This version will start the threads attempting to connect to the api.
+        # A signal is used to broadcast whether the threads successfully connected (i.e. the server is up)
+        api_settings = file_funcs.get_api_settings(self.server_path)
+        self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client, args=api_settings, daemon=True)
+        self.mgmt_listener_thread.start()
+        self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client, args=api_settings, daemon=True)
+        self.mgmt_sender_thread.start()
 
     def disconnect_bus(self):
         try:
@@ -1003,6 +1008,8 @@ class ServerManagerApp(QMainWindow):
     def first_load(self):
         self.set_worlds_list()
         self.get_status()
+        if self.status == "online" and self.is_api_compatible(self.world_version):
+            self.create_bus()
     
     def message_entered(self):
         message = self.message_entry.text()
@@ -1104,9 +1111,6 @@ class ServerManagerApp(QMainWindow):
                         self.worlds[world].pop("seed")
                         file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
             
-                # The bus is the asynchronous threads that listen to the api
-                if self.is_api_compatible(version):
-                    self.create_bus()
                 os.system(f'start "" /min cmd /C "title Server Ignition && cd /d "{self.server_path}" && run.bat"')
                 loop = True
                 window = None
@@ -1138,13 +1142,8 @@ class ServerManagerApp(QMainWindow):
                 self.world_version = version
                 
                 if self.is_api_compatible(version):
-                    # This version will start the threads attempting to connect to the api.
-                    # A signal is used to broadcast whether the threads successfully connected (i.e. the server is up)
-                    api_settings = file_funcs.get_api_settings(self.server_path)
-                    self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client, args=api_settings, daemon=True)
-                    self.mgmt_listener_thread.start()
-                    self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client, args=api_settings, daemon=True)
-                    self.mgmt_sender_thread.start()
+                    # The bus is the asynchronous threads that listen to the api
+                    self.create_bus()
                 else:
                     if seed:
                         # Wait longer
@@ -1285,6 +1284,8 @@ class ServerManagerApp(QMainWindow):
             version = version.removeprefix("vanilla ")
         if status == "online":
             self.status = "online"
+            self.world = world
+            self.world_version = version
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
