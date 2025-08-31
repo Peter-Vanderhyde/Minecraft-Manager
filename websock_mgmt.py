@@ -79,7 +79,7 @@ class MgmtBus(QObject):
             # shutdown() was called before this loop
             self._shutdown = asyncio.Event()
 
-        while time_waited < 81 and not self._shutdown.is_set():
+        while time_waited < 51 and not self._shutdown.is_set():
             try:
                 async with websockets.connect(url) as ws:
                     connected = True
@@ -107,7 +107,7 @@ class MgmtBus(QObject):
                 if time_waited == 9:
                     self.log.emit("Attempting to connect to server websocket...")
                 elif time_waited == 21:
-                    self.log.emit("Attempting connection for 60 more seconds...")
+                    self.log.emit("Attempting connection for 30 more seconds...")
         
         if not self._shutdown.is_set():
             self.return_error("Timed out waiting for server to respond.")
@@ -118,7 +118,7 @@ class MgmtBus(QObject):
         loop = asyncio.get_running_loop()
         time_waited = 0
 
-        while time_waited < 81 and not self._shutdown.is_set():
+        while time_waited < 51 and not self._shutdown.is_set():
             try:
                 async with websockets.connect(url) as ws:
                     while not self._shutdown.is_set():

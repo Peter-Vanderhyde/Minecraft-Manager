@@ -138,6 +138,8 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
         with open(os.path.join(server_path, "server.properties"), 'r') as properties:
             lines = properties.readlines()
         
+        found_world = False
+        found_seed = False
         for i, line in enumerate(lines):
             if line.startswith("level-name="):
                 lines[i] = f"level-name=worlds/{world}\n"
@@ -146,6 +148,11 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
                     lines[i] = f"level-seed={seed}\n"
                 else:
                     lines[i] = f"level-seed=\n"
+        
+        if not found_world:
+            lines.append(f"level-name=worlds/{world}\n")
+        if not found_seed:
+            lines.append(f"level-seed={seed if seed is not None else ""}\n")
         
         with open(os.path.join(server_path, "server.properties"), 'w') as properties:
             properties.writelines(lines)
@@ -221,21 +228,40 @@ def get_api_settings(server_path):
         
         host = ""
         port = ""
+        found_enabled = False
+        found_host = False
+        found_port = False
+        found_interval = False
         for i, line in enumerate(lines):
             if line.startswith("management-server-enabled="):
                 lines[i] = "management-server-enabled=true\n"
+                found_enabled = True
             elif line.startswith("management-server-host="):
+                found_host = True
                 host = line.strip().split("=")[1]
                 if not host:
                     host = "localhost"
                     lines[i] = "management-server-host=localhost\n"
             elif line.startswith("management-server-port="):
+                found_port = True
                 port = line.strip().split("=")[1]
                 if not port:
                     port = "25585"
                     lines[i] = "management-server-port=25585\n"
             elif line.startswith("status-heartbeat-interval="):
+                found_interval = True
                 lines[i] = "status-heartbeat-interval=10\n"
+        
+        if not found_enabled:
+            lines.append("management-server-enabled=true\n")
+        if not found_host:
+            lines.append("management-server-host=localhost\n")
+            host = "localhost"
+        if not found_port:
+            lines.append("management-server-port=25585\n")
+            port = "25585"
+        if not found_interval:
+            lines.append("status-heartbeat-interval=10\n")
         
         with open(os.path.join(server_path, "server.properties"), "w") as f:
             f.writelines(lines)

@@ -1006,7 +1006,10 @@ class ServerManagerApp(QMainWindow):
             split_version = [int(num) for num in version.split(".")]
             # Check if world is running on 1.21.9 or newer
             # Older versions incompatible with new server API
-            return (split_version[0] > 1 or split_version[1] > 21 or split_version[2] > 8)
+            if len(split_version) == 2:
+                return (split_version[0] > 1 or split_version[1] > 21)
+            else:
+                return (split_version[0] > 1 or split_version[1] > 21 or split_version[2] > 8)
         else:
             first = version.split("w")
             second = first[1][:-1]
@@ -1110,6 +1113,8 @@ class ServerManagerApp(QMainWindow):
                     else:
                         self.log_queue.put(f"Generating world with random seed...")
                 self.delay(1)
+                if self.is_api_compatible(version):
+                    file_funcs.get_api_settings(self.server_path)
                 if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
                     raise RuntimeError("Failed to prepare settings.")
                 else:
@@ -1169,9 +1174,9 @@ class ServerManagerApp(QMainWindow):
                     self.log_queue.put(f"Server world '{world}' has been started.")
                     self.broadcast(f"Server world '{world}' has been started.")
                     self.send_data("start", "refresh")
-            except:
+            except Exception as e:
                 error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
-                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'!</font>")
+                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
                 return error
     
     def stop_server(self):
