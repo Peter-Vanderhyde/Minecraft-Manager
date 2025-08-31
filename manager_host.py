@@ -13,8 +13,8 @@ import glob
 import shutil
 from datetime import datetime
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
-from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
+from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl
 
 import queries
 import file_funcs
@@ -137,7 +137,7 @@ class ServerManagerApp(QMainWindow):
                 "Download it from:<br>"
                 "Adoptium Temurin JRE (www.adoptium.net/temurin/releases/)<br><br>"
                 "The latest versions of Minecraft will require the latest version of Java.",
-                eula_ok_button=False
+                eula=False
             )
 
             return
@@ -152,7 +152,7 @@ class ServerManagerApp(QMainWindow):
                                     f"Minecraft version {latest_mc_version} requires Java version {required_java_version}.<br>"
                                     f"You are currently running version {self.java_version}.<br>"
                                     "Download an updated version from www.adoptium.net/temurin/releases/",
-                                    eula_ok_button=False)
+                                    eula=False)
                 
                 return
 
@@ -164,9 +164,12 @@ class ServerManagerApp(QMainWindow):
         if self.server_path == "" or not os.path.isdir(self.server_path):
             self.message_timer.stop()
             self.show_server_entry_page()
-            # self.show_error_page("Server Path is Invalid", "Set the path in 'manager_settings.json'")
         else:
-            self.start_manager_server()
+            if not self.check_eula():
+                self.show_error_page("By accepting, you are indicating your agreement<br> to Minecraft's EULA.",
+                                    "(https://aka.ms/MinecraftEULA)", eula=True)
+            else:
+                self.start_manager_server()
 
     def init_ui(self):
         # Central widget to hold everything
@@ -306,21 +309,43 @@ class ServerManagerApp(QMainWindow):
         center_column_layout = QVBoxLayout()
 
         top_box = QVBoxLayout()
+
+        top_box.addStretch(1)
         self.error_label = QLabel("")
         self.error_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
         self.error_label.setObjectName("error")
         top_box.addWidget(self.error_label)
-        bot_box = QVBoxLayout()
         self.info_label = QLabel("")
         self.info_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.info_label.setObjectName("details")
-        bot_box.addWidget(self.info_label)
-        self.folder_button = QPushButton("Open Server Folder")
-        self.folder_button.clicked.connect(self.open_server_folder)
-        bot_box.addWidget(self.folder_button)
-        self.eula_ok_button = QPushButton("OK")
-        self.eula_ok_button.clicked.connect(self.accepted_eula)
-        bot_box.addWidget(self.eula_ok_button)
+        top_box.addWidget(self.info_label)
+
+        bot_box = QVBoxLayout()
+        bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        link_row = QHBoxLayout()
+        buttons_row = QHBoxLayout()
+
+        link_row.addStretch(1)
+        self.eula_link_button = QPushButton("Open EULA Link")
+        self.eula_link_button.setObjectName("smallBlueButton")
+        self.eula_link_button.clicked.connect(self.open_eula_link)
+        link_row.addWidget(self.eula_link_button)
+        link_row.addStretch(1)
+        bot_box.addLayout(link_row)
+        bot_box.addStretch(1)
+
+        buttons_row.addStretch(1)
+        self.eula_accept_button = QPushButton("Accept")
+        self.eula_accept_button.clicked.connect(self.accepted_eula)
+        buttons_row.addWidget(self.eula_accept_button)
+        buttons_row.addStretch(1)
+        self.eula_decline_button = QPushButton("Decline")
+        self.eula_decline_button.setObjectName("redButton")
+        self.eula_decline_button.clicked.connect(self.declined_eula)
+        buttons_row.addWidget(self.eula_decline_button)
+        buttons_row.addStretch(1)
+        bot_box.addLayout(buttons_row)
+        bot_box.addStretch(1)
 
         center_column_layout.addLayout(top_box)
         center_column_layout.addLayout(bot_box)
@@ -763,15 +788,17 @@ class ServerManagerApp(QMainWindow):
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
     
-    def show_error_page(self, error, info, eula_ok_button=False):
+    def show_error_page(self, error, info, eula=False):
         self.error_label.setText(error)
         self.info_label.setText(info)
-        if eula_ok_button:
-            self.eula_ok_button.show()
-            self.folder_button.show()
+        if eula:
+            self.eula_link_button.show()
+            self.eula_accept_button.show()
+            self.eula_decline_button.show()
         else:
-            self.eula_ok_button.hide()
-            self.folder_button.hide()
+            self.eula_link_button.hide()
+            self.eula_accept_button.hide()
+            self.eula_decline_button.hide()
         self.stacked_layout.setCurrentIndex(1)
     
     def show_server_entry_page(self):
@@ -1088,7 +1115,7 @@ class ServerManagerApp(QMainWindow):
                                     f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
                                     f"You are currently running version {self.java_version}.<br>"
                                     "Download an updated version from www.adoptium.net/temurin/releases/</font>",
-                                    eula_ok_button=False)
+                                    eula=False)
                 
                 return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
 
@@ -1461,14 +1488,30 @@ class ServerManagerApp(QMainWindow):
             
             self.accepted_eula()
     
-    def accepted_eula(self):
-        with open(os.path.join(self.server_path, "eula.txt")) as f:
+    def open_eula_link(self):
+        QDesktopServices.openUrl(QUrl("https://aka.ms/MinecraftEULA"))
+
+    def check_eula(self):
+        with open(os.path.join(self.server_path, "eula.txt"), 'r') as f:
             content = f.read()
         if "eula=false" in content:
-            self.show_error_page("You must agree to the EULA in order to run the server.",
-                                    "Please open 'eula.txt' in the server folder.", True)
+            return False
         elif "eula=true" in content:
-            self.start_manager_server()
+            return True
+    
+    def accepted_eula(self):
+        with open(os.path.join(self.server_path, "eula.txt"), 'r') as f:
+            content = f.readlines()
+        for i, line in enumerate(content):
+            if line.strip() == "eula=false":
+                content[i] = "eula=true"
+        with open(os.path.join(self.server_path, "eula.txt"), 'w') as f:
+            f.writelines(content)
+        
+        self.start_manager_server()
+
+    def declined_eula(self):
+        self.close()
     
     def set_ip(self):
         ip = self.hosting_ip_entry.text()

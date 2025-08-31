@@ -38,19 +38,6 @@ QPushButton:disabled {
     background-color: #660000; /* Even darker red when pressed */
 }
 
-#restartButton {
-    background-color: #3b5998; /* Blue variant */
-    color: #4285f4;
-}
-
-#restartButton:hover {
-    background-color: #2d4278; /* Darker blue on hover */
-}
-
-#restartButton:pressed {
-    background-color: #1d2951; /* Even darker blue when pressed */
-}
-
 #stopButton:disabled,
 #restartButton:disabled {
     background-color: #a0a0a0; /* Slightly lighter gray for disabled */
