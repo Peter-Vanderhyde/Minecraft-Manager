@@ -82,6 +82,8 @@ class ServerManagerApp(QMainWindow):
     get_status_signal = pyqtSignal()
     set_status_signal = pyqtSignal(list)
     update_players_list_signal = pyqtSignal(list)
+    start_server_signal = pyqtSignal(list) # [client, world_name]
+    stop_server_signal = pyqtSignal(object)
 
     def __init__(self):
         super().__init__()
@@ -116,6 +118,8 @@ class ServerManagerApp(QMainWindow):
         self.get_status_signal.connect(self.get_status)
         self.set_status_signal.connect(self.set_status)
         self.update_players_list_signal.connect(self.update_players_list)
+        self.start_server_signal.connect(self.client_start_server)
+        self.stop_server_signal.connect(self.client_stop_server)
 
         # Minecraft Server Management Protocol Listener
         self.bus = None
@@ -925,7 +929,6 @@ class ServerManagerApp(QMainWindow):
                             if status[0] == "online":
                                 players = self.query_players()
                                 self.update_players_list_signal.emit(players)
-                                self.send_data("players", players)
                             else:
                                 self.set_status_signal.emit(status)
                                 self.tell(client, "The server has closed.")
@@ -935,29 +938,9 @@ class ServerManagerApp(QMainWindow):
                         elif request in ["start-server", "stop-server"]:
                             self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
                             if request == "stop-server":
-                                error = self.stop_server()
-                                if error:
-                                    if error == "already offline":
-                                        self.tell(client, "Server already stopped.")
-                                        updated_status = self.query_status()
-                                        self.set_status_signal.emit(updated_status)
-                                        self.send_data("status", updated_status)
-                                    else:
-                                        self.tell(client, error)
-                            if request == "start-server":
-                                error = None
-                                if request == "start-server":
-                                    error = self.start_server(args[0])
-                                else:
-                                    error = self.start_server(self.world)
-                                if error:
-                                    if error == "already online":
-                                        self.tell(client, "Server already running.")
-                                        updated_status = self.query_status()
-                                        self.set_status_signal.emit(updated_status)
-                                        self.send_data("status", updated_status)
-                                    else:
-                                        self.tell(client, error)
+                                self.stop_server_signal.emit(client)
+                            elif request == "start-server":
+                                self.start_server_signal.emit([client, args[0]])
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -1047,6 +1030,29 @@ class ServerManagerApp(QMainWindow):
         self.log_queue.put("Server has been stopped.")
         self.broadcast("Server has been stopped.")
         self.send_data("stop", "refresh")
+    
+    def client_start_server(self, args):
+        client, world = args
+        error = self.start_server(world)
+        if error:
+            if error == "already online":
+                self.tell(client, "Server already running.")
+                updated_status = self.query_status()
+                self.set_status_signal.emit(updated_status)
+                self.send_data("status", updated_status)
+            else:
+                self.tell(client, error)
+    
+    def client_stop_server(self, client):
+        error = self.stop_server()
+        if error:
+            if error == "already offline":
+                self.tell(client, "Server already stopped.")
+                updated_status = self.query_status()
+                self.set_status_signal.emit(updated_status)
+                self.send_data("status", updated_status)
+            else:
+                self.tell(client, error)
     
     def start_server(self, world):
         if world == "":
@@ -1245,7 +1251,6 @@ class ServerManagerApp(QMainWindow):
         if status[0] == "online":
             self.curr_players = self.query_players()
             self.update_players_list()
-            self.send_data("players", self.curr_players)
         else:
             self.set_status(status)
             self.send_data("status", status)
@@ -1330,6 +1335,7 @@ class ServerManagerApp(QMainWindow):
         self.update_players_list()
 
     def update_players_list(self):
+        self.send_data("players", self.curr_players)
         self.players_info_box.clear()
         if len(self.curr_players) == 0:
             self.players_info_box.append("<font color='red'>No players online</font>")

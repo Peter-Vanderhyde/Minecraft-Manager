@@ -118,7 +118,7 @@ class MgmtBus(QObject):
         loop = asyncio.get_running_loop()
         time_waited = 0
 
-        while time_waited < 10 and not self._shutdown.is_set():
+        while time_waited < 81 and not self._shutdown.is_set():
             try:
                 async with websockets.connect(url) as ws:
                     while not self._shutdown.is_set():
@@ -163,10 +163,10 @@ class MgmtBus(QObject):
                         self.server_closing.emit()
                 elif topic == "players":
                     if action == "joined":
-                        self.log.emit(f"{params[0]["name"]} joined the server.")
+                        self.log.emit(f"{params[0]['name']} joined the server.")
                         self.player_join.emit(params[0])
                     elif action == "left":
-                        self.log.emit(f"{params[0]["name"]} disconnected from the server.")
+                        self.log.emit(f"{params[0]['name']} disconnected from the server.")
                         self.player_leave.emit(params[0])
         else:
             self.return_error(f"Unknown Data Received: {recvd}")
