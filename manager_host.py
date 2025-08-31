@@ -269,8 +269,8 @@ class ServerManagerApp(QMainWindow):
         self.world_manager.clicked.connect(self.show_world_manager_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
-        self.open_properties_button = QPushButton("Server Properties")
-        self.open_properties_button.clicked.connect(self.open_properties)
+        self.world_properties_button = QPushButton("World Properties")
+        self.world_properties_button.clicked.connect(self.open_properties)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -288,7 +288,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(separator, 4, 0, 1, 2)
         functions_layout.addWidget(self.world_manager, 5, 0, 1, 2)
         functions_layout.addWidget(self.open_folder_button, 6, 0, 1, 2)
-        functions_layout.addWidget(self.open_properties_button, 7, 0, 1, 2)
+        functions_layout.addWidget(self.world_properties_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -1096,7 +1096,7 @@ class ServerManagerApp(QMainWindow):
         self.log_queue.put("Starting server...")
         QApplication.processEvents()
         data = self.worlds.get(world)
-        path = os.path.join(os.path.join(self.server_path, "worlds"), world)
+        path = os.path.join(self.server_path, "worlds", world)
         if not data:
             self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
             return f"<font color='red'>Manager doesn't recognize that world.</font>"
@@ -1113,6 +1113,19 @@ class ServerManagerApp(QMainWindow):
                     else:
                         self.log_queue.put(f"Generating world with random seed...")
                 self.delay(1)
+
+                # Erase properties for fresh start each time
+                with open(os.path.join(self.server_path, "server.properties"), 'w') as props:
+                    props.write("")
+                
+                # Copy world properties to the server properties
+                if os.path.isfile(os.path.join(path, "saved_properties.properties")):
+                    lines = []
+                    with open(os.path.join(path, "saved_properties.properties"), 'r') as world_props:
+                        lines = world_props.readlines()
+                    with open(os.path.join(self.server_path, "server.properties"), 'w') as props:
+                        props.writelines(lines)
+
                 if self.is_api_compatible(version):
                     file_funcs.get_api_settings(self.server_path)
                 if not file_funcs.prepare_server_settings(world, version, fabric, self.server_path, self.log_queue, seed):
@@ -1151,6 +1164,15 @@ class ServerManagerApp(QMainWindow):
                 
                 self.world = world
                 self.world_version = version
+
+                if not os.path.isfile(os.path.join(path, "saved_properties.properties")):
+                    lines = []
+                    with open(os.path.join(self.server_path, "server.properties"), 'r') as props:
+                        lines = props.readlines()
+                    with open(os.path.join(path, "saved_properties.properties"), 'w') as world_props:
+                        world_props.writelines(lines)
+                    if world == self.dropdown.currentText():
+                        self.world_properties_button.setEnabled(True)
                 
                 if self.is_api_compatible(version):
                     # The bus is the asynchronous threads that listen to the api
@@ -1365,8 +1387,13 @@ class ServerManagerApp(QMainWindow):
     def set_selected_world_version(self, world):
         if world:
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
+            if os.path.isfile(os.path.join(self.server_path, "worlds", world, "saved_properties.properties")):
+                self.world_properties_button.setEnabled(True)
+            else:
+                self.world_properties_button.setEnabled(False)
         else:
             self.world_version_label.setText("")
+            self.world_properties_button.setEnabled(False)
     
     def set_server_path(self):
         path = self.server_folder_path_entry.text()
@@ -1410,7 +1437,7 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.setEnabled(False)
         self.world_manager.setEnabled(False)
         self.open_folder_button.setEnabled(False)
-        self.open_properties_button.setEnabled(False)
+        self.world_properties_button.setEnabled(False)
 
         self.log_queue.put("Downloading latest server.jar file...")
         self.show_main_page(ignore_load=True)
@@ -1430,7 +1457,7 @@ class ServerManagerApp(QMainWindow):
             self.stop_button.setEnabled(True)
             self.world_manager.setEnabled(True)
             self.open_folder_button.setEnabled(True)
-            self.open_properties_button.setEnabled(True)
+            self.world_properties_button.setEnabled(True)
             
             self.accepted_eula()
     
@@ -1625,7 +1652,17 @@ class ServerManagerApp(QMainWindow):
         self.show_main_page()
     
     def open_properties(self):
-        file_funcs.open_file(os.path.join(self.server_path, "server.properties"))
+        world = self.dropdown.currentText()
+        if world == "" or world is None:
+            self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
+            return
+        
+        if not os.path.isfile(os.path.join(self.server_path, "worlds", world, "saved_properties.properties")):
+            self.log_queue.put(f"<font color='red'>The world has not been generated yet.")
+            self.log_queue.put(f"<font color='red'>Start world once to generate the world properties.</font>")
+            return
+        
+        file_funcs.open_file(os.path.join(self.server_path, "worlds", world, "saved_properties.properties"))
 
     @pyqtSlot()
     def onWindowStateChanged(self):

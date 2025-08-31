@@ -60,45 +60,6 @@ def load_worlds(server_path, worlds, log_queue):
             return {}
     
     worlds_to_ignore = []
-
-    properties_path = os.path.join(server_path, "server.properties")
-    # Look for server properties file
-    if os.path.isfile(properties_path):
-        try:
-            with open(properties_path, 'r') as f:
-                lines = f.readlines()
-            
-            # Make sure the properties are correctly set up for queries
-            edited = False
-            found_query = False
-            found_port = False
-            for i, line in enumerate(lines):
-                compare = None
-                if line.startswith("enable-query="):
-                    found_query = True
-                    compare = "enable-query=true\n"
-                elif line.startswith("query.port="):
-                    found_port = True
-                    compare = "query.port=25565\n"
-                
-                if compare and line != compare:
-                    lines[i] = compare
-                    edited = True
-            
-            if not found_query:
-                lines.append("\nenable-query=true")
-                edited = True
-            if not found_port:
-                lines.append("\nquery.port=25565")
-                edited = True
-            
-            if edited:
-                with open(properties_path, 'w') as f:
-                    f.writelines(lines)
-        except IOError:
-            log_queue.put(f"<font color='orange'>WARNING: Was unable to check if server.properties has query enabled.</font>")
-    else:
-        log_queue.put(f"<font color='orange'>WARNING: Unable to find 'server.properties' in folder at '{server_path}'.</font>")
     
     for world, data in worlds.items():
         directory = os.path.join(server_path, "worlds")
@@ -140,6 +101,8 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
         
         found_world = False
         found_seed = False
+        found_query = False
+        found_port = False
         for i, line in enumerate(lines):
             if line.startswith("level-name="):
                 lines[i] = f"level-name=worlds/{world}\n"
@@ -148,11 +111,21 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
                     lines[i] = f"level-seed={seed}\n"
                 else:
                     lines[i] = f"level-seed=\n"
+            elif line.startswith("enable-query="):
+                lines[i] = "enable-query=true\n"
+                found_query = True
+            elif line.startswith("query.port="):
+                lines[i] = "query.port=25565\n"
+                found_port = True
         
         if not found_world:
             lines.append(f"level-name=worlds/{world}\n")
         if not found_seed:
             lines.append(f"level-seed={seed if seed is not None else ""}\n")
+        if not found_query:
+            lines.append("enable-query=true\n")
+        if not found_port:
+            lines.append("query.port=25565\n")
         
         with open(os.path.join(server_path, "server.properties"), 'w') as properties:
             properties.writelines(lines)
@@ -293,20 +266,32 @@ def open_file(path):
         return False
 
 def save_version(folder_path, version):
-    try:
-        with open(os.path.join(folder_path, "version.txt"), 'w') as f:
-            f.write(version)
-    except:
-        pass
+    if os.path.isfile(os.path.join(folder_path, "saved_properties.properties")):
+        with open(os.path.join(folder_path, "saved_properties.properties"), 'r') as props:
+            lines = props.readlines()
+        
+        found_version = False
+        for i, line in enumerate(lines):
+            if line.startswith("version="):
+                lines[i] = f"version={version}\n"
+                found_version = True
+        
+        if not found_version:
+            lines.append(f"version={version}\n")
+        
+        with open(os.path.join(folder_path, "saved_properties.properties"), 'w') as props:
+            props.writelines(lines)
 
 def load_version(folder_path):
-    try:
-        with open(os.path.join(folder_path, "version.txt"), 'r') as f:
-            line = f.readline()
+    if os.path.isfile(os.path.join(folder_path, "saved_properties.properties")):
+        with open(os.path.join(folder_path, "saved_properties.properties"), 'r') as props:
+            lines = props.readlines()
         
-        return line.strip()
-    except FileNotFoundError:
-        return None
+        for line in lines:
+            if line.startswith("version="):
+                return line.strip().split("=")[1]
+    
+    return None
 
 def save_world_versions(server_path, worlds):
     for world, data in worlds.items():
