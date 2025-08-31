@@ -56,7 +56,7 @@ def check_java_installed():
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.background_image = QPixmap(os.path.join(IMAGE_PATH, "block_background.png"))
+        self.background_image = QPixmap(os.path.normpath(os.path.join(IMAGE_PATH, "block_background.png")))
 
     def paintEvent(self, event: QPaintEvent):
         painter = QPainter(self)
@@ -274,6 +274,8 @@ class ServerManagerApp(QMainWindow):
         self.open_folder_button.clicked.connect(self.open_server_folder)
         self.world_properties_button = QPushButton("World Properties")
         self.world_properties_button.clicked.connect(self.open_properties)
+        self.world_mods_button = QPushButton("World Mods")
+        self.world_mods_button.clicked.connect(self.open_mods_folder)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -292,6 +294,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.world_manager, 5, 0, 1, 2)
         functions_layout.addWidget(self.open_folder_button, 6, 0, 1, 2)
         functions_layout.addWidget(self.world_properties_button, 7, 0, 1, 2)
+        functions_layout.addWidget(self.world_mods_button, 8, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -688,14 +691,17 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon(os.path.join(IMAGE_PATH, "app_icon.png"))
+        icon = QIcon(self.path(IMAGE_PATH, "app_icon.png"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        with open(os.path.join(STYLE_PATH, "manager_host_style.css"), 'r') as stylesheet:
+        with open(self.path(STYLE_PATH, "manager_host_style.css"), 'r') as stylesheet:
             style_str = stylesheet.read()
         
         self.setStyleSheet(style_str)
+    
+    def path(self, *args):
+        return os.path.normpath(os.path.join(*args))
     
     def create_bus(self):
         self.bus = websock_mgmt.MgmtBus()
@@ -1122,8 +1128,11 @@ class ServerManagerApp(QMainWindow):
         self.broadcast("Starting server...")
         self.log_queue.put("Starting server...")
         QApplication.processEvents()
+        old_jars = glob.glob(self.path(self.server_path, "*.jar"))
+        for path in old_jars:
+            os.remove(path)
         data = self.worlds.get(world)
-        path = os.path.join(self.server_path, "worlds", world)
+        path = self.path(self.server_path, "worlds", world)
         if not data:
             self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
             return f"<font color='red'>Manager doesn't recognize that world.</font>"
@@ -1142,16 +1151,30 @@ class ServerManagerApp(QMainWindow):
                 self.delay(1)
 
                 # Erase properties for fresh start each time
-                with open(os.path.join(self.server_path, "server.properties"), 'w') as props:
+                with open(self.path(self.server_path, "server.properties"), 'w') as props:
                     props.write("")
                 
                 # Copy world properties to the server properties
-                if os.path.isfile(os.path.join(path, "saved_properties.properties")):
+                if os.path.isfile(self.path(path, "saved_properties.properties")):
                     lines = []
-                    with open(os.path.join(path, "saved_properties.properties"), 'r') as world_props:
+                    with open(self.path(path, "saved_properties.properties"), 'r') as world_props:
                         lines = world_props.readlines()
-                    with open(os.path.join(self.server_path, "server.properties"), 'w') as props:
+                    with open(self.path(self.server_path, "server.properties"), 'w') as props:
                         props.writelines(lines)
+                
+                world_mods_folder = self.path(path, "mods")
+                server_mods_folder = self.path(self.server_path, "mods")
+                if fabric and os.path.exists(world_mods_folder):
+                    if os.path.exists(server_mods_folder):
+                        shutil.rmtree(server_mods_folder)
+                    shutil.copytree(world_mods_folder, server_mods_folder)
+                elif fabric:
+                    if os.path.exists(server_mods_folder):
+                        shutil.rmtree(server_mods_folder)
+                        os.mkdir(server_mods_folder)
+                else:
+                    if os.path.exists(server_mods_folder):
+                        shutil.rmtree(server_mods_folder)
 
                 if self.is_api_compatible(version):
                     file_funcs.get_api_settings(self.server_path)
@@ -1192,14 +1215,22 @@ class ServerManagerApp(QMainWindow):
                 self.world = world
                 self.world_version = version
 
-                if not os.path.isfile(os.path.join(path, "saved_properties.properties")):
+                if not os.path.isfile(self.path(path, "saved_properties.properties")):
                     lines = []
-                    with open(os.path.join(self.server_path, "server.properties"), 'r') as props:
+                    with open(self.path(self.server_path, "server.properties"), 'r') as props:
                         lines = props.readlines()
-                    with open(os.path.join(path, "saved_properties.properties"), 'w') as world_props:
+                    with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
                         world_props.writelines(lines)
                     if world == self.dropdown.currentText():
                         self.world_properties_button.setEnabled(True)
+                        if fabric:
+                            self.world_mods_button.setEnabled(True)
+                
+                if fabric and not os.path.exists(world_mods_folder):
+                    try:
+                        os.mkdir(world_mods_folder)
+                    except:
+                        pass
                 
                 if self.is_api_compatible(version):
                     # The bus is the asynchronous threads that listen to the api
@@ -1414,13 +1445,22 @@ class ServerManagerApp(QMainWindow):
     def set_selected_world_version(self, world):
         if world:
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
-            if os.path.isfile(os.path.join(self.server_path, "worlds", world, "saved_properties.properties")):
+            if os.path.isfile(self.path(self.server_path, "worlds", world, "saved_properties.properties")):
                 self.world_properties_button.setEnabled(True)
             else:
                 self.world_properties_button.setEnabled(False)
+            
+            if self.worlds[world].get("fabric"):
+                if os.path.exists(self.path(self.server_path, "worlds", world)):
+                    self.world_mods_button.setEnabled(True)
+                else:
+                    self.world_mods_button.setEnabled(False)
+            else:
+                self.world_mods_button.setEnabled(False)
         else:
             self.world_version_label.setText("")
             self.world_properties_button.setEnabled(False)
+            self.world_mods_button.setEnabled(False)
     
     def set_server_path(self):
         path = self.server_folder_path_entry.text()
@@ -1443,7 +1483,7 @@ class ServerManagerApp(QMainWindow):
             if path == "" or os.path.exists(path):
                 return
             
-            parent = os.path.join(path, os.path.pardir)
+            parent = self.path(path, os.path.pardir)
             create_path(parent)
             os.mkdir(path)
 
@@ -1492,7 +1532,7 @@ class ServerManagerApp(QMainWindow):
         QDesktopServices.openUrl(QUrl("https://aka.ms/MinecraftEULA"))
 
     def check_eula(self):
-        with open(os.path.join(self.server_path, "eula.txt"), 'r') as f:
+        with open(self.path(self.server_path, "eula.txt"), 'r') as f:
             content = f.read()
         if "eula=false" in content:
             return False
@@ -1500,12 +1540,12 @@ class ServerManagerApp(QMainWindow):
             return True
     
     def accepted_eula(self):
-        with open(os.path.join(self.server_path, "eula.txt"), 'r') as f:
+        with open(self.path(self.server_path, "eula.txt"), 'r') as f:
             content = f.readlines()
         for i, line in enumerate(content):
             if line.strip() == "eula=false":
                 content[i] = "eula=true"
-        with open(os.path.join(self.server_path, "eula.txt"), 'w') as f:
+        with open(self.path(self.server_path, "eula.txt"), 'w') as f:
             f.writelines(content)
         
         self.start_manager_server()
@@ -1535,12 +1575,12 @@ class ServerManagerApp(QMainWindow):
             self.start_manager_server()
     
     def backup_world(self):
-        world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
         if world_path is None:
             return
         
         world_path = os.path.normpath(world_path)
-        world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
+        world_folders = glob.glob(os.path.normpath(self.path(self.server_path, "worlds", "*/")))
         if world_path in world_folders:
             try:
                 if self.world == os.path.basename(world_path) and self.query_status()[0] == "online":
@@ -1549,7 +1589,7 @@ class ServerManagerApp(QMainWindow):
                     return
                 
                 current_date = datetime.now().strftime("%m-%d-%y")
-                new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
                 if os.path.exists(new_path):
                     index = 1
                     while os.path.exists(f"{new_path}({str(index)})"):
@@ -1568,7 +1608,7 @@ class ServerManagerApp(QMainWindow):
             except:
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
                 try:
-                    new_path = f"{os.path.join(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                    new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
                     shutil.rmtree(new_path)
                 except:
                     pass
@@ -1578,12 +1618,12 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page()
     
     def add_existing_world(self):
-        world_path = file_funcs.pick_folder(self, os.path.join(self.server_path, "worlds"))
+        world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
         if world_path is None:
             return
         
         world_path = os.path.normpath(world_path)
-        world_folders = glob.glob(os.path.normpath(os.path.join(self.server_path, "worlds", "*/")))
+        world_folders = glob.glob(os.path.normpath(self.path(self.server_path, "worlds", "*/")))
         if world_path in world_folders:
             try:
                 if os.path.basename(world_path) in self.worlds.keys():
@@ -1682,7 +1722,7 @@ class ServerManagerApp(QMainWindow):
         
         if self.delete_world_checkbox.isChecked():
             try:
-                folder_path = os.path.join(self.server_path, "worlds", world)
+                folder_path = self.path(self.server_path, "worlds", world)
                 shutil.rmtree(folder_path)
             except:
                 pass
@@ -1700,12 +1740,26 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
             return
         
-        if not os.path.isfile(os.path.join(self.server_path, "worlds", world, "saved_properties.properties")):
+        if not os.path.isfile(self.path(self.server_path, "worlds", world, "saved_properties.properties")):
             self.log_queue.put(f"<font color='red'>The world has not been generated yet.")
             self.log_queue.put(f"<font color='red'>Start world once to generate the world properties.</font>")
             return
         
-        file_funcs.open_file(os.path.join(self.server_path, "worlds", world, "saved_properties.properties"))
+        file_funcs.open_file(self.path(self.server_path, "worlds", world, "saved_properties.properties"))
+    
+    def open_mods_folder(self):
+        world = self.dropdown.currentText()
+        if world and self.worlds[world].get("fabric"):
+            world_folder = self.path(self.server_path, "worlds", world)
+            if os.path.exists(world_folder):
+                if os.path.exists(self.path(world_folder, "mods")):
+                    file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
+                else:
+                    os.mkdir(self.path(world_folder, "mods"))
+                    file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
+            else:
+                self.log_queue.put(f"<font color='red'>World has not been generated yet.</font>")
+                return
 
     @pyqtSlot()
     def onWindowStateChanged(self):
