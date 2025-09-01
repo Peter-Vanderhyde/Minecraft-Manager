@@ -77,7 +77,7 @@ def load_worlds(server_path, worlds, log_queue):
     for world in worlds_to_ignore:
         worlds.pop(world)
     
-    save_world_versions(server_path, worlds)
+    save_all_world_properties(server_path, worlds)
     
     return worlds
 
@@ -85,9 +85,9 @@ def update_settings(file_lock, ips, server_path, worlds, ip=""):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
             json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}}, f, indent=4)
-    save_world_versions(server_path, worlds)
+    save_all_world_properties(server_path, worlds)
 
-def prepare_server_settings(world, version, fabric, server_path, log_queue, seed=None):
+def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, server_path, log_queue, seed=None):
     # Change the properties
     try:
         with open(os.path.join(server_path, "eula.txt"), 'r') as f:
@@ -101,31 +101,77 @@ def prepare_server_settings(world, version, fabric, server_path, log_queue, seed
         
         found_world = False
         found_seed = False
+        found_gamemode = False
+        found_hardcore = False
+        found_difficulty = False
+        found_level_type = False
         found_query = False
         found_port = False
+        found_fabric = False
+        found_version = False
         for i, line in enumerate(lines):
             if line.startswith("level-name="):
                 lines[i] = f"level-name=worlds/{world}\n"
+                found_world = True
             elif line.startswith("level-seed="):
                 if seed is not None:
                     lines[i] = f"level-seed={seed}\n"
                 else:
                     lines[i] = f"level-seed=\n"
+                found_seed = True
+            elif line.startswith("gamemode="):
+                if gamemode == "Hardcore":
+                    lines[i] = "gamemode=survival\n"
+                else:
+                    lines[i] = f"gamemode={gamemode.lower()}\n"
+                found_gamemode = True
+            elif line.startswith("hardcore="):
+                if gamemode == "Hardcore":
+                    lines[i] = "hardcore=true\n"
+                else:
+                    lines[i] = "hardcore=false\n"
+                found_hardcore = True
+            elif line.startswith("difficulty="):
+                lines[i] = f"difficulty={difficulty.lower()}\n"
+                found_difficulty = True
+            elif line.startswith("level-type"):
+                lines[i] = f"level-type=minecraft\\:{level_type.lower().replace(' ', '_')}\n"
+                found_level_type = True
             elif line.startswith("enable-query="):
                 lines[i] = "enable-query=true\n"
                 found_query = True
             elif line.startswith("query.port="):
                 lines[i] = "query.port=25565\n"
                 found_port = True
+            elif line.startswith("fabric="):
+                lines[i] = f"fabric={"true" if fabric else "false"}\n"
+                found_fabric = True
+            elif line.startswith("version="):
+                lines[i] = f"version={version}\n"
+                found_version = True
         
         if not found_world:
             lines.append(f"level-name=worlds/{world}\n")
         if not found_seed:
             lines.append(f"level-seed={seed if seed is not None else ""}\n")
+        if not found_gamemode:
+            if gamemode == "Hardcore":
+                lines.append("gamemode=survival\n")
+            else:
+                lines.append(f"gamemode={gamemode.lower()}\n")
+        if not found_hardcore:
+            if gamemode == "Hardcore":
+                lines.append("hardcore=true\n")
+        if not found_difficulty:
+            lines.append(f"difficulty={difficulty.lower()}\n")
+        if not found_level_type:
+            lines.append(f"level-type=minecraft\\:{level_type.lower().replace(' ', '_')}\n")
         if not found_query:
             lines.append("enable-query=true\n")
         if not found_port:
             lines.append("query.port=25565\n")
+        if not found_version:
+            lines.append(f"version={version}\n")
         
         with open(os.path.join(server_path, "server.properties"), 'w') as properties:
             properties.writelines(lines)
@@ -265,36 +311,114 @@ def open_file(path):
     except FileNotFoundError:
         return False
 
-def save_version(folder_path, version):
-    if os.path.isfile(os.path.join(folder_path, "saved_properties.properties")):
-        with open(os.path.join(folder_path, "saved_properties.properties"), 'r') as props:
-            lines = props.readlines()
-        
-        found_version = False
-        for i, line in enumerate(lines):
-            if line.startswith("version="):
-                lines[i] = f"version={version}\n"
-                found_version = True
-        
-        if not found_version:
-            lines.append(f"version={version}\n")
-        
-        with open(os.path.join(folder_path, "saved_properties.properties"), 'w') as props:
-            props.writelines(lines)
-
-def load_version(folder_path):
-    if os.path.isfile(os.path.join(folder_path, "saved_properties.properties")):
-        with open(os.path.join(folder_path, "saved_properties.properties"), 'r') as props:
-            lines = props.readlines()
-        
-        for line in lines:
-            if line.startswith("version="):
-                return line.strip().split("=")[1]
+def save_world_properties(folder_path, properties):
+    file_path = os.path.join(folder_path, "saved_properties.properties")
+    if not os.path.isfile(file_path):
+        with open(file_path, 'w') as f:
+            f.write("")
     
-    return None
+    with open(file_path, 'r') as props:
+        lines = props.readlines()
+    
+    found_version = False
+    found_gamemode = False
+    found_hardcore = False
+    found_difficulty = False
+    found_fabric = False
+    found_level_type = False
+    for i, line in enumerate(lines):
+        if line.startswith("version="):
+            lines[i] = f"version={properties.get("version")}\n"
+            found_version = True
+        elif line.startswith("gamemode="):
+            if properties.get("gamemode", "Survival") == "Hardcore":
+                lines[i] = "gamemode=survival\n"
+            else:
+                lines[i] = f"gamemode={properties.get("gamemode", "Survival").lower()}\n"
+            found_gamemode = True
+        elif line.startswith("hardcore="):
+            if properties.get("gamemode", "Survival") == "Hardcore":
+                lines[i] = "hardcore=true\n"
+            else:
+                lines[i] = "hardcore=false\n"
+            found_hardcore = True
+        elif line.startswith("difficulty="):
+            lines[i] = f"difficulty={properties.get("difficulty", "Easy").lower()}\n"
+            found_difficulty = True
+        elif line.startswith("fabric="):
+            lines[i] = f"fabric={"true" if properties.get("fabric", False) else "false"}\n"
+            found_fabric = True
+        elif line.startswith("level-type="):
+            lines[i] = f"level-type=minecraft\\:{properties.get("level-type", "Normal").lower().replace(' ', '_')}\n"
+            found_level_type = True
+    
+    if not found_version:
+        lines.append(f"version={properties.get("version")}\n")
+    if not found_gamemode:
+        gamemode = properties.get("gamemode", "Survival")
+        if gamemode == "Hardcore":
+            lines.append("gamemode=survival\n")
+        else:
+            lines.append(f"gamemode={gamemode.lower()}\n")
+    if not found_hardcore:
+        if properties.get("gamemode") == "Hardcore":
+            lines.append("hardcore=true\n")
+        else:
+            pass
+    if not found_difficulty:
+        lines.append(f"difficulty={properties.get("difficulty", "Easy").lower()}\n")
+    if not found_fabric:
+        lines.append(f"fabric={"true" if properties.get("fabric", False) else "false"}\n")
+    if not found_level_type:
+        lines.append(f"level-type=minecraft\\:{properties.get("level-type", "Normal").lower().replace(' ', '_')}\n")
+    
+    with open(file_path, 'w') as props:
+        props.writelines(lines)
 
-def save_world_versions(server_path, worlds):
+def load_world_properties(folder_path):
+    file_path = os.path.join(folder_path, "saved_properties.properties")
+    properties = {
+        "version": None,
+        "gamemode": "Survival",
+        "difficulty": "Easy",
+        "fabric": False,
+        "level-type": "Normal"
+    }
+
+    if not os.path.isfile(file_path):
+        if os.path.isfile(os.path.join(folder_path, "version.txt")):
+            with open(os.path.join(folder_path, "version.txt"), 'r') as f:
+                version = f.readline()
+            properties["version"] = version
+            os.remove(os.path.join(folder_path, "version.txt"))
+        return properties
+
+    with open(file_path, 'r') as props:
+        lines = props.readlines()
+
+    hardcore = False
+    for line in lines:
+        if line.startswith("version="):
+            properties["version"] = line.strip().split("=")[1]
+        elif line.startswith("gamemode="):
+            properties["gamemode"] = line.strip().split("=")[1].capitalize()
+        elif line.startswith("hardcore="):
+            if line.strip() == "hardcore=true":
+                hardcore = True
+        elif line.startswith("difficulty"):
+            properties["difficulty"] = line.strip().split("=")[1].capitalize()
+        elif line.startswith("fabric="):
+            properties["fabric"] = (line.strip().split("=")[1] == "true")
+        elif line.startswith("level-type="):
+            properties["level-type"] = line.strip().split(":")[1].capitalize().replace('_', ' ')
+    
+    if hardcore:
+        properties["gamemode"] = "Hardcore"
+
+    return properties
+
+def save_all_world_properties(server_path, worlds):
     for world, data in worlds.items():
         world_folder = os.path.join(server_path, "worlds", world)
-        if os.path.isdir(world_folder) and data.get("version"):
-            save_version(world_folder, data.get("version"))
+        if os.path.isdir(world_folder):
+            save_world_properties(world_folder, data)
