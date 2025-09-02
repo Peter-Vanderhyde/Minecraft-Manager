@@ -21,7 +21,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = True
+TESTING = False
 VERSION = "v2.4.0"
 
 if TESTING:
@@ -299,6 +299,7 @@ class ServerManagerApp(QMainWindow):
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
         dropdown_layout.addWidget(self.world_version_label)
         functions_layout.addLayout(dropdown_layout, 1, 1, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        functions_layout.setColumnStretch(1, 1)
 
         functions_layout.addWidget(self.stop_button, 2, 0, 1, 1)  # Spanning two columns
         functions_layout.addWidget(separator, 3, 0, 1, 2)
@@ -580,6 +581,7 @@ class ServerManagerApp(QMainWindow):
         self.new_world_name_edit.setObjectName("lineEdit")
         self.new_world_name_edit.setPlaceholderText("World Name")
         self.new_world_name_edit.hide()
+        self.new_world_name_edit.setMaxLength(32)
         self.new_world_seed_edit = QLineEdit("")
         self.new_world_seed_edit.setObjectName("lineEdit")
         self.new_world_seed_edit.setPlaceholderText("(Optional) World Seed")
@@ -1914,6 +1916,7 @@ class ServerManagerApp(QMainWindow):
             self.is_fabric_check.setChecked(False)
             self.gamemode_dropdown.setCurrentText("Survival")
             self.difficulty_dropdown.setCurrentText("Normal")
+            self.level_type_dropdown.show()
             self.level_type_dropdown.setCurrentText("Normal")
         else:
             self.add_existing_world_button.show()
@@ -1927,7 +1930,7 @@ class ServerManagerApp(QMainWindow):
             self.is_fabric_check.setChecked(False)
             self.gamemode_dropdown.setCurrentText("Survival")
             self.difficulty_dropdown.setCurrentText("Normal")
-            self.level_type_dropdown.setCurrentText("Normal")
+            self.level_type_dropdown.hide()
         
         self.add_world_error.setText("")
         self.show_add_world_page()

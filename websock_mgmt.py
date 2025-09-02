@@ -150,7 +150,6 @@ class MgmtBus(QObject):
                 time_waited += 2
     
     def handle_received(self, recvd):
-        print(recvd)
         def append_log(text, fg=None, bg=None):
             safe = html.escape(text).replace("\n", "<br>")
             if fg or bg:

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
-TESTING = True
+TESTING = False
 VERSION = "v2.4.0"
 
 if TESTING:
@@ -518,7 +518,7 @@ class ServerManagerApp(QMainWindow):
             return
         
         for player in players:
-            self.players_info_box.append(f"<font color='blue'>{player}</font>")
+            self.players_info_box.append(f"<font color='purple'>{player}</font>")
     
     def set_worlds_list(self, worlds):
         self.worlds.clear()
