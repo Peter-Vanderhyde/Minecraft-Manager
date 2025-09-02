@@ -273,33 +273,40 @@ class ServerManagerApp(QMainWindow):
         separator.setFrameShape(QFrame.Shape.HLine)
         separator.setFrameShadow(QFrame.Shadow.Raised)
 
+        self.world_properties_button = QPushButton("Properties")
+        self.world_properties_button.clicked.connect(self.show_edit_properties_page)
+        self.world_mods_button = QPushButton("Mods")
+        self.world_mods_button.clicked.connect(self.open_mods_folder)
+
+        separator2 = QFrame(self)
+        separator2.setFrameShape(QFrame.Shape.HLine)
+        separator2.setFrameShadow(QFrame.Shadow.Raised)
+
         self.world_manager = QPushButton("World Manager")
         self.world_manager.clicked.connect(self.show_world_manager_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
-        self.world_properties_button = QPushButton("World Properties")
-        self.world_properties_button.clicked.connect(self.show_edit_properties_page)
-        self.world_mods_button = QPushButton("World Mods")
-        self.world_mods_button.clicked.connect(self.open_mods_folder)
+    
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
+        functions_layout.addWidget(self.start_button, 1, 0, 1, 1)
 
         # Create a horizontal layout for the dropdown and add it to the grid
-        dropdown_layout = QHBoxLayout()
+        dropdown_layout = QVBoxLayout()
         self.dropdown = QComboBox()
         self.dropdown.currentTextChanged.connect(self.set_selected_world_version)
         dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
-        functions_layout.addLayout(dropdown_layout, 1, 1)
-        functions_layout.addWidget(self.world_version_label, 2, 1)
+        dropdown_layout.addWidget(self.world_version_label)
+        functions_layout.addLayout(dropdown_layout, 1, 1, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
-        functions_layout.addWidget(separator, 4, 0, 1, 2)
-        functions_layout.addWidget(self.world_manager, 5, 0, 1, 2)
-        functions_layout.addWidget(self.open_folder_button, 6, 0, 1, 2)
-        functions_layout.addWidget(self.world_properties_button, 7, 0, 1, 2)
-        functions_layout.addWidget(self.world_mods_button, 8, 0, 1, 2)
+        functions_layout.addWidget(self.stop_button, 2, 0, 1, 1)  # Spanning two columns
+        functions_layout.addWidget(separator, 3, 0, 1, 2)
+        functions_layout.addWidget(self.world_properties_button, 4, 0, 1, 1)
+        functions_layout.addWidget(self.world_mods_button, 4, 1, 1, 1)
+        functions_layout.addWidget(separator2, 5, 0, 1, 2)
+        functions_layout.addWidget(self.world_manager, 6, 0, 1, 2)
+        functions_layout.addWidget(self.open_folder_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
