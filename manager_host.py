@@ -12,7 +12,7 @@ import subprocess
 import glob
 import shutil
 from datetime import datetime
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl
 
@@ -273,7 +273,7 @@ class ServerManagerApp(QMainWindow):
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
         self.world_properties_button = QPushButton("World Properties")
-        self.world_properties_button.clicked.connect(self.open_properties)
+        self.world_properties_button.clicked.connect(self.show_edit_properties_page)
         self.world_mods_button = QPushButton("World Mods")
         self.world_mods_button.clicked.connect(self.open_mods_folder)
 
@@ -755,6 +755,60 @@ class ServerManagerApp(QMainWindow):
         remove_world_page = QWidget()
         remove_world_page.setLayout(remove_world_layout)
 
+        # Page 8: Edit Properties
+
+        center_layout = QVBoxLayout()
+        center_layout.setContentsMargins(12, 12, 12, 12)  # tweak as you like
+        center_layout.setSpacing(8)
+
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        self.title_label = QLabel("Example Properties")
+        self.title_label.setObjectName("largeText")
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
+        self.edit_box = QPlainTextEdit("Here is some text to try.\nThis is placeholder.")
+        font = self.edit_box.font()
+        font.setPointSize(11)
+        self.edit_box.setFont(font)
+        self.edit_box.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        buttons_box = QHBoxLayout()
+        self.save_button = QPushButton()
+        self.save_button.setText("Save")
+        self.save_button.clicked.connect(self.save_properties_edit)
+        self.cancel_button = QPushButton()
+        self.cancel_button.setText("Cancel")
+        self.cancel_button.setObjectName("redButton")
+        self.cancel_button.clicked.connect(lambda: self.show_main_page(True))
+
+        buttons_box.addStretch(1)
+        buttons_box.addWidget(self.save_button)
+        buttons_box.addWidget(self.cancel_button)
+
+        # Build the vertical stack: title (fixed), editor (expanding), buttons (fixed)
+        center_layout.addWidget(self.title_label)
+        center_layout.addWidget(self.edit_box, 1)      # stretch=1 → eats extra vertical space
+        # ❌ no alignment on the editor here
+        center_layout.addLayout(buttons_box)           # sits just below the editor
+
+        right_layout = QVBoxLayout()
+
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        # Grid: ensure the row expands
+        edit_properties_layout = QGridLayout()
+        edit_properties_layout.setRowStretch(0, 1)     # <-- important
+        edit_properties_layout.setColumnStretch(0, 1)
+        edit_properties_layout.addLayout(center_layout, 0, 1, 1, 8)  # rowSpan=1, colSpan=8
+        edit_properties_layout.setColumnStretch(1, 10)
+        edit_properties_layout.addLayout(right_layout, 0, 9)
+        edit_properties_layout.setColumnStretch(9, 1)
+
+        edit_properties_page = QWidget()
+        edit_properties_page.setLayout(edit_properties_layout)
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
@@ -763,6 +817,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(worlds_page)
         self.stacked_layout.addWidget(add_world_page)
         self.stacked_layout.addWidget(remove_world_page)
+        self.stacked_layout.addWidget(edit_properties_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -919,6 +974,29 @@ class ServerManagerApp(QMainWindow):
 
     def show_remove_world_page(self):
         self.stacked_layout.setCurrentIndex(6)
+    
+    def show_edit_properties_page(self):
+        world = self.dropdown.currentText()
+        file_path = self.path(self.server_path, "worlds", world, "saved_properties.properties")
+        with open(file_path, 'r') as props:
+            curr_properties = props.read()
+        
+        self.edit_box.setPlainText(curr_properties)
+        self.title_label.setText(f"{world} Properties")
+        
+        self.stacked_layout.setCurrentIndex(7)
+    
+    def save_properties_edit(self):
+        world = self.dropdown.currentText()
+        file_path = self.path(self.server_path, "worlds", world, "saved_properties.properties")
+        new_contents = self.edit_box.toPlainText()
+        with open(file_path, 'w') as props:
+            props.write(new_contents)
+        
+        file_funcs.check_for_property_updates(self.server_path, world, self.file_lock, self.ips, self.host_ip)
+        self.log_queue.put(f"<font color='green'>Properties have been saved.</font>")
+
+        self.show_main_page(True)
     
     def check_server_path(self, new_text):
         self.existing_server_button.setEnabled(os.path.isdir(new_text))
@@ -1896,7 +1974,7 @@ class ServerManagerApp(QMainWindow):
                     found_old = True
                 elif version == new_version:
                     if found_old:
-                        self.add_world_error.setText("Warning! The existing world was generated in 1.21.8!<br>Selecting this older version could break the world.")
+                        self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
                     else:
                         self.add_world_error.setText("")
                     return

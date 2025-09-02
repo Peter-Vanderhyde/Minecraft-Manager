@@ -422,3 +422,74 @@ def save_all_world_properties(server_path, worlds):
         world_folder = os.path.join(server_path, "worlds", world)
         if os.path.isdir(world_folder):
             save_world_properties(world_folder, data)
+
+def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
+    props_file = os.path.join(server_folder, "worlds", world, "saved_properties.properties")
+
+    with open(props_file, 'r') as f:
+        lines = f.readlines()
+    
+    with open("manager_settings.json", 'r') as settings:
+        old_settings = settings.read()
+    old_settings = json.loads(old_settings)
+    old_props = old_settings["server folder"]["worlds"].get(world)
+    
+    props = {}
+    was_hardcore = (old_props.get("gamemode", "Survival") == "Hardcore")
+    gamemode = old_props.get("gamemode", "Survival")
+    difficulty = old_props.get("difficulty", "Easy")
+    hardcore = "true" if gamemode == "Hardcore" else "false"
+    changed = False
+    for line in lines:
+        if line.startswith("level-seed=") and old_props.get("seed") is not None:
+            props["seed"] = line.strip().split("=")[1]
+        elif line.startswith("gamemode="):
+            gamemode = line.strip().split("=")[1].capitalize()
+            if was_hardcore and gamemode != "Survival":
+                changed = True
+        elif line.startswith("hardcore="):
+            hardcore = line.strip().split("=")[1]
+            if (was_hardcore and hardcore != "true") or (not was_hardcore and hardcore == "true"):
+                changed = True
+        elif line.startswith("difficulty="):
+            difficulty = line.strip().split("=")[1].capitalize()
+            if was_hardcore and difficulty != "Hard":
+                changed = True
+        elif line.startswith("fabric="):
+            props["fabric"] = True if line.strip().split("=")[1] == "true" else False
+        elif line.startswith("level-type=") and old_props.get("seed") is not None:
+            props["level-type"] = line.strip().split(":")[1].capitalize().replace('_', ' ')
+    
+    if changed:
+        if not was_hardcore:
+            props["gamemode"] = "Hardcore"
+            props["difficulty"] = "Hard"
+            gamemode = "survival"
+            difficulty = "hard"
+            hardcore = "true"
+        else:
+            props["gamemode"] = gamemode
+            props["difficulty"] = difficulty
+            hardcore = "false"
+            gamemode = gamemode.lower()
+            difficulty = difficulty.lower()
+    else:
+        props["gamemode"] = gamemode
+        props["difficulty"] = difficulty
+    
+    if changed:
+        for i, line in enumerate(lines):
+            if line.startswith("gamemode="):
+                lines[i] = f"gamemode={gamemode}\n"
+            elif line.startswith("difficulty="):
+                lines[i] = f"difficulty={difficulty}\n"
+            elif line.startswith("hardcore="):
+                lines[i] = f"hardcore={hardcore}\n"
+    
+    for key, value in props.items():
+        old_props[key] = value
+    
+    worlds = old_settings["server folder"]["worlds"]
+    worlds[world] = old_props
+    
+    update_settings(file_lock, ips, server_folder, worlds, host_ip)
