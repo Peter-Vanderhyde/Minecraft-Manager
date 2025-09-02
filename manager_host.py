@@ -1550,6 +1550,8 @@ class ServerManagerApp(QMainWindow):
         status = self.query_status()
         self.set_status(status)
         self.send_data("status", status)
+        if self.is_api_compatible(self.world_version) and status == "online" and not self.bus and self.bus_shutdown_complete.is_set():
+            self.create_bus()
 
     def get_players(self):
         # Used with the player refresh button
