@@ -21,7 +21,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
+TESTING = True
 VERSION = "v2.4.0"
 
 if TESTING:
@@ -1550,7 +1550,7 @@ class ServerManagerApp(QMainWindow):
         status = self.query_status()
         self.set_status(status)
         self.send_data("status", status)
-        if self.is_api_compatible(self.world_version) and status == "online" and not self.bus and self.bus_shutdown_complete.is_set():
+        if status == "online" and self.is_api_compatible(self.world_version) and not self.bus and self.bus_shutdown_complete.is_set():
             self.create_bus()
 
     def get_players(self):

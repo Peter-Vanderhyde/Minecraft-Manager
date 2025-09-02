@@ -257,24 +257,21 @@ class ServerManagerApp(QMainWindow):
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
         self.world_version_label = QLabel("")
         self.world_version_label.setObjectName("world_version")
-        self.world_version_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.world_version_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
 
-        functions_layout = QGridLayout()
-        functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0, 2, 1)
-
-        # Create a horizontal layout for the dropdown and add it to the grid
-        dropdown_layout = QHBoxLayout()
         self.dropdown = QComboBox()
         self.dropdown.currentTextChanged.connect(self.set_current_world_version)
-        dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
-        functions_layout.addLayout(dropdown_layout, 1, 1)
-        functions_layout.addWidget(self.world_version_label, 2, 1)
 
-        functions_layout.addWidget(self.stop_button, 3, 0, 1, 2)  # Spanning two columns
+        functions_layout = QGridLayout()
+        functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
+        functions_layout.addWidget(self.dropdown, 1, 0, 1, 2)
+        functions_layout.addWidget(self.world_version_label, 2, 0, 1, 2)
+        functions_layout.addWidget(self.start_button, 3, 0, 1, 2)
+        functions_layout.addWidget(self.stop_button, 4, 0, 1, 2)
+
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
