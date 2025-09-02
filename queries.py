@@ -76,8 +76,9 @@ def download_latest_server_jar(server_path, log_queue):
     return latest_version
 
 def get_required_java_version(version, log_queue):
-    if int(version.split(".")[1]) < 7:
-        return 8
+    if "." in version:
+        if int(version.split(".")[1]) < 7:
+            return 8
     success, response = get_json(version, log_queue)
     if success:
         required_version = response["javaVersion"]["majorVersion"]
@@ -138,7 +139,7 @@ def verify_fabric_version(version):
     
     return False
 
-def get_mc_versions():
+def get_mc_versions(include_snapshots=False):
     versions_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
     try:
         response = requests.get(versions_url)
@@ -147,7 +148,10 @@ def get_mc_versions():
     
     if response.status_code == 200:
         versions = response.json()["versions"]
-        versions = [version["id"] for version in versions if version["type"] == "release"]
+        if include_snapshots:
+            versions = [version["id"] for version in versions]
+        else:
+            versions = [version["id"] for version in versions if version["type"] == "release"]
         return versions
     else:
         return None
