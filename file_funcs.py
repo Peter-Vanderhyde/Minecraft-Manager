@@ -269,7 +269,7 @@ def get_api_settings(server_path):
                     lines[i] = "management-server-port=25585\n"
             elif line.startswith("status-heartbeat-interval="):
                 found_interval = True
-                lines[i] = "status-heartbeat-interval=10\n"
+                lines[i] = "status-heartbeat-interval=60\n"
         
         if not found_enabled:
             lines.append("management-server-enabled=true\n")
@@ -280,7 +280,7 @@ def get_api_settings(server_path):
             lines.append("management-server-port=25585\n")
             port = "25585"
         if not found_interval:
-            lines.append("status-heartbeat-interval=10\n")
+            lines.append("status-heartbeat-interval=60\n")
         
         with open(os.path.join(server_path, "server.properties"), "w") as f:
             f.writelines(lines)

@@ -12,13 +12,14 @@ import subprocess
 import glob
 import shutil
 from datetime import datetime
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl
 
 import queries
 import file_funcs
 import websock_mgmt
+import html
 
 TESTING = True
 VERSION = "v2.4.0"
@@ -196,7 +197,11 @@ class ServerManagerApp(QMainWindow):
         self.current_players_label.setFont(QFont(self.current_players_label.font().family(), int(self.current_players_label.font().pointSize() * 1.5)))
         self.refresh_button = QPushButton("Refresh")
         self.refresh_button.clicked.connect(self.get_players)
-        self.players_info_box = QTextBrowser()
+        self.players_info_box = QListWidget()
+        self.players_info_box.setUniformItemSizes(True)
+        self.players_info_box.itemClicked.connect(
+            lambda it: self.open_player_context_menu(self.players_info_box.visualItemRect(it).center())
+        )
 
         temp_box.addWidget(self.change_ip_button)
         temp_box.addWidget(self.host_ip_label)
@@ -1079,11 +1084,11 @@ class ServerManagerApp(QMainWindow):
                 
                 time.sleep(1)
         
-        self.log_queue.put(f"<font color='blue'>{self.clients[client]} has joined the room!</font>")
+        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
         self.tell(client, "You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
-                self.tell(send_client, f"<font color='blue'>{self.clients[client]} has joined the room!</font>")
+                self.tell(send_client, f"<font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
         
         self.delay(1)
 
@@ -1103,20 +1108,20 @@ class ServerManagerApp(QMainWindow):
                         continue
 
                     if not message.startswith("MANAGER-REQUEST"):
-                        self.log_queue.put(f'<font color="blue">{self.clients[client]}: {message}</font>')
+                        self.log_queue.put(f'<font color="blue">{html.escape(self.clients[client])}: {message}</font>')
                         self.broadcast(message, client)
                     else:
                         data = message.split('~~>')[-1].split(',')
                         request, args = data[0], data[1:]
                         if request == "get-status":
-                            # self.log_queue.put(f"{self.clients[client]} queried the server status.")
+                            # self.log_queue.put(f"{html.escape(self.clients[client])} queried the server status.")
                             result = self.query_status()
                             # self.log_queue.put(f"Server status is: {result[0]}.")
                             self.set_status_signal.emit(result)
                             self.send_data("status", result)
                         elif request == "get-players":
                             status = self.query_status()
-                            # self.log_queue.put(f"{self.clients[client]} queried the active players.")
+                            # self.log_queue.put(f"{html.escape(self.clients[client])} queried the active players.")
                             if status[0] == "online":
                                 players = self.query_players()
                                 self.update_players_list_signal.emit(players)
@@ -1127,11 +1132,13 @@ class ServerManagerApp(QMainWindow):
                         elif request == "get-worlds-list":
                             self.send_data("worlds-list", self.query_worlds(), client)
                         elif request in ["start-server", "stop-server"]:
-                            self.log_queue.put(f"{self.clients[client]} requested to {request[:request.find('-')]} the server.")
+                            self.log_queue.put(f"{html.escape(self.clients[client])} requested to {request[:request.find('-')]} the server.")
                             if request == "stop-server":
                                 self.stop_server_signal.emit(client)
                             elif request == "start-server":
                                 self.start_server_signal.emit([client, args[0]])
+                        elif request == "restart-server":
+                            self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds.</font>")
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -1144,8 +1151,8 @@ class ServerManagerApp(QMainWindow):
             time.sleep(0.5)
         
         client.close()
-        self.log_queue.put(f"<font color='blue'>{self.clients[client]} has left the room.</font>")
-        self.broadcast(f"<font color='blue'>{self.clients[client]} has left the room.</font>")
+        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
+        self.broadcast(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
         self.clients.pop(client)
 
     def send_data(self, topic, data, client=None):
@@ -1628,19 +1635,40 @@ class ServerManagerApp(QMainWindow):
         self.send_data("players", self.curr_players)
         self.players_info_box.clear()
         if len(self.curr_players) == 0:
-            self.players_info_box.append("<font color='red'>No players online</font>")
+            item = QListWidgetItem("No players online")
+            item.setForeground(QColor("red"))
+            self.players_info_box.addItem(item)
             return
-        
+
         for player in self.curr_players:
-            self.players_info_box.append(f"<font color='blue'>{player}</font>")
+            item = QListWidgetItem(html.escape(player))
+            item.setForeground(QColor("purple"))
+            self.players_info_box.addItem(item)
+    
+    def color_segments(self, segs, colors):
+        msg = ""
+        for segment, color in zip(segs, colors):
+            safe = html.escape(segment).replace("\n", "<br>")
+        
+            if color:
+                msg += f"<span style=\"color:{color}\">{safe}</span>"
+            else:
+                msg += safe
+        return msg
     
     def remove_player(self, player_obj):
         self.curr_players.remove(player_obj["name"])
         self.update_players_list()
+        formatted_text = self.color_segments([player_obj['name'], " disconnected ", "from the server."], ["purple", "red", None])
+        self.log_queue.put(formatted_text)
+        self.broadcast(formatted_text)
     
     def add_player(self, player_obj):
         self.curr_players.append(player_obj["name"])
         self.update_players_list()
+        formatted_text = self.color_segments([player_obj['name'], " joined ", "the server."], ["purple", "green", None])
+        self.log_queue.put(formatted_text)
+        self.broadcast(formatted_text)
     
     def set_worlds_list(self):
         self.dropdown.clear()
@@ -1950,7 +1978,7 @@ class ServerManagerApp(QMainWindow):
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
-            self.log_queue.put("<font color='green'>The world and its folder will be generated when the world is run for the first time.</font>")
+            self.log_queue.put("The world and its folder will be generated when the world is run for the first time.")
             self.dropdown.setCurrentText(self.new_world_name_edit.text())
             self.show_main_page()
         elif result is False:
@@ -2025,6 +2053,82 @@ class ServerManagerApp(QMainWindow):
             else:
                 self.log_queue.put(f"<font color='red'>World has not been generated yet.</font>")
                 return
+    
+    def open_player_context_menu(self, pos):
+        item = self.players_info_box.itemAt(pos)
+        if not item or not self.is_api_compatible(self.world_version) or item.text() == "No players online":
+            return
+        
+        name = item.text()
+        menu = QMenu(self)
+        options = [
+            {
+                "file": "ops.json",
+                "default": "Op",
+                "remove": "De-Op",
+                "func": self.op_player
+            },
+            {
+                "file": "whitelist.json",
+                "default": "Whitelist",
+                "remove": "Remove Whitelist",
+                "func": self.whitelist_player
+            },
+            {
+                "file": None,
+                "default": "Kick",
+                "func": self.kick_player
+            },
+            {
+                "file": None,
+                "default": "Ban",
+                "func": self.ban_player
+            }
+        ]
+
+        for option in options:
+            label = option.get("default")
+            func = option.get("func")
+            if not option.get("file"):
+                menu.addAction(label, lambda n=name, f=func: f(n))
+                continue
+            
+            with open(self.path(self.server_path, option.get("file")), 'r') as f:
+                players = json.loads(f.read())
+            
+            remove = False
+            for player in players:
+                if player.get("name") == name:
+                    label = option.get("remove")
+                    remove = True
+            
+            menu.addAction(label, lambda n=name, r=remove, f=func: f(n, r))
+        
+        menu.exec(self.players_info_box.viewport().mapToGlobal(pos))
+    
+    def op_player(self, player, remove):
+        self.bus.op_player.emit(player, remove)
+        if remove:
+            self.notify_player(player, "Your operator status has been removed.")
+            self.msg_player(player, "Server: Your operator status has been removed.")
+        else:
+            self.notify_player(player, "You have been given operator status.")
+            self.msg_player(player, "Server: You have been given operator status.")
+    
+    def whitelist_player(self, player, remove):
+        self.bus.whitelist_player.emit(player, remove)
+    
+    def kick_player(self, player):
+        self.bus.kick_player.emit(player)
+    
+    def ban_player(self, player):
+        self.bus.ban_player.emit(player)
+    
+    def notify_player(self, player, msg):
+        self.bus.notify_player.emit(player, msg)
+    
+    def msg_player(self, player, msg):
+        self.bus.msg_player.emit(player, msg)
     
     def change_snapshot_state(self, state: Qt.CheckState):
         new_versions = queries.get_mc_versions(state == Qt.CheckState.Checked)

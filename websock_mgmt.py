@@ -3,6 +3,7 @@ import asyncio
 import websockets
 import json
 import queue
+import html
 
 
 class MgmtBus(QObject):
@@ -17,10 +18,22 @@ class MgmtBus(QObject):
     update_status = pyqtSignal(list)
 
     close_server = pyqtSignal()
+    op_player = pyqtSignal(str, bool)
+    whitelist_player = pyqtSignal(str, bool)
+    kick_player = pyqtSignal(str)
+    ban_player = pyqtSignal(str)
+    notify_player = pyqtSignal(str, str)
+    msg_player = pyqtSignal(str, str)
 
     def __init__(self):
         super().__init__()
         self.close_server.connect(self.send_close)
+        self.op_player.connect(self.send_op)
+        self.whitelist_player.connect(self.send_whitelist)
+        self.kick_player.connect(self.send_kick)
+        self.ban_player.connect(self.send_ban)
+        self.notify_player.connect(self.send_notification_to_player)
+        self.msg_player.connect(self.send_message_to_player)
         self.cmd_queue = queue.Queue()
         self._shutdown = asyncio.Event()
     
@@ -138,6 +151,18 @@ class MgmtBus(QObject):
     
     def handle_received(self, recvd):
         print(recvd)
+        def append_log(text, fg=None, bg=None):
+            safe = html.escape(text).replace("\n", "<br>")
+            if fg or bg:
+                style = []
+                if fg: style.append(f"color:{fg}")
+                if bg: style.append(f"background-color:{bg}")
+                style.append(f"padding:2px 6px")
+                style.append("margin:2px 0")
+                self.log.emit(f"<span style=\"{';'.join(style)}\">{safe}</span>")
+            else:
+                self.log.emit(safe)
+        
         if "error" in recvd:
             self.return_error(f"Error: {recvd["error"].get("data") or recvd["error"].get("message")}")
         elif "result" in recvd:
@@ -157,17 +182,28 @@ class MgmtBus(QObject):
                         status = params[0]["started"]
                         version = params[0]["version"]["name"]
                         self.update_status.emit([status, version])
-                    elif action == "saved":
-                        self.log.emit("Saved world.")
                     elif action == "stopping":
                         self.server_closing.emit()
                 elif topic == "players":
                     if action == "joined":
-                        self.log.emit(f"{params[0]['name']} joined the server.")
                         self.player_join.emit(params[0])
                     elif action == "left":
-                        self.log.emit(f"{params[0]['name']} disconnected from the server.")
                         self.player_leave.emit(params[0])
+                elif topic == "operators":
+                    if action == "added":
+                        append_log(f"{params[0]['player']['name']} was given operator status.", "#ffffff", "#3b5998")
+                    elif action == "removed":
+                        append_log(f"{params[0]['player']['name']} lost operator status.", "#ffffff", "#a54040")
+                elif topic == "allowlist":
+                    if action == "added":
+                        append_log(f"{params[0]['name']} was added to the whitelist.", "#ffffff", "#3b5998")
+                    elif action == "removed":
+                        append_log(f"{params[0]['name']} was removed from the whitelist.", "#ffffff", "#a54040")
+                elif topic == "bans":
+                    if action == "added":
+                        append_log(f"{params[0]['player']['name']} was banned from the server.", "#ffffff", "#a54040")
+                    elif action == "removed":
+                        append_log(f"{params[0]['name']} was pardoned from their ban.", "#ffffff", "#3b5998")
         else:
             self.return_error(f"Unknown Data Received: {recvd}")
     
@@ -180,3 +216,25 @@ class MgmtBus(QObject):
 
     def send_close(self):
         self.assemble_data("minecraft:server/stop")
+    
+    def send_op(self, name, remove=False):
+        if not remove:
+            self.assemble_data(f"minecraft:operators/add", [{"player": {"name": name}}])
+        else:
+            self.assemble_data(f"minecraft:operators/remove", [{"name": name}])
+    
+    def send_whitelist(self, name, remove=False):
+        command = "add" if not remove else "remove"
+        self.assemble_data(f"minecraft:allowlist/{command}", [{"name": name}])
+    
+    def send_kick(self, name):
+        self.assemble_data(f"minecraft:players/kick", {"players": [{"name": name}], "message": {"literal": "You have been kicked? What were you doing?!"}})
+    
+    def send_ban(self, name):
+        self.assemble_data(f"minecraft:bans/add", [{"player": {"name": name}, "reason": "You done messed up."}])
+    
+    def send_notification_to_player(self, name, msg):
+        self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": True})
+    
+    def send_message_to_player(self, name, msg):
+        self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": False})

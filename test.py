@@ -16,7 +16,7 @@ def updatePlayers(players):
 
 def handle_response(response):
     response = json.loads(response)
-    #print(response)
+    print(response)
     if "result" in response:
         result = response["result"]
         if type(result) not in [list, dict]:
@@ -84,11 +84,14 @@ async def sendRequest(ws):
             cmd = "rpc.discover"
         
         req = {"jsonrpc":"2.0", "id":2, "method":cmd}
-        if cmd == "minecraft:server/system_message":
+        if cmd == "minecraft:operators":
+            # req = {
+#   "jsonrpc":"2.0","id":3,"method":"minecraft:server/system_message",
+#   "params":[{"receivingPlayers":[{"name":"PetergrineFalcon"}], "message": { "literal":"Action bar test!", "bold": True }, "overlay": True }]
+# }
             req = {
-  "jsonrpc":"2.0","id":3,"method":"minecraft:server/system_message",
-  "params":[{"receivingPlayers":[{"name":"PetergrineFalcon"}], "message": { "literal":"Action bar test!", "bold": True }, "overlay": True }]
-}
+"jsonrpc":"2.0", "id":3, "method":"minecraft:bans/add", "params":[[{"player": {"name":"PetergrineFalcon"}}]]
+            }
         
         try:
             await ws.send(json.dumps(req))
