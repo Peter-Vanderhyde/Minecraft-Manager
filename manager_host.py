@@ -282,8 +282,8 @@ class ServerManagerApp(QMainWindow):
         separator2.setFrameShape(QFrame.Shape.HLine)
         separator2.setFrameShadow(QFrame.Shadow.Raised)
 
-        self.world_manager = QPushButton("World Manager")
-        self.world_manager.clicked.connect(self.show_world_manager_page)
+        self.world_manager_button = QPushButton("World Manager")
+        self.world_manager_button.clicked.connect(self.show_world_manager_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
     
@@ -306,7 +306,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.world_properties_button, 4, 0, 1, 1)
         functions_layout.addWidget(self.world_mods_button, 4, 1, 1, 1)
         functions_layout.addWidget(separator2, 5, 0, 1, 2)
-        functions_layout.addWidget(self.world_manager, 6, 0, 1, 2)
+        functions_layout.addWidget(self.world_manager_button, 6, 0, 1, 2)
         functions_layout.addWidget(self.open_folder_button, 7, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
@@ -527,10 +527,8 @@ class ServerManagerApp(QMainWindow):
         bot_box = QHBoxLayout()
         bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        create_new_button = QPushButton("Create New World")
-        create_new_button.clicked.connect(self.add_new_world)
-        select_existing_button = QPushButton("Add Existing World")
-        select_existing_button.clicked.connect(self.add_existing_world)
+        add_world_button = QPushButton("Add World")
+        add_world_button.clicked.connect(self.show_new_world_type_page)
         remove_world_button = QPushButton("Remove World")
         remove_world_button.clicked.connect(self.prepare_remove_world_page)
         remove_world_button.setObjectName("redButton")
@@ -541,8 +539,7 @@ class ServerManagerApp(QMainWindow):
         cancel_button.setObjectName("smallRedButton")
         cancel_button.clicked.connect(self.show_main_page)
 
-        top_box.addWidget(create_new_button)
-        top_box.addWidget(select_existing_button)
+        top_box.addWidget(add_world_button)
         top_box.addWidget(remove_world_button)
         top_box.addWidget(backup_button)
         bot_box.addWidget(cancel_button)
@@ -635,7 +632,7 @@ class ServerManagerApp(QMainWindow):
         self.create_new_world_button.clicked.connect(self.confirm_create_world)
         cancel_button = QPushButton("Cancel")
         cancel_button.setObjectName("redButton")
-        cancel_button.clicked.connect(self.show_world_manager_page)
+        cancel_button.clicked.connect(self.show_new_world_type_page)
         self.add_world_error = QLabel("")
         self.add_world_error.setObjectName("messageText")
 
@@ -747,8 +744,8 @@ class ServerManagerApp(QMainWindow):
         temp_box1.addWidget(world_label)
         temp_box1.addWidget(self.worlds_dropdown, 1)
 
-        temp_box2.addWidget(remove_world_cancel_button)
         temp_box2.addWidget(remove_world_confirm_button)
+        temp_box2.addWidget(remove_world_cancel_button)
 
         center_layout.addWidget(remove_world_label)
         center_layout.addLayout(temp_box1)
@@ -772,7 +769,7 @@ class ServerManagerApp(QMainWindow):
         # Page 8: Edit Properties
 
         center_layout = QVBoxLayout()
-        center_layout.setContentsMargins(12, 12, 12, 12)  # tweak as you like
+        center_layout.setContentsMargins(12, 12, 12, 12)
         center_layout.setSpacing(8)
 
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -799,11 +796,9 @@ class ServerManagerApp(QMainWindow):
         buttons_box.addWidget(self.save_button)
         buttons_box.addWidget(self.cancel_button)
 
-        # Build the vertical stack: title (fixed), editor (expanding), buttons (fixed)
         center_layout.addWidget(self.title_label)
-        center_layout.addWidget(self.edit_box, 1)      # stretch=1 → eats extra vertical space
-        # ❌ no alignment on the editor here
-        center_layout.addLayout(buttons_box)           # sits just below the editor
+        center_layout.addWidget(self.edit_box, 1)
+        center_layout.addLayout(buttons_box)
 
         right_layout = QVBoxLayout()
 
@@ -811,11 +806,10 @@ class ServerManagerApp(QMainWindow):
         version.setObjectName("version_num")
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
-        # Grid: ensure the row expands
         edit_properties_layout = QGridLayout()
-        edit_properties_layout.setRowStretch(0, 1)     # <-- important
+        edit_properties_layout.setRowStretch(0, 1)
         edit_properties_layout.setColumnStretch(0, 1)
-        edit_properties_layout.addLayout(center_layout, 0, 1, 1, 8)  # rowSpan=1, colSpan=8
+        edit_properties_layout.addLayout(center_layout, 0, 1, 1, 8)
         edit_properties_layout.setColumnStretch(1, 10)
         edit_properties_layout.addLayout(right_layout, 0, 9)
         edit_properties_layout.setColumnStretch(9, 1)
@@ -823,7 +817,38 @@ class ServerManagerApp(QMainWindow):
         edit_properties_page = QWidget()
         edit_properties_page.setLayout(edit_properties_layout)
 
-        # Add pages to the stacked layout
+        # Page 9: Add world type page
+
+        page_layout = QHBoxLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        create_new_button = QPushButton("Create New World")
+        create_new_button.clicked.connect(self.add_new_world)
+        select_existing_button = QPushButton("Add Existing World")
+        select_existing_button.clicked.connect(self.add_existing_world)
+        cancel_add_world_button = QPushButton("Back")
+        cancel_add_world_button.setObjectName("smallRedButton")
+        cancel_add_world_button.clicked.connect(self.show_world_manager_page)
+
+        center_layout.addWidget(create_new_button)
+        center_layout.addWidget(select_existing_button)
+        back_layout = QHBoxLayout()
+        back_layout.addStretch(1)
+        back_layout.addWidget(cancel_add_world_button)
+        back_layout.addStretch(1)
+        center_layout.addLayout(back_layout)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(center_layout)
+        page_layout.addStretch(1)
+
+        new_world_type_page = QWidget()
+        new_world_type_page.setLayout(page_layout)
+
+        #----------------------------------------------------
+
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(error_page)
         self.stacked_layout.addWidget(server_path_page)
@@ -832,6 +857,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(add_world_page)
         self.stacked_layout.addWidget(remove_world_page)
         self.stacked_layout.addWidget(edit_properties_page)
+        self.stacked_layout.addWidget(new_world_type_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1000,6 +1026,9 @@ class ServerManagerApp(QMainWindow):
         
         self.stacked_layout.setCurrentIndex(7)
     
+    def show_new_world_type_page(self):
+        self.stacked_layout.setCurrentIndex(8)
+    
     def save_properties_edit(self):
         world = self.dropdown.currentText()
         file_path = self.path(self.server_path, "worlds", world, "saved_properties.properties")
@@ -1036,6 +1065,9 @@ class ServerManagerApp(QMainWindow):
         self.receive_thread.start()
         self.message_timer.start(1000)
         self.log_queue.put("Waiting for connections...")
+        if not self.dropdown.currentText():
+            self.log_queue.put("<br>You do not currently have any worlds added to your list.")
+            self.log_queue.put("Click 'World Manager' to add a new world.")
     
     def receive(self):
         handlers = []
@@ -1147,7 +1179,8 @@ class ServerManagerApp(QMainWindow):
                             elif request == "start-server":
                                 self.start_server_signal.emit([client, args[0]])
                         elif request == "restart-server":
-                            self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds.</font>")
+                            self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds in the current version.</font>")
+                            self.tell(client, "You are using an outdated client version. You can find the latest release at https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases.")
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -1196,7 +1229,7 @@ class ServerManagerApp(QMainWindow):
             scrollbar.setValue(scrollbar.maximum())
     
     def first_load(self):
-        self.verify_world_formatting()
+        self.verify_world_formatting() # Update oudated formatting from previous versions
         self.set_worlds_list()
         self.get_status()
         if self.status == "online" and self.is_api_compatible(self.world_version):
@@ -1746,7 +1779,7 @@ class ServerManagerApp(QMainWindow):
         self.refresh_status_button.setEnabled(False)
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(False)
-        self.world_manager.setEnabled(False)
+        self.world_manager_button.setEnabled(False)
         self.open_folder_button.setEnabled(False)
         self.world_properties_button.setEnabled(False)
         self.world_mods_button.setEnabled(False)
@@ -1768,7 +1801,7 @@ class ServerManagerApp(QMainWindow):
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(True)
-            self.world_manager.setEnabled(True)
+            self.world_manager_button.setEnabled(True)
             self.open_folder_button.setEnabled(True)
             
             if not self.check_eula():
@@ -1829,7 +1862,7 @@ class ServerManagerApp(QMainWindow):
             return
         
         world_path = os.path.normpath(world_path)
-        world_folders = glob.glob(os.path.normpath(self.path(self.server_path, "worlds", "*/")))
+        world_folders = glob.glob(self.path(self.server_path, "worlds", "*/"))
         if world_path in world_folders:
             try:
                 if self.world == os.path.basename(world_path) and self.query_status()[0] == "online":
@@ -1920,6 +1953,7 @@ class ServerManagerApp(QMainWindow):
             self.difficulty_dropdown.setCurrentText("Normal")
             self.level_type_dropdown.show()
             self.level_type_dropdown.setCurrentText("Normal")
+            self.level_type_label.show()
         else:
             self.add_existing_world_button.show()
             self.create_new_world_button.hide()
@@ -1933,6 +1967,7 @@ class ServerManagerApp(QMainWindow):
             self.gamemode_dropdown.setCurrentText("Survival")
             self.difficulty_dropdown.setCurrentText("Normal")
             self.level_type_dropdown.hide()
+            self.level_type_label.hide()
         
         self.add_world_error.setText("")
         self.show_add_world_page()
@@ -2010,18 +2045,23 @@ class ServerManagerApp(QMainWindow):
             new_version = self.mc_version_dropdown.currentText()
             found_old = False
             for version in queries.get_mc_versions(True):
-                if version == old_version:
-                    found_old = True
-                elif version == new_version:
+                if version == new_version:
                     if found_old:
                         self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
                     else:
                         self.add_world_error.setText("")
                     return
+                elif version == old_version:
+                    found_old = True
     
     def remove_world(self):
         world = self.worlds_dropdown.currentText()
         if not world:
+            return
+        
+        if self.world == world and self.query_status()[0] == "online":
+            self.log_queue.put(f"<font color='red'>ERROR: Unable to remove {world} while the world is being run.</font>")
+            self.show_main_page()
             return
         
         if self.delete_world_checkbox.isChecked():
