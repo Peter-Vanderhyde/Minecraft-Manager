@@ -107,6 +107,7 @@ class ServerManagerApp(QMainWindow):
         self.world = ""
         self.world_version = ""
         self.worlds = {}
+        self.universal_settings = {}
         self.curr_players = []
         self.log_queue = queue.Queue()
         self.result_queue = queue.Queue()
@@ -158,7 +159,7 @@ class ServerManagerApp(QMainWindow):
                 return
 
 
-        self.host_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.server_path, self.worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
         self.clear_log_queue()
         
@@ -287,6 +288,8 @@ class ServerManagerApp(QMainWindow):
 
         self.world_manager_button = QPushButton("World Manager")
         self.world_manager_button.clicked.connect(self.show_world_manager_page)
+        self.commands_button = QPushButton("Admin Settings")
+        self.commands_button.clicked.connect(self.show_commands_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
     
@@ -295,9 +298,11 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
 
         dropdown_layout = QVBoxLayout()
+        box = QHBoxLayout()
         self.dropdown = QComboBox()
         self.dropdown.currentTextChanged.connect(self.set_selected_world_version)
-        dropdown_layout.addWidget(self.dropdown)  # Dropdown for world options
+        box.addWidget(self.dropdown, 1)
+        dropdown_layout.addLayout(box)  # Dropdown for world options
         dropdown_layout.addWidget(self.world_version_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         functions_layout.addLayout(dropdown_layout, 1, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
 
@@ -309,7 +314,8 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.modrinth_button, 5, 0, 1, 2)
         functions_layout.addWidget(separator2, 6, 0, 1, 2)
         functions_layout.addWidget(self.world_manager_button, 7, 0, 1, 2)
-        functions_layout.addWidget(self.open_folder_button, 8, 0, 1, 2)
+        functions_layout.addWidget(self.commands_button, 8, 0, 1, 2)
+        functions_layout.addWidget(self.open_folder_button, 9, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -779,7 +785,7 @@ class ServerManagerApp(QMainWindow):
         self.title_label = QLabel("Example Properties")
         self.title_label.setObjectName("largeText")
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-        self.edit_box = QPlainTextEdit("Here is some text to try.\nThis is placeholder.")
+        self.edit_box = QPlainTextEdit("This is placeholder.")
         font = self.edit_box.font()
         font.setPointSize(11)
         self.edit_box.setFont(font)
@@ -855,6 +861,95 @@ class ServerManagerApp(QMainWindow):
         new_world_type_page = QWidget()
         new_world_type_page.setLayout(page_layout)
 
+        # Page 10: Running Commands
+
+        page_layout = QHBoxLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        commands_label = QLabel("Admin Settings")
+        commands_label.setObjectName("largeText")
+        # stretch here
+        commands_warning_label = QLabel("Any changes will require a<br>server restart to take effect.")
+        commands_warning_label.hide()
+        whitelist_toggle_label = QLabel("Whitelist: ")
+        whitelist_toggle_label.setObjectName("optionText")
+        whitelist_toggle_button = QPushButton("Disabled")
+        whitelist_toggle_button.setObjectName("redButton")
+        whitelist_toggle_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        whitelist_toggle_button.adjustSize()
+        whitelist_toggle_button.clicked.connect(self.toggle_whitelist)
+        whitelist_add_label = QLabel("Add to whitelist:")
+        whitelist_add_label.setObjectName("optionText")
+        whitelist_add_button = QPushButton("Add")
+        whitelist_add_button.setObjectName("smallYellowButton")
+        whitelist_add_button.clicked.connect(self.add_player_to_whitelist)
+        whitelist_add_button.setEnabled(False)
+        whitelist_add_textbox = QLineEdit("")
+        whitelist_add_textbox.setPlaceholderText("Username")
+        whitelist_add_textbox.returnPressed.connect(self.add_player_to_whitelist)
+        whitelist_add_textbox.textChanged.connect(lambda: whitelist_add_button.setEnabled(whitelist_add_textbox.text() != ""))
+        view_distance_label = QLabel("View Distance: ")
+        view_distance_label.setObjectName("optionText")
+        view_distance_textbox = QLineEdit("")
+        view_distance_textbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        view_distance_textbox.setPlaceholderText("3-32")
+        view_distance_textbox.setMaxLength(2)
+        view_distance_textbox.setMaximumWidth(100)
+        view_distance_textbox.setObjectName("optionText")
+        view_distance_textbox.returnPressed.connect(self.update_view_distance)
+        simulation_distance_label = QLabel("Simulation Distance: ")
+        simulation_distance_label.setObjectName("optionText")
+        simulation_distance_textbox = QLineEdit("")
+        simulation_distance_textbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        simulation_distance_textbox.setPlaceholderText("3-32")
+        simulation_distance_textbox.setMaxLength(2)
+        simulation_distance_textbox.setMaximumWidth(100)
+        simulation_distance_textbox.setObjectName("optionText")
+        simulation_distance_textbox.returnPressed.connect(self.update_simulation_distance)
+        commands_back_button = QPushButton("Back")
+        commands_back_button.setObjectName("smallRedButton")
+        commands_back_button.clicked.connect(self.show_main_page)
+
+        center_layout.addWidget(commands_label, 1, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        center_layout.addWidget(commands_warning_label)
+        hor_box = QHBoxLayout()
+        hor_box.addWidget(whitelist_toggle_label)
+        hor_box.addWidget(whitelist_toggle_button)
+        center_layout.addLayout(hor_box)
+        hor_box = QHBoxLayout()
+        hor_box.addWidget(whitelist_add_label)
+        hor_box.addWidget(whitelist_add_textbox, 1)
+        hor_box.addWidget(whitelist_add_button)
+        center_layout.addLayout(hor_box)
+        hor_box = QHBoxLayout()
+        hor_box.addWidget(view_distance_label)
+        hor_box.addWidget(view_distance_textbox)
+        center_layout.addLayout(hor_box)
+        hor_box = QHBoxLayout()
+        hor_box.addWidget(simulation_distance_label)
+        hor_box.addWidget(simulation_distance_textbox)
+        center_layout.addLayout(hor_box)
+        hor_box = QHBoxLayout()
+        hor_box.addStretch(1)
+        hor_box.addWidget(commands_back_button)
+        hor_box.addStretch(1)
+        center_layout.addLayout(hor_box)
+        center_layout.addStretch(1)
+
+        right_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(center_layout)
+        page_layout.addLayout(right_layout, 1)
+
+        commands_page_layout = QWidget()
+        commands_page_layout.setLayout(page_layout)
+
         #----------------------------------------------------
 
         self.stacked_layout.addWidget(server_manager_page)
@@ -866,6 +961,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(remove_world_page)
         self.stacked_layout.addWidget(edit_properties_page)
         self.stacked_layout.addWidget(new_world_type_page)
+        self.stacked_layout.addWidget(commands_page_layout)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -972,7 +1068,7 @@ class ServerManagerApp(QMainWindow):
     
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            saved_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+            saved_ip, self.ips, self.server_path, self.worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
@@ -1037,6 +1133,10 @@ class ServerManagerApp(QMainWindow):
     def show_new_world_type_page(self):
         self.stacked_layout.setCurrentIndex(8)
     
+    def show_commands_page(self):
+        
+        self.stacked_layout.setCurrentIndex(9)
+    
     def save_properties_edit(self):
         world = self.dropdown.currentText()
         file_path = self.path(self.server_path, "worlds", world, "saved_properties.properties")
@@ -1044,7 +1144,7 @@ class ServerManagerApp(QMainWindow):
         with open(file_path, 'w') as props:
             props.write(new_contents)
         
-        file_funcs.check_for_property_updates(self.server_path, world, self.file_lock, self.ips, self.host_ip)
+        self.universal_settings = file_funcs.check_for_property_updates(self.server_path, world, self.file_lock, self.ips, self.host_ip)
         self.log_queue.put(f"<font color='green'>Properties have been saved.</font>")
 
         self.show_main_page(True)
@@ -1122,7 +1222,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -1244,9 +1344,11 @@ class ServerManagerApp(QMainWindow):
             self.create_bus()
     
     def verify_world_formatting(self):
+        outdated = False
         for name, data in self.worlds.items():
             if not data.get("gamemode"):
                 # Older manager version
+                outdated = True
                 new_data = {
                     "version": data["version"],
                     "seed": data.get("seed", ""),
@@ -1256,12 +1358,23 @@ class ServerManagerApp(QMainWindow):
                     "level-type": data.get("level-type", "Normal")
                 }
                 self.worlds[name] = new_data
-                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds)
-                if os.path.exists(self.path(self.server_path, "worlds", name)):
-                    file_funcs.save_world_properties(self.path(self.server_path, "worlds", name), new_data)
-                
-                if os.path.isfile(self.path(self.server_path, "worlds", name, "version.txt")):
-                    os.remove(self.path(self.server_path, "worlds", name, "version.txt"))
+        
+        if self.universal_settings in [{}, None]:
+            self.universal_settings = {
+                "whitelist enabled": False,
+                "view distance": 10,
+                "simulation distance": 10
+            }
+            outdated = True
+        
+        if outdated:
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.host_ip)
+            if os.path.exists(self.path(self.server_path, "worlds", name)):
+                file_funcs.save_world_properties(self.path(self.server_path, "worlds", name), new_data)
+            
+            if os.path.isfile(self.path(self.server_path, "worlds", name, "version.txt")):
+                os.remove(self.path(self.server_path, "worlds", name, "version.txt"))
+        
     
     def message_entered(self):
         message = self.message_entry.text()
@@ -1406,6 +1519,8 @@ class ServerManagerApp(QMainWindow):
                     with open(self.path(self.server_path, "server.properties"), 'w') as props:
                         props.writelines(lines)
                 
+                file_funcs.apply_universal_settings(self.server_path)
+                
                 world_mods_folder = self.path(path, "mods")
                 server_mods_folder = self.path(self.server_path, "mods")
                 if fabric and os.path.exists(world_mods_folder):
@@ -1427,7 +1542,7 @@ class ServerManagerApp(QMainWindow):
                 else:
                     if seed is not None:
                         self.worlds[world].pop("seed")
-                        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+                        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
             
                 os.system(f'start "" /min cmd /C "title Server Ignition && cd /d "{self.server_path}" && run.bat"')
                 loop = True
@@ -1758,12 +1873,12 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.get()
             self.message_timer.start(1000)
             if self.server_path:
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
-                saved_ip, self.ips, self.server_path, self.worlds = file_funcs.load_settings(self.log_queue, self.file_lock)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.universal_settings, self.saved_ip)
+                saved_ip, self.ips, self.server_path, self.worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
             else:
                 self.server_path = path
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.universal_settings, self.saved_ip)
             self.start_manager_server()
     
     def create_server_folder(self):
@@ -1784,7 +1899,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.get()
         self.message_timer.start(200)
             
-        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.universal_settings, self.saved_ip)
         
         self.change_ip_button.setEnabled(False)
         self.refresh_button.setEnabled(False)
@@ -1866,7 +1981,7 @@ class ServerManagerApp(QMainWindow):
             self.host_ip = ip
             self.delay(0.5)
             if self.default_ip_check.isChecked():
-                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, ip=self.host_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, ip=self.host_ip)
             self.start_manager_server()
     
     def backup_world(self):
@@ -2006,7 +2121,7 @@ class ServerManagerApp(QMainWindow):
                 "fabric": self.is_fabric_check.isChecked(),
                 "level-type": self.level_type_dropdown.currentText()
             }
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
             file_funcs.save_world_properties(self.path(os.path.join(self.server_path, "worlds", name)), self.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
@@ -2034,7 +2149,7 @@ class ServerManagerApp(QMainWindow):
                 "fabric": self.is_fabric_check.isChecked(),
                 "level-type": self.level_type_dropdown.currentText()
             }
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -2086,7 +2201,7 @@ class ServerManagerApp(QMainWindow):
                 pass
         
         self.worlds.pop(world)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
         self.set_worlds_list()
         self.send_data("worlds-list", self.query_worlds())
         self.log_queue.put(f"<font color='green'>Successfully removed world.</font>")
@@ -2118,6 +2233,18 @@ class ServerManagerApp(QMainWindow):
             else:
                 self.log_queue.put(f"<font color='red'>World has not been generated yet.</font>")
                 return
+    
+    def toggle_whitelist(self):
+        pass
+
+    def add_player_to_whitelist(self):
+        pass
+    
+    def update_view_distance(self):
+        pass
+
+    def update_simulation_distance(self):
+        pass
     
     def open_player_context_menu(self, pos):
         item = self.players_info_box.itemAt(pos)

@@ -126,6 +126,10 @@ QLabel {
     font-size: 27px;
 }
 
+#optionText {
+    font-size: 20px;
+}
+
 #lineEdit {
     font-size: 16px;
 }
