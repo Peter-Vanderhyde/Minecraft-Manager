@@ -21,8 +21,8 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
-VERSION = "v2.4.0"
+TESTING = True
+VERSION = "v2.4.1"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -277,6 +277,9 @@ class ServerManagerApp(QMainWindow):
         self.world_properties_button.clicked.connect(self.show_edit_properties_page)
         self.world_mods_button = QPushButton("Mods")
         self.world_mods_button.clicked.connect(self.open_mods_folder)
+        self.modrinth_button = QPushButton("Modrinth")
+        self.modrinth_button.setObjectName("blueButton")
+        self.modrinth_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.modrinth.com")))
 
         separator2 = QFrame(self)
         separator2.setFrameShape(QFrame.Shape.HLine)
@@ -290,24 +293,23 @@ class ServerManagerApp(QMainWindow):
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
-        functions_layout.addWidget(self.start_button, 1, 0, 1, 1)
 
-        # Create a horizontal layout for the dropdown and add it to the grid
         dropdown_layout = QVBoxLayout()
         self.dropdown = QComboBox()
         self.dropdown.currentTextChanged.connect(self.set_selected_world_version)
-        dropdown_layout.addWidget(self.dropdown)  # Dropdown for start options
-        dropdown_layout.addWidget(self.world_version_label)
-        functions_layout.addLayout(dropdown_layout, 1, 1, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
-        functions_layout.setColumnStretch(1, 1)
+        dropdown_layout.addWidget(self.dropdown)  # Dropdown for world options
+        dropdown_layout.addWidget(self.world_version_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        functions_layout.addLayout(dropdown_layout, 1, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        functions_layout.addWidget(self.stop_button, 2, 0, 1, 1)  # Spanning two columns
+        functions_layout.addWidget(self.start_button, 2, 0, 1, 1)
+        functions_layout.addWidget(self.stop_button, 2, 1, 1, 1)
         functions_layout.addWidget(separator, 3, 0, 1, 2)
         functions_layout.addWidget(self.world_properties_button, 4, 0, 1, 1)
         functions_layout.addWidget(self.world_mods_button, 4, 1, 1, 1)
-        functions_layout.addWidget(separator2, 5, 0, 1, 2)
-        functions_layout.addWidget(self.world_manager_button, 6, 0, 1, 2)
-        functions_layout.addWidget(self.open_folder_button, 7, 0, 1, 2)
+        functions_layout.addWidget(self.modrinth_button, 5, 0, 1, 2)
+        functions_layout.addWidget(separator2, 6, 0, 1, 2)
+        functions_layout.addWidget(self.world_manager_button, 7, 0, 1, 2)
+        functions_layout.addWidget(self.open_folder_button, 8, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -840,9 +842,15 @@ class ServerManagerApp(QMainWindow):
         back_layout.addStretch(1)
         center_layout.addLayout(back_layout)
 
+        right_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
         page_layout.addStretch(1)
         page_layout.addLayout(center_layout)
-        page_layout.addStretch(1)
+        page_layout.addLayout(right_layout)
+        page_layout.setStretch(2, 1)
 
         new_world_type_page = QWidget()
         new_world_type_page.setLayout(page_layout)
@@ -1461,6 +1469,7 @@ class ServerManagerApp(QMainWindow):
                         self.world_properties_button.setEnabled(True)
                         if fabric:
                             self.world_mods_button.setEnabled(True)
+                            self.modrinth_button.show()
                 else:
                     with open(self.path(self.server_path, "server.properties"), 'r') as serv:
                         serv_lines = serv.readlines()
@@ -1732,12 +1741,15 @@ class ServerManagerApp(QMainWindow):
                     self.world_mods_button.setEnabled(True)
                 else:
                     self.world_mods_button.setEnabled(False)
+                self.modrinth_button.show()
             else:
                 self.world_mods_button.setEnabled(False)
+                self.modrinth_button.hide()
         else:
             self.world_version_label.setText("")
             self.world_properties_button.setEnabled(False)
             self.world_mods_button.setEnabled(False)
+            self.modrinth_button.hide()
     
     def set_server_path(self):
         path = self.server_folder_path_entry.text()
@@ -1783,6 +1795,7 @@ class ServerManagerApp(QMainWindow):
         self.open_folder_button.setEnabled(False)
         self.world_properties_button.setEnabled(False)
         self.world_mods_button.setEnabled(False)
+        self.modrinth_button.hide()
 
         self.log_queue.put("Downloading latest server.jar file...")
         self.show_main_page(ignore_load=True)
