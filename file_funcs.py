@@ -15,7 +15,13 @@ def load_settings(log_queue, file_lock):
         "names": {},
         "server folder": {
             "path": "",
-            "worlds": {}
+            "worlds": {},
+            "world order": []
+        },
+        "universal settings": {
+            "whitelist enabled": False,
+            "view distance": 10,
+            "simulation distance": 10
         }
     }
     try:
@@ -26,12 +32,14 @@ def load_settings(log_queue, file_lock):
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return "", {}, "", {}
+        return "", {}, "", {}, [], {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
     server_path = data["server folder"].get("path")
     worlds = data["server folder"].get("worlds")
+    world_order = data["server folder"].get("world order", [])
+    universal_settings = data.get("universal settings")
     
     if worlds is not None:
         if server_path:
@@ -45,9 +53,8 @@ def load_settings(log_queue, file_lock):
             ips = {}
         if host_ip is None:
             host_ip = ""
-        update_settings(file_lock, ips, server_path, worlds, ip=host_ip)
-    
-    return host_ip, ips, server_path, worlds
+        update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=host_ip)
+    return host_ip, ips, server_path, worlds, world_order, universal_settings
 
 def load_worlds(server_path, worlds, log_queue):
     # Add worlds folder if not already present
@@ -81,10 +88,10 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_settings(file_lock, ips, server_path, worlds, ip=""):
+def update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=""):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
-            json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}}, f, indent=4)
+            json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds, "world order": world_order}, "universal settings": universal_settings}, f, indent=4)
     save_all_world_properties(server_path, worlds)
 
 def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, server_path, log_queue, seed=None):
@@ -95,6 +102,15 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
         if "eula=false" in content:
             log_queue.put("<font color='orange'>WARNING: The EULA has not been accepted yet! Please open eula.txt.</font>")
             return False
+        
+        with open("manager_settings.json", 'r') as manager_settings:
+            settings = json.loads(manager_settings.read())
+        
+        universal_settings = settings.get("universal settings", {
+            "whitelist enabled": False,
+            "view distance": 10,
+            "simulation distance": 10
+        })
         
         with open(os.path.join(server_path, "server.properties"), 'r') as properties:
             lines = properties.readlines()
@@ -109,6 +125,9 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
         found_port = False
         found_fabric = False
         found_version = False
+        found_whitelist = False
+        found_view = False
+        found_simulation = False
         for i, line in enumerate(lines):
             if line.startswith("level-name="):
                 lines[i] = f"level-name=worlds/{world}\n"
@@ -149,6 +168,15 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
             elif line.startswith("version="):
                 lines[i] = f"version={version}\n"
                 found_version = True
+            elif line.startswith("white-list="):
+                lines[i] = f"white-list={"true" if universal_settings.get("whitelist enabled") else "false"}\n"
+                found_whitelist = True
+            elif line.startswith("view-distance="):
+                lines[i] = f"view-distance={str(min(32, max(3, universal_settings.get("view distance")))) or "10"}\n"
+                found_view = True
+            elif line.startswith("simulation-distance="):
+                lines[i] = f"simulation-distance={str(min(32, max(3, universal_settings.get("simulation distance")))) or "10"}\n"
+                found_simulation = True
         
         if not found_world:
             lines.append(f"level-name=worlds/{world}\n")
@@ -170,8 +198,16 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
             lines.append("enable-query=true\n")
         if not found_port:
             lines.append("query.port=25565\n")
+        if not found_fabric:
+            lines.append("fabric=false\n")
         if not found_version:
             lines.append(f"version={version}\n")
+        if not found_whitelist:
+            lines.append(f"white-list=false\n")
+        if not found_view:
+            lines.append(f"view-distance=10\n")
+        if not found_simulation:
+            lines.append(f"simulation-distance=10\n")
         
         with open(os.path.join(server_path, "server.properties"), 'w') as properties:
             properties.writelines(lines)
@@ -433,6 +469,7 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
         old_settings = settings.read()
     old_settings = json.loads(old_settings)
     old_props = old_settings["server folder"]["worlds"].get(world)
+    old_universal = old_settings.get("universal settings")
     
     props = {}
     was_hardcore = (old_props.get("gamemode", "Survival") == "Hardcore")
@@ -459,6 +496,22 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
             props["fabric"] = True if line.strip().split("=")[1] == "true" else False
         elif line.startswith("level-type=") and old_props.get("seed") is not None:
             props["level-type"] = line.strip().split(":")[1].capitalize().replace('_', ' ')
+        elif line.startswith("white-list="):
+            old_universal["whitelist enabled"] = True if line.strip().split("=")[1] == "true" else False
+        elif line.startswith("view-distance="):
+            distance = line.strip().split("=")[1]
+            if distance:
+                try:
+                    old_universal["view distance"] = min(32, max(3, int(distance)))
+                except:
+                    pass
+        elif line.startswith("simulation-distance="):
+            distance = line.strip().split("=")[1]
+            if distance:
+                try:
+                    old_universal["simulation distance"] = min(32, max(3, int(distance)))
+                except:
+                    pass
     
     if changed:
         if not was_hardcore:
@@ -491,5 +544,76 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
     
     worlds = old_settings["server folder"]["worlds"]
     worlds[world] = old_props
+    world_order = old_settings["server folder"].get("world order", [])
     
-    update_settings(file_lock, ips, server_folder, worlds, host_ip)
+    update_settings(file_lock, ips, server_folder, worlds, world_order, old_universal, host_ip)
+    update_all_universal_settings(server_folder)
+    return old_universal
+
+def update_all_universal_settings(server_folder):
+    with open("manager_settings.json", 'r') as manager_settings:
+        settings = json.loads(manager_settings.read())
+    
+    world_names = settings.get("server folder").get("worlds").keys()
+    universals = settings.get("universal settings")
+    for world in world_names:
+        try:
+            with open(os.path.join(server_folder, "worlds", world, "saved_properties.properties"), 'r') as props:
+                lines = props.readlines()
+            
+            found_whitelist = False
+            found_view = False
+            found_simulation = False
+            for i, line in enumerate(lines):
+                if line.startswith("white-list="):
+                    lines[i] = f"white-list={"true" if universals.get("whitelist enabled") else "false"}\n"
+                    found_whitelist = True
+                elif line.startswith("view-distance="):
+                    lines[i] = f"view-distance={str(min(32, max(3, universals.get("view distance")))) or "10"}\n"
+                    found_view = True
+                elif line.startswith("simulation-distance="):
+                    lines[i] = f"simulation-distance={str(min(32, max(3, universals.get("simulation distance")))) or "10"}\n"
+                    found_simulation = True
+            
+            if not found_whitelist:
+                lines.append("white-list=false\n")
+            if not found_view:
+                lines.append("view-distance=10\n")
+            if not found_simulation:
+                lines.append("simulation-distance=10\n")
+            
+            with open(os.path.join(server_folder, "worlds", world, "saved_properties.properties"), 'w') as props:
+                props.writelines(lines)
+        except:
+            pass
+
+def apply_universal_settings(server_folder):
+    with open("manager_settings.json", 'r') as settings:
+        universal = json.loads(settings.read()).get("universal settings")
+    
+    with open(os.path.join(server_folder, "server.properties"), 'r') as f:
+        lines = f.readlines()
+    
+    found_whitelist = False
+    found_view = False
+    found_simulation = False
+    for i, line in enumerate(lines):
+        if line.startswith("white-list="):
+            lines[i] = f"white-list={"true" if universal.get("whitelist enabled") else "false"}\n"
+            found_whitelist = True
+        elif line.startswith("view-distance="):
+            lines[i] = f"view-distance={str(min(32, max(3, universal.get("view distance")))) or "10"}\n"
+            found_view = True
+        elif line.startswith("simulation-distance="):
+            lines[i] = f"simulation-distance={str(min(32, max(3, universal.get("simulation distance")))) or "10"}\n"
+            found_simulation = True
+        
+    if not found_whitelist:
+        lines.append("white-list=false\n")
+    if not found_view:
+        lines.append("view-distance=10\n")
+    if not found_simulation:
+        lines.append("simulation-distance=10\n")
+    
+    with open(os.path.join(server_folder, "server.properties"), 'w') as f:
+        f.writelines(lines)

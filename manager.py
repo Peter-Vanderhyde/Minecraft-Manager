@@ -10,7 +10,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject
 
 TESTING = False
-VERSION = "v2.4.0"
+VERSION = "v2.4.1"
 
 if TESTING:
     STYLE_PATH = "Styles"

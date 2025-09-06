@@ -14,6 +14,18 @@ QPushButton {
     border-radius: 8px;
 }
 
+QPushButton[variant='red'] {
+    background-color: darkred;
+    border: none;
+    color: lightcoral;
+    padding: 5px 15px;
+    text-align: center;
+    text-decoration: none;
+    font-size: 16px;
+    margin: 4px 2px;
+    border-radius: 8px;
+}
+
 #yellowButton, #smallYellowButton {
     background-color: #d4af37;  /* Yellow background color */
 }
@@ -30,6 +42,10 @@ QPushButton {
 
 QPushButton:hover {
     background-color: #45a049; /* Change background color on hover */
+}
+
+QPushButton:hover[variant='red'] {
+    background-color: #780000;
 }
 
 #yellowButton:hover, #smallYellowButton:hover {
@@ -124,6 +140,10 @@ QLabel {
 
 #mediumText {
     font-size: 27px;
+}
+
+#optionText {
+    font-size: 20px;
 }
 
 #lineEdit {
