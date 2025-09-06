@@ -167,11 +167,14 @@ class ServerManagerApp(QMainWindow):
             self.message_timer.stop()
             self.show_server_entry_page()
         else:
-            if not self.check_eula():
+            eula_result = self.check_eula()
+            if eula_result == False:
                 self.show_error_page("By accepting, you are indicating your agreement<br> to Minecraft's EULA.",
                                     "(https://aka.ms/MinecraftEULA)", eula=True)
-            else:
+            elif eula_result:
                 self.start_manager_server()
+            elif eula_result is None:
+                return
 
     def init_ui(self):
         # Central widget to hold everything
@@ -868,72 +871,80 @@ class ServerManagerApp(QMainWindow):
         center_layout = QVBoxLayout()
         center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        commands_label = QLabel("Admin Settings")
-        commands_label.setObjectName("largeText")
+        self.commands_label = QLabel("Admin Settings")
+        self.commands_label.setObjectName("largeText")
         # stretch here
-        commands_warning_label = QLabel("Any changes will require a<br>server restart to take effect.")
-        commands_warning_label.hide()
-        whitelist_toggle_label = QLabel("Whitelist: ")
-        whitelist_toggle_label.setObjectName("optionText")
-        whitelist_toggle_button = QPushButton("Disabled")
-        whitelist_toggle_button.setObjectName("redButton")
-        whitelist_toggle_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        whitelist_toggle_button.adjustSize()
-        whitelist_toggle_button.clicked.connect(self.toggle_whitelist)
-        whitelist_add_label = QLabel("Add to whitelist:")
-        whitelist_add_label.setObjectName("optionText")
-        whitelist_add_button = QPushButton("Add")
-        whitelist_add_button.setObjectName("smallYellowButton")
-        whitelist_add_button.clicked.connect(self.add_player_to_whitelist)
-        whitelist_add_button.setEnabled(False)
-        whitelist_add_textbox = QLineEdit("")
-        whitelist_add_textbox.setPlaceholderText("Username")
-        whitelist_add_textbox.returnPressed.connect(self.add_player_to_whitelist)
-        whitelist_add_textbox.textChanged.connect(lambda: whitelist_add_button.setEnabled(whitelist_add_textbox.text() != ""))
-        view_distance_label = QLabel("View Distance: ")
-        view_distance_label.setObjectName("optionText")
-        view_distance_textbox = QLineEdit("")
-        view_distance_textbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        view_distance_textbox.setPlaceholderText("3-32")
-        view_distance_textbox.setMaxLength(2)
-        view_distance_textbox.setMaximumWidth(100)
-        view_distance_textbox.setObjectName("optionText")
-        view_distance_textbox.returnPressed.connect(self.update_view_distance)
-        simulation_distance_label = QLabel("Simulation Distance: ")
-        simulation_distance_label.setObjectName("optionText")
-        simulation_distance_textbox = QLineEdit("")
-        simulation_distance_textbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        simulation_distance_textbox.setPlaceholderText("3-32")
-        simulation_distance_textbox.setMaxLength(2)
-        simulation_distance_textbox.setMaximumWidth(100)
-        simulation_distance_textbox.setObjectName("optionText")
-        simulation_distance_textbox.returnPressed.connect(self.update_simulation_distance)
-        commands_back_button = QPushButton("Back")
-        commands_back_button.setObjectName("smallRedButton")
-        commands_back_button.clicked.connect(self.show_main_page)
+        self.commands_warning_label = QLabel("Any changes will require a<br>server restart to take effect.")
+        self.commands_warning_label.setObjectName("details")
+        self.commands_warning_label.hide()
+        self.whitelist_toggle_label = QLabel("Whitelist: ")
+        self.whitelist_toggle_label.setObjectName("optionText")
+        self.whitelist_toggle_button = QPushButton("Disabled")
+        self.whitelist_toggle_button.setProperty("variant", "red")
+        self.whitelist_toggle_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.whitelist_toggle_button.adjustSize()
+        self.whitelist_toggle_button.clicked.connect(self.toggle_whitelist)
+        self.whitelist_add_label = QLabel("Add to whitelist:")
+        self.whitelist_add_label.setObjectName("optionText")
+        self.whitelist_add_button = QPushButton("Add")
+        self.whitelist_add_button.setObjectName("smallYellowButton")
+        self.whitelist_add_button.clicked.connect(self.add_player_to_whitelist)
+        self.whitelist_add_button.setEnabled(False)
+        self.whitelist_add_textbox = QLineEdit("")
+        self.whitelist_add_textbox.setPlaceholderText("Username")
+        self.whitelist_add_textbox.returnPressed.connect(self.add_player_to_whitelist)
+        self.whitelist_add_textbox.textChanged.connect(lambda: self.whitelist_add_button.setEnabled(self.whitelist_add_textbox.text() != ""))
+        self.view_distance_label = QLabel("View Distance: ")
+        self.view_distance_label.setObjectName("optionText")
+        self.view_distance_textbox = QLineEdit("")
+        self.view_distance_textbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.view_distance_textbox.setPlaceholderText("3-32")
+        self.view_distance_textbox.setMaxLength(2)
+        self.view_distance_textbox.setMaximumWidth(100)
+        self.view_distance_textbox.setObjectName("optionText")
+        self.view_distance_textbox.editingFinished.connect(lambda: self.view_distance_textbox.setText(
+                                                                                str(min(32, max(3, int(self.view_distance_textbox.text()))))))
+        self.view_distance_textbox.textChanged.connect(lambda: self.view_distance_textbox.setText(
+            self.view_distance_textbox.text() if self.view_distance_textbox.text().isdigit() else self.view_distance_textbox.text()[:-1]
+        ))
+        self.simulation_distance_label = QLabel("Simulation Distance: ")
+        self.simulation_distance_label.setObjectName("optionText")
+        self.simulation_distance_textbox = QLineEdit("")
+        self.simulation_distance_textbox.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.simulation_distance_textbox.setPlaceholderText("3-32")
+        self.simulation_distance_textbox.setMaxLength(2)
+        self.simulation_distance_textbox.setMaximumWidth(100)
+        self.simulation_distance_textbox.setObjectName("optionText")
+        self.simulation_distance_textbox.editingFinished.connect(lambda: self.simulation_distance_textbox.setText(
+                                                                                str(min(32, max(3, int(self.simulation_distance_textbox.text()))))))
+        self.simulation_distance_textbox.textChanged.connect(lambda: self.simulation_distance_textbox.setText(
+            self.simulation_distance_textbox.text() if self.simulation_distance_textbox.text().isdigit() else self.simulation_distance_textbox.text()[:-1]
+        ))
+        self.commands_back_button = QPushButton("Save")
+        self.commands_back_button.clicked.connect(self.leave_commands_page)
 
-        center_layout.addWidget(commands_label, 1, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
-        center_layout.addWidget(commands_warning_label)
+        center_layout.addWidget(self.commands_label, 1, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
         hor_box = QHBoxLayout()
-        hor_box.addWidget(whitelist_toggle_label)
-        hor_box.addWidget(whitelist_toggle_button)
+        hor_box.addWidget(self.whitelist_toggle_label)
+        hor_box.addWidget(self.whitelist_toggle_button)
         center_layout.addLayout(hor_box)
         hor_box = QHBoxLayout()
-        hor_box.addWidget(whitelist_add_label)
-        hor_box.addWidget(whitelist_add_textbox, 1)
-        hor_box.addWidget(whitelist_add_button)
+        hor_box.addWidget(self.whitelist_add_label)
+        hor_box.addWidget(self.whitelist_add_textbox, 1)
+        hor_box.addWidget(self.whitelist_add_button)
         center_layout.addLayout(hor_box)
         hor_box = QHBoxLayout()
-        hor_box.addWidget(view_distance_label)
-        hor_box.addWidget(view_distance_textbox)
+        hor_box.addWidget(self.view_distance_label)
+        hor_box.addWidget(self.view_distance_textbox)
         center_layout.addLayout(hor_box)
         hor_box = QHBoxLayout()
-        hor_box.addWidget(simulation_distance_label)
-        hor_box.addWidget(simulation_distance_textbox)
+        hor_box.addWidget(self.simulation_distance_label)
+        hor_box.addWidget(self.simulation_distance_textbox)
         center_layout.addLayout(hor_box)
+        center_layout.addWidget(self.commands_warning_label, alignment=Qt.AlignmentFlag.AlignCenter)
         hor_box = QHBoxLayout()
         hor_box.addStretch(1)
-        hor_box.addWidget(commands_back_button)
+        hor_box.addWidget(self.commands_back_button)
         hor_box.addStretch(1)
         center_layout.addLayout(hor_box)
         center_layout.addStretch(1)
@@ -1134,7 +1145,25 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(8)
     
     def show_commands_page(self):
+        if self.status == "online" and not self.is_api_compatible(self.world_version):
+            self.commands_warning_label.show()
+        else:
+            self.commands_warning_label.hide()
+        if self.universal_settings.get("whitelist enabled"):
+            self.whitelist_toggle_button.setProperty("variant", "")
+            self.whitelist_toggle_button.setText("Enabled")
+        else:
+            self.whitelist_toggle_button.setProperty("variant", "red")
+            self.whitelist_toggle_button.setText("Disabled")
         
+        st = self.whitelist_toggle_button.style()
+        st.unpolish(self.whitelist_toggle_button)
+        st.polish(self.whitelist_toggle_button)
+
+        self.whitelist_add_textbox.clear()
+
+        self.view_distance_textbox.setText(str(self.universal_settings.get("view distance")))
+        self.simulation_distance_textbox.setText(str(self.universal_settings.get("simulation distance")))
         self.stacked_layout.setCurrentIndex(9)
     
     def save_properties_edit(self):
@@ -1358,6 +1387,11 @@ class ServerManagerApp(QMainWindow):
                     "level-type": data.get("level-type", "Normal")
                 }
                 self.worlds[name] = new_data
+                if os.path.exists(self.path(self.server_path, "worlds", name)):
+                    file_funcs.save_world_properties(self.path(self.server_path, "worlds", name), new_data)
+                
+                if os.path.isfile(self.path(self.server_path, "worlds", name, "version.txt")):
+                    os.remove(self.path(self.server_path, "worlds", name, "version.txt"))
         
         if self.universal_settings in [{}, None]:
             self.universal_settings = {
@@ -1369,11 +1403,6 @@ class ServerManagerApp(QMainWindow):
         
         if outdated:
             file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.host_ip)
-            if os.path.exists(self.path(self.server_path, "worlds", name)):
-                file_funcs.save_world_properties(self.path(self.server_path, "worlds", name), new_data)
-            
-            if os.path.isfile(self.path(self.server_path, "worlds", name, "version.txt")):
-                os.remove(self.path(self.server_path, "worlds", name, "version.txt"))
         
     
     def message_entered(self):
@@ -1907,6 +1936,7 @@ class ServerManagerApp(QMainWindow):
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(False)
         self.world_manager_button.setEnabled(False)
+        self.commands_button.setEnabled(False)
         self.open_folder_button.setEnabled(False)
         self.world_properties_button.setEnabled(False)
         self.world_mods_button.setEnabled(False)
@@ -1930,6 +1960,7 @@ class ServerManagerApp(QMainWindow):
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(True)
             self.world_manager_button.setEnabled(True)
+            self.commands_button.setEnabled(True)
             self.open_folder_button.setEnabled(True)
             
             if not self.check_eula():
@@ -1942,12 +1973,16 @@ class ServerManagerApp(QMainWindow):
         QDesktopServices.openUrl(QUrl("https://aka.ms/MinecraftEULA"))
 
     def check_eula(self):
-        with open(self.path(self.server_path, "eula.txt"), 'r') as f:
-            content = f.read()
-        if "eula=false" in content:
-            return False
-        elif "eula=true" in content:
-            return True
+        try:
+            with open(self.path(self.server_path, "eula.txt"), 'r') as f:
+                content = f.read()
+            if "eula=false" in content:
+                return False
+            elif "eula=true" in content:
+                return True
+        except FileNotFoundError:
+            self.show_error_page("Unable to find server eula.txt file.", "", eula=False)
+            return None
     
     def accepted_eula(self):
         with open(self.path(self.server_path, "eula.txt"), 'r') as f:
@@ -2235,16 +2270,51 @@ class ServerManagerApp(QMainWindow):
                 return
     
     def toggle_whitelist(self):
-        pass
+        enabled = not self.whitelist_toggle_button.text() == "Enabled"
+        self.whitelist_toggle_button.setProperty("variant", "red" * (not enabled))
+        self.whitelist_toggle_button.setText("Enabled" if enabled else "Disabled")
+        
+        st = self.whitelist_toggle_button.style()
+        st.unpolish(self.whitelist_toggle_button)
+        st.polish(self.whitelist_toggle_button)
+    
+    def set_whitelist(self):
+        enabled = self.whitelist_toggle_button.text() == "Enabled"
+        self.universal_settings["whitelist enabled"] = enabled
+
+        if self.status == "online" and self.bus is not None:
+            self.bus.enable_whitelist.emit(enabled)
 
     def add_player_to_whitelist(self):
-        pass
+        player = self.whitelist_add_textbox.text()
+        if player:
+            if self.status == "online" and self.bus is not None:
+                self.bus.whitelist_player.emit(player, False)
+            
+            self.whitelist_add_textbox.clear()
     
     def update_view_distance(self):
-        pass
+        distance = self.view_distance_textbox.text()
+        if distance and distance.isdigit():
+            distance = min(32, max(3, int(distance)))
+            self.universal_settings["view distance"] = int(distance)
 
     def update_simulation_distance(self):
-        pass
+        distance = self.simulation_distance_textbox.text()
+        if distance and distance.isdigit():
+            distance = min(32, max(3, int(distance)))
+            self.universal_settings["simulation distance"] = int(distance)
+    
+    def leave_commands_page(self):
+        self.set_whitelist()
+        self.update_view_distance()
+        self.update_simulation_distance()
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.host_ip)
+        file_funcs.update_all_universal_settings(self.server_path)
+        if self.status == "online" and self.bus is not None:
+            self.bus.view_distance.emit(int(self.universal_settings["view distance"]))
+            self.bus.simulation_distance.emit(int(self.universal_settings["simulation distance"]))
+        self.show_main_page()
     
     def open_player_context_menu(self, pos):
         item = self.players_info_box.itemAt(pos)

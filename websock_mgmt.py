@@ -19,21 +19,27 @@ class MgmtBus(QObject):
 
     close_server = pyqtSignal()
     op_player = pyqtSignal(str, bool)
+    enable_whitelist = pyqtSignal(bool)
     whitelist_player = pyqtSignal(str, bool)
     kick_player = pyqtSignal(str)
     ban_player = pyqtSignal(str)
     notify_player = pyqtSignal(str, str)
     msg_player = pyqtSignal(str, str)
+    view_distance = pyqtSignal(int)
+    simulation_distance = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
         self.close_server.connect(self.send_close)
         self.op_player.connect(self.send_op)
+        self.enable_whitelist.connect(self.send_whitelist_enable)
         self.whitelist_player.connect(self.send_whitelist)
         self.kick_player.connect(self.send_kick)
         self.ban_player.connect(self.send_ban)
         self.notify_player.connect(self.send_notification_to_player)
         self.msg_player.connect(self.send_message_to_player)
+        self.view_distance.connect(self.send_view_distance)
+        self.simulation_distance.connect(self.send_simulation_distance)
         self.cmd_queue = queue.Queue()
         self._shutdown = asyncio.Event()
     
@@ -222,6 +228,9 @@ class MgmtBus(QObject):
         else:
             self.assemble_data(f"minecraft:operators/remove", [{"name": name}])
     
+    def send_whitelist_enable(self, enable):
+        self.assemble_data(f"minecraft:serversettings/use_allowlist/set", enable)
+    
     def send_whitelist(self, name, remove=False):
         command = "add" if not remove else "remove"
         self.assemble_data(f"minecraft:allowlist/{command}", [{"name": name}])
@@ -237,3 +246,9 @@ class MgmtBus(QObject):
     
     def send_message_to_player(self, name, msg):
         self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": False})
+    
+    def send_view_distance(self, distance):
+        self.assemble_data(f"minecraft:serversettings/view_distance/set", distance)
+    
+    def send_simulation_distance(self, distance):
+        self.assemble_data(f"minecraft:serversettings/simulation_distance/set", distance)

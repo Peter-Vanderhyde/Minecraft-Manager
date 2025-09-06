@@ -31,7 +31,7 @@ def load_settings(log_queue, file_lock):
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return "", {}, "", {}
+        return "", {}, "", {}, {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
@@ -52,7 +52,6 @@ def load_settings(log_queue, file_lock):
         if host_ip is None:
             host_ip = ""
         update_settings(file_lock, ips, server_path, worlds, universal_settings, ip=host_ip)
-    
     return host_ip, ips, server_path, worlds, universal_settings
 
 def load_worlds(server_path, worlds, log_queue):
@@ -171,10 +170,10 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
                 lines[i] = f"white-list={"true" if universal_settings.get("whitelist enabled") else "false"}\n"
                 found_whitelist = True
             elif line.startswith("view-distance="):
-                lines[i] = f"view-distance={str(universal_settings.get("view distance")) or "10"}\n"
+                lines[i] = f"view-distance={str(min(32, max(3, universal_settings.get("view distance")))) or "10"}\n"
                 found_view = True
             elif line.startswith("simulation-distance="):
-                lines[i] = f"simulation-distance={str(universal_settings.get("simulation distance")) or "10"}\n"
+                lines[i] = f"simulation-distance={str(min(32, max(3, universal_settings.get("simulation distance")))) or "10"}\n"
                 found_simulation = True
         
         if not found_world:
@@ -501,14 +500,14 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
             distance = line.strip().split("=")[1]
             if distance:
                 try:
-                    old_universal["view distance"] = int(distance)
+                    old_universal["view distance"] = min(32, max(3, int(distance)))
                 except:
                     pass
         elif line.startswith("simulation-distance="):
             distance = line.strip().split("=")[1]
             if distance:
                 try:
-                    old_universal["simulation distance"] = int(distance)
+                    old_universal["simulation distance"] = min(32, max(3, int(distance)))
                 except:
                     pass
     
@@ -567,10 +566,10 @@ def update_all_universal_settings(server_folder):
                     lines[i] = f"white-list={"true" if universals.get("whitelist enabled") else "false"}\n"
                     found_whitelist = True
                 elif line.startswith("view-distance="):
-                    lines[i] = f"view-distance={str(universals.get("view distance")) or "10"}\n"
+                    lines[i] = f"view-distance={str(min(32, max(3, universals.get("view distance")))) or "10"}\n"
                     found_view = True
                 elif line.startswith("simulation-distance="):
-                    lines[i] = f"simulation-distance={str(universals.get("simulation distance")) or "10"}\n"
+                    lines[i] = f"simulation-distance={str(min(32, max(3, universals.get("simulation distance")))) or "10"}\n"
                     found_simulation = True
             
             if not found_whitelist:
@@ -582,7 +581,7 @@ def update_all_universal_settings(server_folder):
             
             with open(os.path.join(server_folder, "worlds", world, "saved_properties.properties"), 'w') as props:
                 props.writelines(lines)
-        except FileNotFoundError:
+        except:
             pass
 
 def apply_universal_settings(server_folder):
@@ -600,10 +599,10 @@ def apply_universal_settings(server_folder):
             lines[i] = f"white-list={"true" if universal.get("whitelist enabled") else "false"}\n"
             found_whitelist = True
         elif line.startswith("view-distance="):
-            lines[i] = f"view-distance={str(universal.get("view distance")) or "10"}\n"
+            lines[i] = f"view-distance={str(min(32, max(3, universal.get("view distance")))) or "10"}\n"
             found_view = True
         elif line.startswith("simulation-distance="):
-            lines[i] = f"simulation-distance={str(universal.get("simulation distance")) or "10"}\n"
+            lines[i] = f"simulation-distance={str(min(32, max(3, universal.get("simulation distance")))) or "10"}\n"
             found_simulation = True
         
     if not found_whitelist:
