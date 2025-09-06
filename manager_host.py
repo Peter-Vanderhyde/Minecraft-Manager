@@ -1408,7 +1408,7 @@ class ServerManagerApp(QMainWindow):
             outdated = True
         
         if outdated:
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.host_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         
     
     def message_entered(self):
@@ -2340,7 +2340,7 @@ class ServerManagerApp(QMainWindow):
         self.set_whitelist()
         self.update_view_distance()
         self.update_simulation_distance()
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.host_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         file_funcs.update_all_universal_settings(self.server_path)
         if self.status == "online" and self.bus is not None:
             self.bus.view_distance.emit(int(self.universal_settings["view distance"]))
@@ -2354,7 +2354,7 @@ class ServerManagerApp(QMainWindow):
         self.dropdown.clear()
         self.dropdown.addItems(self.world_order)
         self.dropdown.setCurrentText(current_selected)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.host_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
     
     def open_player_context_menu(self, pos):
         item = self.players_info_box.itemAt(pos)
