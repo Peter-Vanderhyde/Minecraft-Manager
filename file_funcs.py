@@ -15,7 +15,8 @@ def load_settings(log_queue, file_lock):
         "names": {},
         "server folder": {
             "path": "",
-            "worlds": {}
+            "worlds": {},
+            "world order": []
         },
         "universal settings": {
             "whitelist enabled": False,
@@ -31,12 +32,13 @@ def load_settings(log_queue, file_lock):
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return "", {}, "", {}, {}
+        return "", {}, "", {}, [], {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
     server_path = data["server folder"].get("path")
     worlds = data["server folder"].get("worlds")
+    world_order = data["server folder"].get("world order", [])
     universal_settings = data.get("universal settings")
     
     if worlds is not None:
@@ -51,8 +53,8 @@ def load_settings(log_queue, file_lock):
             ips = {}
         if host_ip is None:
             host_ip = ""
-        update_settings(file_lock, ips, server_path, worlds, universal_settings, ip=host_ip)
-    return host_ip, ips, server_path, worlds, universal_settings
+        update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=host_ip)
+    return host_ip, ips, server_path, worlds, world_order, universal_settings
 
 def load_worlds(server_path, worlds, log_queue):
     # Add worlds folder if not already present
@@ -86,10 +88,10 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_settings(file_lock, ips, server_path, worlds, universal_settings, ip=""):
+def update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=""):
     with file_lock:
         with open("manager_settings.json", 'w') as f:
-            json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds}, "universal settings": universal_settings}, f, indent=4)
+            json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds, "world order": world_order}, "universal settings": universal_settings}, f, indent=4)
     save_all_world_properties(server_path, worlds)
 
 def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, server_path, log_queue, seed=None):
@@ -542,8 +544,9 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
     
     worlds = old_settings["server folder"]["worlds"]
     worlds[world] = old_props
+    world_order = old_settings["server folder"].get("world order", [])
     
-    update_settings(file_lock, ips, server_folder, worlds, old_universal, host_ip)
+    update_settings(file_lock, ips, server_folder, worlds, world_order, old_universal, host_ip)
     update_all_universal_settings(server_folder)
     return old_universal
 

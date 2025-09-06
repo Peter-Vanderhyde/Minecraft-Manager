@@ -107,6 +107,7 @@ class ServerManagerApp(QMainWindow):
         self.world = ""
         self.world_version = ""
         self.worlds = {}
+        self.world_order = []
         self.universal_settings = {}
         self.curr_players = []
         self.log_queue = queue.Queue()
@@ -159,7 +160,7 @@ class ServerManagerApp(QMainWindow):
                 return
 
 
-        self.host_ip, self.ips, self.server_path, self.worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
         self.clear_log_queue()
         
@@ -1079,7 +1080,7 @@ class ServerManagerApp(QMainWindow):
     
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            saved_ip, self.ips, self.server_path, self.worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+            saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
@@ -1161,6 +1162,15 @@ class ServerManagerApp(QMainWindow):
         st.polish(self.whitelist_toggle_button)
 
         self.whitelist_add_textbox.clear()
+
+        if not self.world_version or self.status == "offline" or not self.is_api_compatible(self.world_version):
+            self.whitelist_add_label.hide()
+            self.whitelist_add_textbox.hide()
+            self.whitelist_add_button.hide()
+        elif self.status == "online" and self.is_api_compatible(self.world_version):
+            self.whitelist_add_label.show()
+            self.whitelist_add_textbox.show()
+            self.whitelist_add_button.show()
 
         self.view_distance_textbox.setText(str(self.universal_settings.get("view distance")))
         self.simulation_distance_textbox.setText(str(self.universal_settings.get("simulation distance")))
@@ -1251,7 +1261,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
+                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -1393,6 +1403,11 @@ class ServerManagerApp(QMainWindow):
                 if os.path.isfile(self.path(self.server_path, "worlds", name, "version.txt")):
                     os.remove(self.path(self.server_path, "worlds", name, "version.txt"))
         
+        if self.world_order == [] and len(self.worlds.keys()) > 0:
+            outdated = True
+            for world in self.worlds.keys():
+                self.world_order.append(world)
+        
         if self.universal_settings in [{}, None]:
             self.universal_settings = {
                 "whitelist enabled": False,
@@ -1402,7 +1417,7 @@ class ServerManagerApp(QMainWindow):
             outdated = True
         
         if outdated:
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.host_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.host_ip)
         
     
     def message_entered(self):
@@ -1571,7 +1586,7 @@ class ServerManagerApp(QMainWindow):
                 else:
                     if seed is not None:
                         self.worlds[world].pop("seed")
-                        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
+                        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
             
                 os.system(f'start "" /min cmd /C "title Server Ignition && cd /d "{self.server_path}" && run.bat"')
                 loop = True
@@ -1602,6 +1617,7 @@ class ServerManagerApp(QMainWindow):
                 
                 self.world = world
                 self.world_version = version
+                self.move_world_to_top(world)
 
                 if not os.path.isfile(self.path(path, "saved_properties.properties")):
                     lines = []
@@ -1869,7 +1885,7 @@ class ServerManagerApp(QMainWindow):
     
     def set_worlds_list(self):
         self.dropdown.clear()
-        self.dropdown.addItems(self.worlds.keys())
+        self.dropdown.addItems(self.world_order)
         self.set_selected_world_version(self.dropdown.currentText())
     
     def set_selected_world_version(self, world):
@@ -1902,12 +1918,12 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.get()
             self.message_timer.start(1000)
             if self.server_path:
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.universal_settings, self.saved_ip)
-                saved_ip, self.ips, self.server_path, self.worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+                saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
             else:
                 self.server_path = path
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.universal_settings, self.saved_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
             self.start_manager_server()
     
     def create_server_folder(self):
@@ -1928,7 +1944,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.get()
         self.message_timer.start(200)
             
-        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         
         self.change_ip_button.setEnabled(False)
         self.refresh_button.setEnabled(False)
@@ -2016,7 +2032,7 @@ class ServerManagerApp(QMainWindow):
             self.host_ip = ip
             self.delay(0.5)
             if self.default_ip_check.isChecked():
-                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, ip=self.host_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, ip=self.host_ip)
             self.start_manager_server()
     
     def backup_world(self):
@@ -2156,7 +2172,8 @@ class ServerManagerApp(QMainWindow):
                 "fabric": self.is_fabric_check.isChecked(),
                 "level-type": self.level_type_dropdown.currentText()
             }
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
+            self.world_order.insert(0, name)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
             file_funcs.save_world_properties(self.path(os.path.join(self.server_path, "worlds", name)), self.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
@@ -2184,7 +2201,8 @@ class ServerManagerApp(QMainWindow):
                 "fabric": self.is_fabric_check.isChecked(),
                 "level-type": self.level_type_dropdown.currentText()
             }
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
+            self.world_order.insert(0, self.new_world_name_edit.text())
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -2236,7 +2254,8 @@ class ServerManagerApp(QMainWindow):
                 pass
         
         self.worlds.pop(world)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.saved_ip)
+        self.world_order.remove(world)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         self.set_worlds_list()
         self.send_data("worlds-list", self.query_worlds())
         self.log_queue.put(f"<font color='green'>Successfully removed world.</font>")
@@ -2309,12 +2328,21 @@ class ServerManagerApp(QMainWindow):
         self.set_whitelist()
         self.update_view_distance()
         self.update_simulation_distance()
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.universal_settings, self.host_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.host_ip)
         file_funcs.update_all_universal_settings(self.server_path)
         if self.status == "online" and self.bus is not None:
             self.bus.view_distance.emit(int(self.universal_settings["view distance"]))
             self.bus.simulation_distance.emit(int(self.universal_settings["simulation distance"]))
         self.show_main_page()
+    
+    def move_world_to_top(self, world):
+        self.world_order.remove(world)
+        self.world_order.insert(0, world)
+        current_selected = self.dropdown.currentText()
+        self.dropdown.clear()
+        self.dropdown.addItems(self.world_order)
+        self.dropdown.setCurrentText(current_selected)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.host_ip)
     
     def open_player_context_menu(self, pos):
         item = self.players_info_box.itemAt(pos)
