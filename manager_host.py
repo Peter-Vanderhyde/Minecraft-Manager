@@ -21,7 +21,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = True
+TESTING = False
 VERSION = "v2.4.1"
 
 if TESTING:
@@ -1163,15 +1163,6 @@ class ServerManagerApp(QMainWindow):
 
         self.whitelist_add_textbox.clear()
 
-        if not self.world_version or self.status == "offline" or not self.is_api_compatible(self.world_version):
-            self.whitelist_add_label.hide()
-            self.whitelist_add_textbox.hide()
-            self.whitelist_add_button.hide()
-        elif self.status == "online" and self.is_api_compatible(self.world_version):
-            self.whitelist_add_label.show()
-            self.whitelist_add_textbox.show()
-            self.whitelist_add_button.show()
-
         self.view_distance_textbox.setText(str(self.universal_settings.get("view distance")))
         self.simulation_distance_textbox.setText(str(self.universal_settings.get("simulation distance")))
         self.stacked_layout.setCurrentIndex(9)
@@ -2307,6 +2298,27 @@ class ServerManagerApp(QMainWindow):
     def add_player_to_whitelist(self):
         player = self.whitelist_add_textbox.text()
         if player:
+            player_obj = queries.get_player_uuid(player)
+            if player_obj:
+                try:
+                    with open(self.path(self.server_path, "whitelist.json"), 'r') as f:
+                        curr_whitelists = json.loads(f.read())
+                except FileNotFoundError:
+                    with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
+                        json.dump([player_obj], f, indent=2)
+                    self.whitelist_add_textbox.clear()
+                    return
+                
+                already_whitelisted = False
+                for obj in curr_whitelists:
+                    if obj["name"] == player:
+                        already_whitelisted = True
+                        break
+                
+                if not already_whitelisted:
+                    curr_whitelists.append(player_obj)
+                    with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
+                        json.dump(curr_whitelists, f, indent=2)
             if self.status == "online" and self.bus is not None:
                 self.bus.whitelist_player.emit(player, False)
             

@@ -155,3 +155,13 @@ def get_mc_versions(include_snapshots=False):
         return versions
     else:
         return None
+
+def get_player_uuid(name):
+    url = "https://api.minecraftservices.com/minecraft/profile/lookup/name/" + name
+    try:
+        response = requests.get(url)
+    except:
+        return False
+    
+    if response.status_code == 200:
+        return response.json()
