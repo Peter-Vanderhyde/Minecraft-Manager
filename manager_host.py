@@ -21,8 +21,8 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
-VERSION = "v2.4.1"
+TESTING = True
+VERSION = "v2.4.2"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -994,7 +994,7 @@ class ServerManagerApp(QMainWindow):
     def path(self, *args):
         return os.path.normpath(os.path.join(*args))
     
-    def create_bus(self):
+    def create_bus(self, api_version):
         self.bus = websock_mgmt.MgmtBus()
         self.bus.log.connect(self.log_queue.put)
         self.bus.recvd_result.connect(self.result_queue.put)
@@ -1008,7 +1008,7 @@ class ServerManagerApp(QMainWindow):
 
         # This version will start the threads attempting to connect to the api.
         # A signal is used to broadcast whether the threads successfully connected (i.e. the server is up)
-        api_settings = file_funcs.get_api_settings(self.server_path)
+        api_settings = file_funcs.get_api_settings(self.server_path, api_version)
         self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client, args=api_settings, daemon=True)
         self.mgmt_listener_thread.start()
         self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client, args=api_settings, daemon=True)
@@ -1418,19 +1418,20 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f'<font color="green">You: {message}</font>')
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
+    def get_api_version(self, version):
+        game_versions = queries.get_mc_versions(include_snapshots=True)
+        # Check what API syntax/systems to handle based on updates to the game in certain versions
+        version_index = game_versions.index(version)
+        api_version = 0
+        updated_versions = ["25w35a", "25w37a", "1.21.9"]
+        for v in updated_versions:
+            if version_index <= game_versions.index(v):
+                api_version += 1
+        
+        return api_version
+    
     def is_api_compatible(self, version):
-        if "." in version:
-            split_version = [int(num) for num in version.split(".")]
-            # Check if world is running on 1.21.9 or newer
-            # Older versions incompatible with new server API
-            if len(split_version) == 2:
-                return (split_version[0] > 1 or split_version[1] > 21)
-            else:
-                return (split_version[0] > 1 or split_version[1] > 21 or split_version[2] > 8)
-        else:
-            first = version.split("w")
-            second = first[1][:-1]
-            return (int(first[0]) >= 25 and int(second) >= 35)
+        return self.get_api_version(version) > 0
 
     def api_connection(self, success):
         if success:
@@ -1551,9 +1552,13 @@ class ServerManagerApp(QMainWindow):
                     lines = []
                     with open(self.path(path, "saved_properties.properties"), 'r') as world_props:
                         lines = world_props.readlines()
+                    for i in range(len(lines)):
+                        if lines[i].startswith("management-server-secret="):
+                            lines[i] = ""
                     with open(self.path(self.server_path, "server.properties"), 'w') as props:
                         props.writelines(lines)
                 
+                # Apply settings such as whitelist etc.
                 file_funcs.apply_universal_settings(self.server_path)
                 
                 world_mods_folder = self.path(path, "mods")
@@ -1571,7 +1576,8 @@ class ServerManagerApp(QMainWindow):
                         shutil.rmtree(server_mods_folder)
 
                 if self.is_api_compatible(version):
-                    file_funcs.get_api_settings(self.server_path)
+                    api_version = self.get_api_version(version)
+                    file_funcs.get_api_settings(self.server_path, api_version)
                 if not file_funcs.prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, self.server_path, self.log_queue, seed):
                     raise RuntimeError("Failed to prepare settings.")
                 else:
@@ -1641,7 +1647,7 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put("Waiting for chunks to generate...")
                 if self.is_api_compatible(version):
                     # The bus is the asynchronous threads that listen to the api
-                    self.create_bus()
+                    self.create_bus(self.get_api_version(version))
                 else:
                     if seed:
                         # Wait longer
@@ -2024,6 +2030,7 @@ class ServerManagerApp(QMainWindow):
             self.delay(0.5)
             if self.default_ip_check.isChecked():
                 file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, ip=self.host_ip)
+                self.saved_ip = self.host_ip
             self.start_manager_server()
     
     def backup_world(self):

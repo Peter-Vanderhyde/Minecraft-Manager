@@ -59,23 +59,23 @@ class MgmtBus(QObject):
     def return_error(self, msg):
         self.log.emit(f"<font color='red'>{msg}</font>")
 
-    def run_mgmt_listener_client(self, ip, port):
+    def run_mgmt_listener_client(self, ip, port, auth_token, api_version):
         try:
-            asyncio.run(self.mgmt_listener_worker(ip, port))
+            asyncio.run(self.mgmt_listener_worker(ip, port, auth_token, api_version))
         except Exception as e:
             self.return_error(f"run_mgmt_listener_client raised exception: {e!r}")
     
-    def run_mgmt_sender_client(self, ip, port):
+    def run_mgmt_sender_client(self, ip, port, auth_token, api_version):
         try:
-            asyncio.run(self.mgmt_sender_worker(ip, port))
+            asyncio.run(self.mgmt_sender_worker(ip, port, auth_token, api_version))
         except Exception as e:
             self.return_error(f"run_mgmt_sender_client raised exception: {e!r}")
     
-    async def _listen(self, ws):
+    async def _listen(self, ws, api_version):
         try:
             async for raw in ws:
                 received = json.loads(raw)
-                self.handle_received(received)
+                self.handle_received(received, api_version)
         except asyncio.CancelledError:
             # Task was cancelled by the outer race — normal during shutdown
             raise
@@ -89,8 +89,13 @@ class MgmtBus(QObject):
             # Windows-y “WinError 64” path. Treat as normal end.
             return
     
-    async def mgmt_listener_worker(self, ip, port):
+    async def mgmt_listener_worker(self, ip, port, auth_token, api_version=1):
         url = f"ws://{ip}:{port}"
+        header = {}
+        if auth_token and api_version > 1:
+            header = {
+                "Authorization": f"Bearer {auth_token}"
+            }
         time_waited = 0
         connected = False
 
@@ -100,10 +105,10 @@ class MgmtBus(QObject):
 
         while time_waited < 51 and not self._shutdown.is_set():
             try:
-                async with websockets.connect(url) as ws:
+                async with websockets.connect(url, additional_headers=header) as ws:
                     connected = True
                     self.connected.emit(True)
-                    listener = asyncio.create_task(self._listen(ws))
+                    listener = asyncio.create_task(self._listen(ws, api_version))
                     stopper = asyncio.create_task(self._shutdown.wait())
                     done, pending = await asyncio.wait({listener, stopper}, return_when=asyncio.FIRST_COMPLETED)
                     for task in pending:
@@ -132,14 +137,19 @@ class MgmtBus(QObject):
             self.return_error("Timed out waiting for server to respond.")
             self.connected.emit(False)
     
-    async def mgmt_sender_worker(self, ip, port):
+    async def mgmt_sender_worker(self, ip, port, auth_token, api_version=1):
         url = f"ws://{ip}:{port}"
+        header = {}
+        if auth_token and api_version > 1:
+            header = {
+                "Authorization": f"Bearer {auth_token}"
+            }
         loop = asyncio.get_running_loop()
         time_waited = 0
 
         while time_waited < 51 and not self._shutdown.is_set():
             try:
-                async with websockets.connect(url) as ws:
+                async with websockets.connect(url, additional_headers=header) as ws:
                     while not self._shutdown.is_set():
                         cmd = await loop.run_in_executor(None, self.cmd_queue.get)
                         if cmd is None or self._shutdown.is_set():
@@ -155,7 +165,7 @@ class MgmtBus(QObject):
                 await asyncio.sleep(2.0)
                 time_waited += 2
     
-    def handle_received(self, recvd):
+    def handle_received(self, recvd, api_version):
         def append_log(text, fg=None, bg=None):
             safe = html.escape(text).replace("\n", "<br>")
             if fg or bg:
@@ -174,8 +184,13 @@ class MgmtBus(QObject):
             self.recvd_result.emit(recvd["result"])
         elif "method" in recvd:
             if "notification" in recvd["method"]:
-                notification = recvd["method"].removeprefix("notification:")
-                topic, action = notification.split("/")
+                topic, action = "", ""
+                if api_version > 2:
+                    notification = recvd["method"]
+                    prefix, topic, action = notification.split("/")
+                else:
+                    notification = recvd["method"].removeprefix("notification:")
+                    topic, action = notification.split("/")
                 params = [] if "params" not in recvd else recvd["params"]
                 if topic == "server":
                     if action == "status":
