@@ -1146,7 +1146,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(8)
     
     def show_commands_page(self):
-        if self.status == "online" and not self.is_api_compatible(self.world_version):
+        if self.status == "online" and not self.is_api_compatible(self.worlds[self.world]["version"]):
             self.commands_warning_label.show()
         else:
             self.commands_warning_label.hide()
@@ -1370,7 +1370,7 @@ class ServerManagerApp(QMainWindow):
         self.verify_world_formatting() # Update oudated formatting from previous versions
         self.set_worlds_list()
         self.get_status()
-        if self.status == "online" and self.is_api_compatible(self.world_version):
+        if self.status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]):
             self.create_bus()
     
     def verify_world_formatting(self):
@@ -1423,7 +1423,7 @@ class ServerManagerApp(QMainWindow):
         # Check what API syntax/systems to handle based on updates to the game in certain versions
         version_index = game_versions.index(version)
         api_version = 0
-        updated_versions = ["25w35a", "25w37a", "1.21.9"]
+        updated_versions = ["25w35a", "25w37a", "1.21.9-pre1"]
         for v in updated_versions:
             if version_index <= game_versions.index(v):
                 api_version += 1
@@ -1749,7 +1749,7 @@ class ServerManagerApp(QMainWindow):
         status = self.query_status()
         self.set_status(status)
         self.send_data("status", status)
-        if status == "online" and self.is_api_compatible(self.world_version) and not self.bus and self.bus_shutdown_complete.is_set():
+        if status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]) and not self.bus and self.bus_shutdown_complete.is_set():
             self.create_bus()
 
     def get_players(self):
@@ -2365,7 +2365,7 @@ class ServerManagerApp(QMainWindow):
     
     def open_player_context_menu(self, pos):
         item = self.players_info_box.itemAt(pos)
-        if not item or not self.is_api_compatible(self.world_version) or item.text() == "No players online":
+        if not item or not self.is_api_compatible(self.worlds[self.world]["version"]) or item.text() == "No players online":
             return
         
         name = item.text()
