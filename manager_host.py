@@ -1622,11 +1622,6 @@ class ServerManagerApp(QMainWindow):
                         lines = props.readlines()
                     with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
                         world_props.writelines(lines)
-                    if world == self.dropdown.currentText():
-                        self.world_properties_button.setEnabled(True)
-                        if fabric:
-                            self.world_mods_button.setEnabled(True)
-                            self.modrinth_button.show()
                 else:
                     with open(self.path(self.server_path, "server.properties"), 'r') as serv:
                         serv_lines = serv.readlines()
@@ -1637,6 +1632,12 @@ class ServerManagerApp(QMainWindow):
                     if len(serv_lines) > len(saved_lines):
                         with open(self.path(path, "saved_properties.properties"), 'w') as saved:
                             saved.writelines(serv_lines)
+                    
+                    if world == self.dropdown.currentText():
+                        self.world_properties_button.setEnabled(True)
+                        if fabric:
+                            self.world_mods_button.setEnabled(True)
+                            self.modrinth_button.show()
                 
                 if fabric and not os.path.exists(world_mods_folder):
                     try:
