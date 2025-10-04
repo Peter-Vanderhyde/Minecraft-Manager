@@ -1435,6 +1435,10 @@ class ServerManagerApp(QMainWindow):
 
     def api_connection(self, success):
         if success:
+            waited = 0
+            while waited < 10 and self.query_status()[0] != "online":
+                self.delay(1)
+                waited += 1
             self.get_status_signal.emit()
             self.log_queue.put(f"Server world '{self.world}' has been started.")
             self.broadcast(f"Server world '{self.world}' has been started.")
