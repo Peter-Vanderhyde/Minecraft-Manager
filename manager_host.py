@@ -1895,10 +1895,7 @@ class ServerManagerApp(QMainWindow):
                 self.world_properties_button.setEnabled(False)
             
             if self.worlds[world].get("fabric"):
-                if os.path.exists(self.path(self.server_path, "worlds", world)):
-                    self.world_mods_button.setEnabled(True)
-                else:
-                    self.world_mods_button.setEnabled(False)
+                self.world_mods_button.setEnabled(True)
                 self.modrinth_button.show()
             else:
                 self.world_mods_button.setEnabled(False)
@@ -2278,14 +2275,13 @@ class ServerManagerApp(QMainWindow):
         if world and self.worlds[world].get("fabric"):
             world_folder = self.path(self.server_path, "worlds", world)
             if os.path.exists(world_folder):
-                if os.path.exists(self.path(world_folder, "mods")):
-                    file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
-                else:
+                if not os.path.exists(self.path(world_folder, "mods")):
                     os.mkdir(self.path(world_folder, "mods"))
-                    file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
             else:
-                self.log_queue.put(f"<font color='red'>World has not been generated yet.</font>")
-                return
+                os.mkdir(world_folder)
+                os.mkdir(self.path(world_folder, "mods"))
+
+            file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
     
     def toggle_whitelist(self):
         enabled = not self.whitelist_toggle_button.text() == "Enabled"
