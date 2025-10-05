@@ -995,7 +995,7 @@ class ServerManagerApp(QMainWindow):
         return os.path.normpath(os.path.join(*args))
     
     def create_bus(self, api_version):
-        self.bus = websock_mgmt.MgmtBus()
+        self.bus = websock_mgmt.MgmtBus(api_version)
         self.bus.log.connect(self.log_queue.put)
         self.bus.recvd_result.connect(self.result_queue.put)
         self.bus.connected.connect(self.api_connection)
@@ -1371,7 +1371,7 @@ class ServerManagerApp(QMainWindow):
         self.set_worlds_list()
         self.get_status()
         if self.status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]):
-            self.create_bus()
+            self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
     
     def verify_world_formatting(self):
         outdated = False
@@ -1423,7 +1423,7 @@ class ServerManagerApp(QMainWindow):
         # Check what API syntax/systems to handle based on updates to the game in certain versions
         version_index = game_versions.index(version)
         api_version = 0
-        updated_versions = ["25w35a", "25w37a", "1.21.9-pre1"]
+        updated_versions = ["25w35a", "25w37a", "1.21.9-pre1", "1.21.9-pre4"]
         for v in updated_versions:
             if version_index <= game_versions.index(v):
                 api_version += 1
@@ -1755,7 +1755,7 @@ class ServerManagerApp(QMainWindow):
         self.set_status(status)
         self.send_data("status", status)
         if status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]) and not self.bus and self.bus_shutdown_complete.is_set():
-            self.create_bus()
+            self.create_bus(self.worlds[self.world]["version"])
 
     def get_players(self):
         # Used with the player refresh button

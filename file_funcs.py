@@ -338,9 +338,9 @@ def get_api_settings(server_path, api_version=1):
         with open(os.path.join(server_path, "server.properties"), "w") as f:
             f.writelines(lines)
         
-        return (host, port, auth_token, api_version)
+        return (host, port, auth_token)
     except:
-        return ("localhost", "25585", "", api_version)
+        return ("localhost", "25585", "")
 
 def pick_folder(parent, starting_path=""):
     # Show the file dialog for selecting a folder
