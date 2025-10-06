@@ -1575,6 +1575,8 @@ class ServerManagerApp(QMainWindow):
                             lines[i] = ""
                     with open(self.path(self.server_path, "server.properties"), 'w') as props:
                         props.writelines(lines)
+                elif not os.path.isdir(path):
+                    os.mkdir(path)
                 
                 # Apply settings such as whitelist etc.
                 file_funcs.apply_universal_settings(self.server_path)
