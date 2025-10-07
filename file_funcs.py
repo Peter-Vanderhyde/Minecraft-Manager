@@ -276,16 +276,23 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
     except:
         return False
 
-def get_api_settings(server_path):
+def get_api_settings(server_path, api_version=1):
     try:
+        # api_version:
+        # 1: first basic implementation
+        # 2: 25w37a added client authorization requirement
+        # 3: 1.21.9 changed the notification syntax
         with open(os.path.join(server_path, "server.properties"), "r") as f:
             lines = f.readlines()
         
         host = ""
         port = ""
+        auth_token = ""
         found_enabled = False
         found_host = False
         found_port = False
+        found_tls = False
+        found_secret = False
         found_interval = False
         for i, line in enumerate(lines):
             if line.startswith("management-server-enabled="):
@@ -300,9 +307,15 @@ def get_api_settings(server_path):
             elif line.startswith("management-server-port="):
                 found_port = True
                 port = line.strip().split("=")[1]
-                if not port:
+                if not port or port == "0":
                     port = "25585"
                     lines[i] = "management-server-port=25585\n"
+            elif line.startswith("management-server-tls-enabled="):
+                found_tls = True
+                lines[i] = "management-server-tls-enabled=false\n"
+            elif line.startswith("management-server-secret="):
+                found_secret = True
+                auth_token = line.strip().split("=")[1]
             elif line.startswith("status-heartbeat-interval="):
                 found_interval = True
                 lines[i] = "status-heartbeat-interval=60\n"
@@ -315,15 +328,19 @@ def get_api_settings(server_path):
         if not found_port:
             lines.append("management-server-port=25585\n")
             port = "25585"
+        if not found_tls and api_version > 1:
+            lines.append("management-server-tls-enabled=false\n")
+        if not found_secret and api_version > 1:
+            pass
         if not found_interval:
             lines.append("status-heartbeat-interval=60\n")
         
         with open(os.path.join(server_path, "server.properties"), "w") as f:
             f.writelines(lines)
         
-        return (host, port)
+        return (host, port, auth_token)
     except:
-        return ("localhost", "25585")
+        return ("localhost", "25585", "")
 
 def pick_folder(parent, starting_path=""):
     # Show the file dialog for selecting a folder

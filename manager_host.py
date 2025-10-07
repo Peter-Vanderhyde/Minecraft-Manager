@@ -22,7 +22,7 @@ import websock_mgmt
 import html
 
 TESTING = False
-VERSION = "v2.4.1"
+VERSION = "v2.4.2"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -541,6 +541,8 @@ class ServerManagerApp(QMainWindow):
 
         add_world_button = QPushButton("Add World")
         add_world_button.clicked.connect(self.show_new_world_type_page)
+        update_world_button = QPushButton("Update World")
+        update_world_button.clicked.connect(lambda: self.add_existing_world(update=True))
         remove_world_button = QPushButton("Remove World")
         remove_world_button.clicked.connect(self.prepare_remove_world_page)
         remove_world_button.setObjectName("redButton")
@@ -552,6 +554,7 @@ class ServerManagerApp(QMainWindow):
         cancel_button.clicked.connect(self.show_main_page)
 
         top_box.addWidget(add_world_button)
+        top_box.addWidget(update_world_button)
         top_box.addWidget(remove_world_button)
         top_box.addWidget(backup_button)
         bot_box.addWidget(cancel_button)
@@ -639,6 +642,9 @@ class ServerManagerApp(QMainWindow):
         self.add_existing_world_button = QPushButton("Add World")
         self.add_existing_world_button.hide()
         self.add_existing_world_button.clicked.connect(self.confirm_add_world)
+        self.update_existing_world_button = QPushButton("Update World")
+        self.update_existing_world_button.hide()
+        self.update_existing_world_button.clicked.connect(lambda: self.confirm_add_world(update=True))
         self.create_new_world_button = QPushButton("Create World")
         self.create_new_world_button.hide()
         self.create_new_world_button.clicked.connect(self.confirm_create_world)
@@ -706,6 +712,7 @@ class ServerManagerApp(QMainWindow):
         temp.addLayout(right)
         top_box.addLayout(temp)
         bot_box.addWidget(self.add_existing_world_button)
+        bot_box.addWidget(self.update_existing_world_button)
         bot_box.addWidget(self.create_new_world_button)
         bot_box.addWidget(cancel_button)
 
@@ -839,7 +846,7 @@ class ServerManagerApp(QMainWindow):
         create_new_button = QPushButton("Create New World")
         create_new_button.clicked.connect(self.add_new_world)
         select_existing_button = QPushButton("Add Existing World")
-        select_existing_button.clicked.connect(self.add_existing_world)
+        select_existing_button.clicked.connect(lambda: self.add_existing_world(update=False))
         cancel_add_world_button = QPushButton("Back")
         cancel_add_world_button.setObjectName("smallRedButton")
         cancel_add_world_button.clicked.connect(self.show_world_manager_page)
@@ -994,8 +1001,8 @@ class ServerManagerApp(QMainWindow):
     def path(self, *args):
         return os.path.normpath(os.path.join(*args))
     
-    def create_bus(self):
-        self.bus = websock_mgmt.MgmtBus()
+    def create_bus(self, api_version):
+        self.bus = websock_mgmt.MgmtBus(api_version)
         self.bus.log.connect(self.log_queue.put)
         self.bus.recvd_result.connect(self.result_queue.put)
         self.bus.connected.connect(self.api_connection)
@@ -1005,10 +1012,11 @@ class ServerManagerApp(QMainWindow):
         self.bus.update_status.connect(self.update_status)
         self.bus.player_join.connect(self.add_player)
         self.bus.player_leave.connect(self.remove_player)
+        self.bus.refresh_players.connect(self.update_players_list)
 
         # This version will start the threads attempting to connect to the api.
         # A signal is used to broadcast whether the threads successfully connected (i.e. the server is up)
-        api_settings = file_funcs.get_api_settings(self.server_path)
+        api_settings = file_funcs.get_api_settings(self.server_path, api_version)
         self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client, args=api_settings, daemon=True)
         self.mgmt_listener_thread.start()
         self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client, args=api_settings, daemon=True)
@@ -1143,10 +1151,17 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(7)
     
     def show_new_world_type_page(self):
-        self.stacked_layout.setCurrentIndex(8)
+        if self.update_existing_world_button.isHidden():
+            self.stacked_layout.setCurrentIndex(8)
+        else:
+            self.update_existing_world_button.hide()
+            self.include_snapshots_check.setDisabled(False)
+            self.mc_version_dropdown.clear()
+            self.mc_version_dropdown.addItems(queries.get_mc_versions(include_snapshots=False))
+            self.show_world_manager_page()
     
     def show_commands_page(self):
-        if self.status == "online" and not self.is_api_compatible(self.world_version):
+        if self.status == "online" and not self.is_api_compatible(self.worlds[self.world]["version"]):
             self.commands_warning_label.show()
         else:
             self.commands_warning_label.hide()
@@ -1370,8 +1385,8 @@ class ServerManagerApp(QMainWindow):
         self.verify_world_formatting() # Update oudated formatting from previous versions
         self.set_worlds_list()
         self.get_status()
-        if self.status == "online" and self.is_api_compatible(self.world_version):
-            self.create_bus()
+        if self.status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]):
+            self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
     
     def verify_world_formatting(self):
         outdated = False
@@ -1418,22 +1433,27 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f'<font color="green">You: {message}</font>')
             self.broadcast(f'<font color="blue">Admin: {message}</font>')
     
+    def get_api_version(self, version):
+        game_versions = queries.get_mc_versions(include_snapshots=True)
+        # Check what API syntax/systems to handle based on updates to the game in certain versions
+        version_index = game_versions.index(version)
+        api_version = 0
+        updated_versions = ["25w35a", "25w37a", "1.21.9-pre1", "1.21.9-pre4"]
+        for v in updated_versions:
+            if version_index <= game_versions.index(v):
+                api_version += 1
+        
+        return api_version
+    
     def is_api_compatible(self, version):
-        if "." in version:
-            split_version = [int(num) for num in version.split(".")]
-            # Check if world is running on 1.21.9 or newer
-            # Older versions incompatible with new server API
-            if len(split_version) == 2:
-                return (split_version[0] > 1 or split_version[1] > 21)
-            else:
-                return (split_version[0] > 1 or split_version[1] > 21 or split_version[2] > 8)
-        else:
-            first = version.split("w")
-            second = first[1][:-1]
-            return (int(first[0]) >= 25 and int(second) >= 35)
+        return self.get_api_version(version) > 0
 
     def api_connection(self, success):
         if success:
+            waited = 0
+            while waited < 10 and self.query_status()[0] != "online":
+                self.delay(1)
+                waited += 1
             self.get_status_signal.emit()
             self.log_queue.put(f"Server world '{self.world}' has been started.")
             self.broadcast(f"Server world '{self.world}' has been started.")
@@ -1551,9 +1571,15 @@ class ServerManagerApp(QMainWindow):
                     lines = []
                     with open(self.path(path, "saved_properties.properties"), 'r') as world_props:
                         lines = world_props.readlines()
+                    for i in range(len(lines)):
+                        if lines[i].startswith("management-server-secret="):
+                            lines[i] = ""
                     with open(self.path(self.server_path, "server.properties"), 'w') as props:
                         props.writelines(lines)
+                elif not os.path.isdir(path):
+                    os.mkdir(path)
                 
+                # Apply settings such as whitelist etc.
                 file_funcs.apply_universal_settings(self.server_path)
                 
                 world_mods_folder = self.path(path, "mods")
@@ -1571,7 +1597,8 @@ class ServerManagerApp(QMainWindow):
                         shutil.rmtree(server_mods_folder)
 
                 if self.is_api_compatible(version):
-                    file_funcs.get_api_settings(self.server_path)
+                    api_version = self.get_api_version(version)
+                    file_funcs.get_api_settings(self.server_path, api_version)
                 if not file_funcs.prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, self.server_path, self.log_queue, seed):
                     raise RuntimeError("Failed to prepare settings.")
                 else:
@@ -1616,11 +1643,6 @@ class ServerManagerApp(QMainWindow):
                         lines = props.readlines()
                     with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
                         world_props.writelines(lines)
-                    if world == self.dropdown.currentText():
-                        self.world_properties_button.setEnabled(True)
-                        if fabric:
-                            self.world_mods_button.setEnabled(True)
-                            self.modrinth_button.show()
                 else:
                     with open(self.path(self.server_path, "server.properties"), 'r') as serv:
                         serv_lines = serv.readlines()
@@ -1631,6 +1653,12 @@ class ServerManagerApp(QMainWindow):
                     if len(serv_lines) > len(saved_lines):
                         with open(self.path(path, "saved_properties.properties"), 'w') as saved:
                             saved.writelines(serv_lines)
+                    
+                    if world == self.dropdown.currentText():
+                        self.world_properties_button.setEnabled(True)
+                        if fabric:
+                            self.world_mods_button.setEnabled(True)
+                            self.modrinth_button.show()
                 
                 if fabric and not os.path.exists(world_mods_folder):
                     try:
@@ -1641,7 +1669,7 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put("Waiting for chunks to generate...")
                 if self.is_api_compatible(version):
                     # The bus is the asynchronous threads that listen to the api
-                    self.create_bus()
+                    self.create_bus(self.get_api_version(version))
                 else:
                     if seed:
                         # Wait longer
@@ -1743,8 +1771,8 @@ class ServerManagerApp(QMainWindow):
         status = self.query_status()
         self.set_status(status)
         self.send_data("status", status)
-        if status == "online" and self.is_api_compatible(self.world_version) and not self.bus and self.bus_shutdown_complete.is_set():
-            self.create_bus()
+        if status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]) and not self.bus and self.bus_shutdown_complete.is_set():
+            self.create_bus(self.worlds[self.world]["version"])
 
     def get_players(self):
         # Used with the player refresh button
@@ -1844,7 +1872,13 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.addItem(item)
             return
 
+        opped_players = []
+        if os.path.isfile(self.path(self.server_path, "ops.json")):
+            with open(self.path(self.server_path, "ops.json"), 'r') as f:
+                opped_players = [p["name"] for p in json.loads(f.read())]
         for player in self.curr_players:
+            if player in opped_players:
+                player = f"{player} [op]"
             item = QListWidgetItem(html.escape(player))
             item.setForeground(QColor("purple"))
             self.players_info_box.addItem(item)
@@ -1888,10 +1922,7 @@ class ServerManagerApp(QMainWindow):
                 self.world_properties_button.setEnabled(False)
             
             if self.worlds[world].get("fabric"):
-                if os.path.exists(self.path(self.server_path, "worlds", world)):
-                    self.world_mods_button.setEnabled(True)
-                else:
-                    self.world_mods_button.setEnabled(False)
+                self.world_mods_button.setEnabled(True)
                 self.modrinth_button.show()
             else:
                 self.world_mods_button.setEnabled(False)
@@ -2024,6 +2055,7 @@ class ServerManagerApp(QMainWindow):
             self.delay(0.5)
             if self.default_ip_check.isChecked():
                 file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, ip=self.host_ip)
+                self.saved_ip = self.host_ip
             self.start_manager_server()
     
     def backup_world(self):
@@ -2069,45 +2101,81 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
             self.show_main_page()
     
-    def add_existing_world(self):
+    def add_existing_world(self, update=False):
         world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
         if world_path is None:
             return
         
         world_path = self.path(world_path)
         world_folders = glob.glob(self.path(self.server_path, "worlds", "*/"))
-        if world_path in world_folders:
-            try:
-                if os.path.basename(world_path) in self.worlds.keys():
-                    self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
-                    self.show_main_page()
-                    return
-                self.add_world(world=os.path.basename(world_path), new=False)
-                self.mc_version_dropdown.setCurrentIndex(0)
-                old_properties = file_funcs.load_world_properties(world_path)
-                version = old_properties["version"]
-                if version:
-                    if "w" in version:
-                        self.include_snapshots_check.setChecked(True)
-                    try:
-                        self.mc_version_dropdown.setCurrentText(version)
-                    except:
-                        pass
-                self.gamemode_dropdown.setCurrentText(old_properties["gamemode"])
-                self.difficulty_dropdown.setCurrentText(old_properties["difficulty"])
-                self.fabric_dropdown.setCurrentText("Enabled" if old_properties["fabric"] else "Disabled")
-                self.level_type_dropdown.setCurrentText(old_properties["level-type"])
-            except:
-                self.log_queue.put(f"<font color='red'>ERROR: Unable to add world folder.</font>")
-        elif world_path:
-            self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+        if not update:
+            if world_path in world_folders:
+                try:
+                    if os.path.basename(world_path) in self.worlds.keys():
+                        self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
+                        self.show_main_page()
+                        return
+                    self.add_world(world=os.path.basename(world_path), new=False)
+                    self.mc_version_dropdown.setCurrentIndex(0)
+                    old_properties = file_funcs.load_world_properties(world_path)
+                    version = old_properties["version"]
+                    if version:
+                        if version not in queries.get_mc_versions(include_snapshots=False):
+                            self.include_snapshots_check.setChecked(True)
+                        try:
+                            self.mc_version_dropdown.setCurrentText(version)
+                        except:
+                            pass
+                    self.gamemode_dropdown.setCurrentText(old_properties["gamemode"])
+                    self.difficulty_dropdown.setCurrentText(old_properties["difficulty"])
+                    self.fabric_dropdown.setCurrentText("Enabled" if old_properties["fabric"] else "Disabled")
+                    self.level_type_dropdown.setCurrentText(old_properties["level-type"])
+                except:
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to add world folder.</font>")
+            elif world_path:
+                self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+        else:
+            if world_path in world_folders:
+                try:
+                    if os.path.basename(world_path) not in self.worlds.keys():
+                        self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' not found in worlds list.</font>")
+                        self.show_main_page()
+                        return
+                    world = os.path.basename(world_path)
+                    if world == self.world and self.query_status()[0] == "online":
+                        self.log_queue.put(f"<font color='red'>ERROR: Cannot update while {world} is online.</font>")
+                        self.show_main_page()
+                        return
+                    self.add_world(world=world, new=False, update=True)
+                    self.mc_version_dropdown.setCurrentIndex(0)
+                    old_properties = file_funcs.load_world_properties(world_path)
+                    version = old_properties["version"]
+                    if not version:
+                        self.log_queue.put(f"<font color='red'>ERROR: Unable to find current version for '{world}'.</font>")
+                        self.show_main_page()
+                        return
+                    if not self.set_version_range(version):
+                        self.log_queue.put(f"<font color='red'>ERROR: '{world}' already at latest version.</font>")
+                        self.show_main_page()
+                        return
+                    
+                    self.mc_version_dropdown.setCurrentIndex(0)
+                    self.gamemode_dropdown.setCurrentText(old_properties["gamemode"])
+                    self.difficulty_dropdown.setCurrentText(old_properties["difficulty"])
+                    self.fabric_dropdown.setCurrentText("Enabled" if old_properties["fabric"] else "Disabled")
+                    self.level_type_dropdown.setCurrentText(old_properties["level-type"])
+                except:
+                    self.log_queue.put(f"<font color='red'>ERROR: Unable to {'update' if update else 'add'} world folder.</font>")
+            elif world_path:
+                self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
     
     def add_new_world(self):
         self.add_world(new=True)
     
-    def add_world(self, world="", new=False):
+    def add_world(self, world="", new=False, update=False):
         if new:
             self.add_existing_world_button.hide()
+            self.update_existing_world_button.hide()
             self.create_new_world_button.show()
             self.new_world_name_edit.show()
             self.new_world_seed_edit.show()
@@ -2124,8 +2192,24 @@ class ServerManagerApp(QMainWindow):
             self.level_type_dropdown.show()
             self.level_type_dropdown.setCurrentText("Normal")
             self.level_type_label.show()
+        elif update:
+            self.update_existing_world_button.show()
+            self.add_existing_world_button.hide()
+            self.create_new_world_button.hide()
+            self.new_world_name_edit.hide()
+            self.new_world_seed_edit.hide()
+            self.add_world_label.setText(world)
+
+            self.include_snapshots_check.setChecked(False)
+            self.fabric_dropdown.setCurrentText("Disabled")
+            self.is_fabric_check.setChecked(False)
+            self.gamemode_dropdown.setCurrentText("Survival")
+            self.difficulty_dropdown.setCurrentText("Normal")
+            self.level_type_dropdown.hide()
+            self.level_type_label.hide()
         else:
             self.add_existing_world_button.show()
+            self.update_existing_world_button.hide()
             self.create_new_world_button.hide()
             self.new_world_name_edit.hide()
             self.new_world_seed_edit.hide()
@@ -2152,10 +2236,12 @@ class ServerManagerApp(QMainWindow):
         else:
             return False
 
-    def confirm_add_world(self):
+    def confirm_add_world(self, update=False):
         result = self.verify_version(self.mc_version_dropdown.currentText(), self.is_fabric_check.isChecked())
         if result:
             name = self.add_world_label.text()
+            if update:
+                self.remove_world(updating=name)
             self.worlds[name] = {
                 "version": self.mc_version_dropdown.currentText(),
                 "gamemode": self.gamemode_dropdown.currentText(),
@@ -2168,7 +2254,7 @@ class ServerManagerApp(QMainWindow):
             file_funcs.save_world_properties(self.path(os.path.join(self.server_path, "worlds", name)), self.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
-            self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
+            self.log_queue.put(f"<font color='green'>Successfully {'updated' if update else 'added'} world.</font>")
             self.dropdown.setCurrentText(self.add_world_label.text())
             self.show_main_page()
         elif result is False:
@@ -2176,6 +2262,11 @@ class ServerManagerApp(QMainWindow):
         elif result is None:
             self.log_queue.put(f"<font color='red'>ERROR: Unable to download from {'Fabric' if self.is_fabric_check.isChecked() else 'MCVersions'}.</font>")
             self.show_main_page()
+        
+        self.include_snapshots_check.setDisabled(False)
+        self.update_existing_world_button.hide()
+        self.mc_version_dropdown.clear()
+        self.mc_version_dropdown.addItems(queries.get_mc_versions(include_snapshots=False))
 
     def confirm_create_world(self):
         if self.new_world_name_edit.text() == "" or self.new_world_name_edit.text() in self.worlds.keys():
@@ -2226,17 +2317,20 @@ class ServerManagerApp(QMainWindow):
                 elif version == old_version:
                     found_old = True
     
-    def remove_world(self):
-        world = self.worlds_dropdown.currentText()
+    def remove_world(self, updating=""):
+        if not updating:
+            world = self.worlds_dropdown.currentText()
+        else:
+            world = updating
         if not world:
             return
         
         if self.world == world and self.query_status()[0] == "online":
-            self.log_queue.put(f"<font color='red'>ERROR: Unable to remove {world} while the world is being run.</font>")
+            self.log_queue.put(f"<font color='red'>ERROR: Unable to {'update' if updating else 'remove'} {world} while the world is being run.</font>")
             self.show_main_page()
             return
         
-        if self.delete_world_checkbox.isChecked():
+        if not updating and self.delete_world_checkbox.isChecked():
             try:
                 folder_path = self.path(self.server_path, "worlds", world)
                 shutil.rmtree(folder_path)
@@ -2249,8 +2343,9 @@ class ServerManagerApp(QMainWindow):
         file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         self.set_worlds_list()
         self.send_data("worlds-list", self.query_worlds())
-        self.log_queue.put(f"<font color='green'>Successfully removed world.</font>")
-        self.show_main_page()
+        if not updating:
+            self.log_queue.put(f"<font color='green'>Successfully removed world.</font>")
+            self.show_main_page()
     
     def open_properties(self):
         world = self.dropdown.currentText()
@@ -2270,14 +2365,13 @@ class ServerManagerApp(QMainWindow):
         if world and self.worlds[world].get("fabric"):
             world_folder = self.path(self.server_path, "worlds", world)
             if os.path.exists(world_folder):
-                if os.path.exists(self.path(world_folder, "mods")):
-                    file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
-                else:
+                if not os.path.exists(self.path(world_folder, "mods")):
                     os.mkdir(self.path(world_folder, "mods"))
-                    file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
             else:
-                self.log_queue.put(f"<font color='red'>World has not been generated yet.</font>")
-                return
+                os.mkdir(world_folder)
+                os.mkdir(self.path(world_folder, "mods"))
+
+            file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
     
     def toggle_whitelist(self):
         enabled = not self.whitelist_toggle_button.text() == "Enabled"
@@ -2358,10 +2452,10 @@ class ServerManagerApp(QMainWindow):
     
     def open_player_context_menu(self, pos):
         item = self.players_info_box.itemAt(pos)
-        if not item or not self.is_api_compatible(self.world_version) or item.text() == "No players online":
+        if not item or not self.is_api_compatible(self.worlds[self.world]["version"]) or item.text() == "No players online":
             return
         
-        name = item.text()
+        name = item.text().removesuffix(" [op]")
         menu = QMenu(self)
         options = [
             {
@@ -2433,9 +2527,60 @@ class ServerManagerApp(QMainWindow):
         self.bus.msg_player.emit(player, msg)
     
     def change_snapshot_state(self, state: Qt.CheckState):
-        new_versions = queries.get_mc_versions(state == Qt.CheckState.Checked)
+        if self.update_existing_world_button.isHidden():
+            new_versions = queries.get_mc_versions(state == Qt.CheckState.Checked)
+            self.mc_version_dropdown.clear()
+            self.mc_version_dropdown.addItems(new_versions)
+        else:
+            # In updating page, so limit versions available
+            version = self.worlds[self.add_world_label.text()]["version"]
+            new_versions = []
+            if state == Qt.CheckState.Checked:
+                new_versions = queries.get_mc_versions(include_snapshots=True)
+                new_versions = new_versions[:new_versions.index(version)]
+            else:
+                release_versions = queries.get_mc_versions(include_snapshots=False)
+                if version in release_versions:
+                    new_versions = release_versions[:release_versions.index(version)]
+                else:
+                    snapshot_versions = queries.get_mc_versions(include_snapshots=True)
+                    index = snapshot_versions.index(version)
+                    for i in range(index):
+                        if snapshot_versions[i] in release_versions:
+                            new_versions.append(snapshot_versions[i])
+            
+            self.mc_version_dropdown.clear()
+            self.mc_version_dropdown.addItems(new_versions)
+    
+    def set_version_range(self, version):
+        release_versions = queries.get_mc_versions(include_snapshots=False)
+        snapshot_versions = queries.get_mc_versions(include_snapshots=True)
+        new_versions = []
+        if snapshot_versions[0] == version:
+            return False
+        elif release_versions[0] == version:
+            self.include_snapshots_check.setChecked(True)
+            self.include_snapshots_check.setDisabled(True)
+            new_versions = snapshot_versions[:snapshot_versions.index(version)]
+        else:
+            check_index = snapshot_versions.index(version) - 1
+            while check_index >= 0:
+                check_version = snapshot_versions[check_index]
+                if check_version in release_versions:
+                    break
+                check_index -= 1
+            if check_index < 0:
+                self.include_snapshots_check.setDisabled(True)
+                self.include_snapshots_check.setChecked(True)
+                new_versions = snapshot_versions[:snapshot_versions.index(version)]
+            else:
+                self.include_snapshots_check.setChecked(False)
+                self.include_snapshots_check.setDisabled(False)
+                new_versions = release_versions[:release_versions.index(snapshot_versions[check_index]) + 1]
+        
         self.mc_version_dropdown.clear()
         self.mc_version_dropdown.addItems(new_versions)
+        return True
     
     def check_for_hardcore(self):
         if self.gamemode_dropdown.currentText() == "Hardcore":

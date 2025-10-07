@@ -16,6 +16,7 @@ class MgmtBus(QObject):
     player_join = pyqtSignal(dict)
     player_leave = pyqtSignal(dict)
     update_status = pyqtSignal(list)
+    refresh_players = pyqtSignal()
 
     close_server = pyqtSignal()
     op_player = pyqtSignal(str, bool)
@@ -28,8 +29,9 @@ class MgmtBus(QObject):
     view_distance = pyqtSignal(int)
     simulation_distance = pyqtSignal(int)
 
-    def __init__(self):
+    def __init__(self, api_version):
         super().__init__()
+        self.api_version = api_version
         self.close_server.connect(self.send_close)
         self.op_player.connect(self.send_op)
         self.enable_whitelist.connect(self.send_whitelist_enable)
@@ -59,16 +61,18 @@ class MgmtBus(QObject):
     def return_error(self, msg):
         self.log.emit(f"<font color='red'>{msg}</font>")
 
-    def run_mgmt_listener_client(self, ip, port):
+    def run_mgmt_listener_client(self, ip, port, auth_token):
         try:
-            asyncio.run(self.mgmt_listener_worker(ip, port))
+            asyncio.run(self.mgmt_listener_worker(ip, port, auth_token))
         except Exception as e:
             self.return_error(f"run_mgmt_listener_client raised exception: {e!r}")
     
-    def run_mgmt_sender_client(self, ip, port):
+    def run_mgmt_sender_client(self, ip, port, auth_token):
         try:
-            asyncio.run(self.mgmt_sender_worker(ip, port))
-        except Exception as e:
+            asyncio.run(self.mgmt_sender_worker(ip, port, auth_token))
+        except asyncio.CancelledError:
+            return
+        except BaseException as e:
             self.return_error(f"run_mgmt_sender_client raised exception: {e!r}")
     
     async def _listen(self, ws):
@@ -89,8 +93,13 @@ class MgmtBus(QObject):
             # Windows-y “WinError 64” path. Treat as normal end.
             return
     
-    async def mgmt_listener_worker(self, ip, port):
+    async def mgmt_listener_worker(self, ip, port, auth_token):
         url = f"ws://{ip}:{port}"
+        header = {}
+        if auth_token and self.api_version > 1:
+            header = {
+                "Authorization": f"Bearer {auth_token}"
+            }
         time_waited = 0
         connected = False
 
@@ -100,7 +109,7 @@ class MgmtBus(QObject):
 
         while time_waited < 51 and not self._shutdown.is_set():
             try:
-                async with websockets.connect(url) as ws:
+                async with websockets.connect(url, additional_headers=header) as ws:
                     connected = True
                     self.connected.emit(True)
                     listener = asyncio.create_task(self._listen(ws))
@@ -132,14 +141,19 @@ class MgmtBus(QObject):
             self.return_error("Timed out waiting for server to respond.")
             self.connected.emit(False)
     
-    async def mgmt_sender_worker(self, ip, port):
+    async def mgmt_sender_worker(self, ip, port, auth_token):
         url = f"ws://{ip}:{port}"
+        header = {}
+        if auth_token and self.api_version > 1:
+            header = {
+                "Authorization": f"Bearer {auth_token}"
+            }
         loop = asyncio.get_running_loop()
         time_waited = 0
 
         while time_waited < 51 and not self._shutdown.is_set():
             try:
-                async with websockets.connect(url) as ws:
+                async with websockets.connect(url, additional_headers=header) as ws:
                     while not self._shutdown.is_set():
                         cmd = await loop.run_in_executor(None, self.cmd_queue.get)
                         if cmd is None or self._shutdown.is_set():
@@ -150,7 +164,13 @@ class MgmtBus(QObject):
                             return
                         await ws.send(json.dumps(cmd))
             except websockets.ConnectionClosed:
-                return
+                if not self._shutdown.is_set():
+                    # Lost connection - attempt to reconnect
+                    time_waited = 0
+                    pass
+                else:
+                    # Closing server connection
+                    return
             except ConnectionRefusedError:
                 await asyncio.sleep(2.0)
                 time_waited += 2
@@ -169,13 +189,19 @@ class MgmtBus(QObject):
                 self.log.emit(safe)
         
         if "error" in recvd:
-            self.return_error(f"Error: {recvd["error"].get("data") or recvd["error"].get("message")}")
+            err = recvd["error"].get("data") or recvd["error"].get("message")
+            self.return_error(f"Error: {err}")
         elif "result" in recvd:
             self.recvd_result.emit(recvd["result"])
         elif "method" in recvd:
             if "notification" in recvd["method"]:
-                notification = recvd["method"].removeprefix("notification:")
-                topic, action = notification.split("/")
+                topic, action = "", ""
+                if self.api_version > 2:
+                    notification = recvd["method"]
+                    prefix, topic, action = notification.split("/")
+                else:
+                    notification = recvd["method"].removeprefix("notification:")
+                    topic, action = notification.split("/")
                 params = [] if "params" not in recvd else recvd["params"]
                 if topic == "server":
                     if action == "status":
@@ -197,8 +223,10 @@ class MgmtBus(QObject):
                 elif topic == "operators":
                     if action == "added":
                         append_log(f"{params[0]['player']['name']} was given operator status.", "#ffffff", "#3b5998")
+                        self.refresh_players.emit()
                     elif action == "removed":
                         append_log(f"{params[0]['player']['name']} lost operator status.", "#ffffff", "#a54040")
+                        self.refresh_players.emit()
                 elif topic == "allowlist":
                     if action == "added":
                         append_log(f"{params[0]['name']} was added to the whitelist.", "#ffffff", "#3b5998")
@@ -212,10 +240,15 @@ class MgmtBus(QObject):
         else:
             self.return_error(f"Unknown Data Received: {recvd}")
     
-    def assemble_data(self, method, *args):
+    def assemble_data(self, method, arg=None):
         data = {"jsonrpc":"2.0", "id":2, "method":method}
-        if args:
-            data["params"] = list(args)
+        if arg is not None:
+            if self.api_version >= 4 and type(arg) == dict and arg.get("kick") is not None:
+                data["params"] = arg
+            else:
+                data["params"] = [arg]
+        else:
+            data["params"] = []
         
         self.cmd_queue.put(data)
 
@@ -236,7 +269,10 @@ class MgmtBus(QObject):
         self.assemble_data(f"minecraft:allowlist/{command}", [{"name": name}])
     
     def send_kick(self, name):
-        self.assemble_data(f"minecraft:players/kick", {"players": [{"name": name}], "message": {"literal": "You have been kicked? What were you doing?!"}})
+        if self.api_version >= 4:
+            self.assemble_data(f"minecraft:players/kick", {"kick": [{"player": {"name": name}, "message": {"literal": "You have been kicked? What were you doing?!"}}]})
+        else:
+            self.assemble_data(f"minecraft:players/kick", {"players": [{"name": name}], "message": {"literal": "You have been kicked? What were you doing?!"}})
     
     def send_ban(self, name):
         self.assemble_data(f"minecraft:bans/add", [{"player": {"name": name}, "reason": "You done messed up."}])
