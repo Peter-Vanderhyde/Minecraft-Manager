@@ -16,6 +16,7 @@ class MgmtBus(QObject):
     player_join = pyqtSignal(dict)
     player_leave = pyqtSignal(dict)
     update_status = pyqtSignal(list)
+    refresh_players = pyqtSignal()
 
     close_server = pyqtSignal()
     op_player = pyqtSignal(str, bool)
@@ -69,7 +70,9 @@ class MgmtBus(QObject):
     def run_mgmt_sender_client(self, ip, port, auth_token):
         try:
             asyncio.run(self.mgmt_sender_worker(ip, port, auth_token))
-        except Exception as e:
+        except asyncio.CancelledError:
+            return
+        except BaseException as e:
             self.return_error(f"run_mgmt_sender_client raised exception: {e!r}")
     
     async def _listen(self, ws):
@@ -161,7 +164,13 @@ class MgmtBus(QObject):
                             return
                         await ws.send(json.dumps(cmd))
             except websockets.ConnectionClosed:
-                return
+                if not self._shutdown.is_set():
+                    # Lost connection - attempt to reconnect
+                    time_waited = 0
+                    pass
+                else:
+                    # Closing server connection
+                    return
             except ConnectionRefusedError:
                 await asyncio.sleep(2.0)
                 time_waited += 2
@@ -180,7 +189,8 @@ class MgmtBus(QObject):
                 self.log.emit(safe)
         
         if "error" in recvd:
-            self.return_error(f"Error: {recvd["error"].get("data") or recvd["error"].get("message")}")
+            err = recvd["error"].get("data") or recvd["error"].get("message")
+            self.return_error(f"Error: {err}")
         elif "result" in recvd:
             self.recvd_result.emit(recvd["result"])
         elif "method" in recvd:
@@ -213,8 +223,10 @@ class MgmtBus(QObject):
                 elif topic == "operators":
                     if action == "added":
                         append_log(f"{params[0]['player']['name']} was given operator status.", "#ffffff", "#3b5998")
+                        self.refresh_players.emit()
                     elif action == "removed":
                         append_log(f"{params[0]['player']['name']} lost operator status.", "#ffffff", "#a54040")
+                        self.refresh_players.emit()
                 elif topic == "allowlist":
                     if action == "added":
                         append_log(f"{params[0]['name']} was added to the whitelist.", "#ffffff", "#3b5998")
@@ -230,7 +242,7 @@ class MgmtBus(QObject):
     
     def assemble_data(self, method, arg=None):
         data = {"jsonrpc":"2.0", "id":2, "method":method}
-        if arg:
+        if arg is not None:
             if self.api_version >= 4 and type(arg) == dict and arg.get("kick") is not None:
                 data["params"] = arg
             else:

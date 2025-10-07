@@ -1012,6 +1012,7 @@ class ServerManagerApp(QMainWindow):
         self.bus.update_status.connect(self.update_status)
         self.bus.player_join.connect(self.add_player)
         self.bus.player_leave.connect(self.remove_player)
+        self.bus.refresh_players.connect(self.update_players_list)
 
         # This version will start the threads attempting to connect to the api.
         # A signal is used to broadcast whether the threads successfully connected (i.e. the server is up)
@@ -1871,7 +1872,13 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.addItem(item)
             return
 
+        opped_players = []
+        if os.path.isfile(self.path(self.server_path, "ops.json")):
+            with open(self.path(self.server_path, "ops.json"), 'r') as f:
+                opped_players = [p["name"] for p in json.loads(f.read())]
         for player in self.curr_players:
+            if player in opped_players:
+                player = f"{player} [op]"
             item = QListWidgetItem(html.escape(player))
             item.setForeground(QColor("purple"))
             self.players_info_box.addItem(item)
@@ -2448,7 +2455,7 @@ class ServerManagerApp(QMainWindow):
         if not item or not self.is_api_compatible(self.worlds[self.world]["version"]) or item.text() == "No players online":
             return
         
-        name = item.text()
+        name = item.text().removesuffix(" [op]")
         menu = QMenu(self)
         options = [
             {
