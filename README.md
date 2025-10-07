@@ -21,13 +21,14 @@ The host has the ability to
   > **Note**:  
   Newly created worlds do not generate any world files until their first time being run.
 - Easily backup server worlds.
+- Update worlds to newer versions.
 - Quickly access each world's mods folder.
-- Directly edit each world's properties in the GUI
-- Change a few settings that are universal across all worlds
-  - Enable/Disable the whitelist
-  - Add usernames to the whitelist
-  - Set the view distance
-  - Set the simulation distance
+- Directly edit each world's properties in the GUI.
+- Change a few settings that are universal across all worlds.
+  - Enable/Disable the whitelist.
+  - Add usernames to the whitelist.
+  - Set the view distance.
+  - Set the simulation distance.
 
 ### Extra Features
 For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to receive notifications from the server, and also to send commands to the server. This means there are more features available for those worlds.
