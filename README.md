@@ -9,7 +9,7 @@ This is a Java Minecraft server manager that allows for basic control of a serve
 ## Features
 Through this manager both the host and clients have the ability to
 - Start the world they've selected in the dropdown.
-- Stop or the currently running server.
+- Stop the currently running server.
 - Query the current players on the server.
 - Query the current status of the server including the version and the world name.
 - Chat with others connected to the manager.
