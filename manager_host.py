@@ -1837,7 +1837,7 @@ class ServerManagerApp(QMainWindow):
         return queries.players(self.host_ip, self.server_port)
     
     def query_worlds(self):
-        return self.worlds
+        return (self.worlds, self.world_order)
 
     def get_status(self):
         self.set_status(["pinging",None,None])

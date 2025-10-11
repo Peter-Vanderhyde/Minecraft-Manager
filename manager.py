@@ -55,7 +55,7 @@ class ConnectionWorker(QObject):
 class ServerManagerApp(QMainWindow):
     set_status_signal = pyqtSignal(list)
     set_players_signal = pyqtSignal(list)
-    set_worlds_list_signal = pyqtSignal(dict)
+    set_worlds_list_signal = pyqtSignal(list)
     get_status_signal = pyqtSignal()
     update_log_signal = pyqtSignal(str)
     switch_to_connect_signal = pyqtSignal()
@@ -599,7 +599,7 @@ class ServerManagerApp(QMainWindow):
             self.message_thread.join()
         if self.client:
             self.client.close()
-        self.set_worlds_list({})
+        self.set_worlds_list([{}, []])
         self.stacked_layout.setCurrentIndex(0)
         self.connecting_label.setText("Lost Connection")
         self.close_threads.clear()
@@ -691,11 +691,14 @@ class ServerManagerApp(QMainWindow):
         for player in players:
             self.players_info_box.append(f"<font color='purple'>{player}</font>")
     
-    def set_worlds_list(self, worlds):
+    def set_worlds_list(self, worlds_data):
         self.worlds.clear()
-        self.worlds.update(worlds)
+        self.worlds.update(worlds_data[0])
+        prev = self.dropdown.currentText()
         self.dropdown.clear()
-        self.dropdown.addItems(worlds.keys())
+        self.dropdown.addItems(worlds_data[1])
+        if prev in self.worlds.keys():
+            self.dropdown.setCurrentText(prev)
         self.set_current_world_version(self.dropdown.currentText())
 
     def set_current_world_version(self, world):
