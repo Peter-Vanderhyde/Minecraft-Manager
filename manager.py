@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
-TESTING = False
+TESTING = True
 VERSION = "v2.4.3"
 
 if TESTING:
@@ -244,9 +244,11 @@ class ServerManagerApp(QMainWindow):
         status_layout.setColumnStretch(1, 1)
         
         self.version_label = QLabel("Server Version: ")
-        self.version_label.setObjectName("details")
+        self.version_label.setObjectName("world_details")
+        self.version_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.world_label = QLabel("Server World: ")
-        self.world_label.setObjectName("details")
+        self.world_label.setObjectName("world_details")
+        self.world_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.refresh_status_button = QPushButton("Refresh Status")
         self.refresh_status_button.clicked.connect(self.get_status)
         self.log_box = QTextBrowser()
@@ -278,10 +280,11 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
 
-        self.mods_download_button = QPushButton("Download Mods")
+        self.mods_download_button = QPushButton("Download\nMods")
         self.mods_download_button.setObjectName("blueButton")
         self.mods_download_button.clicked.connect(self.switch_to_download_page)
-        self.mods_download_button.show()
+        self.mods_download_button.hide()
+        self.mods_download_button.setDisabled(True)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -659,8 +662,8 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.show()
             self.server_status_online_label.hide()
-            self.version_label.setText("Version:")
-            self.world_label.setText("World:")
+            self.version_label.setText("")
+            self.world_label.setText("")
             self.refresh_button.setEnabled(False)
             self.players_info_box.clear()
             self.refresh_status_button.setEnabled(True)
@@ -671,8 +674,8 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.show()
             self.server_status_offline_label.hide()
             self.server_status_online_label.hide()
-            self.version_label.setText("Version:")
-            self.world_label.setText("World:")
+            self.version_label.setText("")
+            self.world_label.setText("")
             self.refresh_button.setEnabled(False)
             self.players_info_box.clear()
             self.refresh_status_button.setEnabled(False)

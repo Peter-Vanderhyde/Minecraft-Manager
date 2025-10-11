@@ -87,6 +87,12 @@ QLabel {
     font-size: 16px;
 }
 
+#world_details {
+    font-size: 16px;
+    background-color: rgba(55, 55, 55, 150);
+    border-radius: 5%;
+}
+
 #version_num {
     color: #5fb18f;
     font-size: 16px;

@@ -21,7 +21,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
+TESTING = True
 VERSION = "v2.4.3"
 
 if TESTING:
@@ -243,9 +243,11 @@ class ServerManagerApp(QMainWindow):
         status_layout.setColumnStretch(1, 1)
         
         self.version_label = QLabel("Server Version: ")
-        self.version_label.setObjectName("details")
+        self.version_label.setObjectName("world_details")
+        self.version_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.world_label = QLabel("Server World: ")
-        self.world_label.setObjectName("details")
+        self.world_label.setObjectName("world_details")
+        self.world_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.refresh_status_button = QPushButton("Refresh Status")
         self.refresh_status_button.clicked.connect(self.get_status)
         self.log_box = QTextBrowser()
@@ -1909,8 +1911,8 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.show()
             self.server_status_online_label.hide()
-            self.version_label.setText("Version:")
-            self.world_label.setText("World:")
+            self.version_label.setText("")
+            self.world_label.setText("")
             self.refresh_button.setEnabled(False)
             self.players_info_box.clear()
             self.refresh_status_button.setEnabled(True)
@@ -1921,8 +1923,8 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.show()
             self.server_status_offline_label.hide()
             self.server_status_online_label.hide()
-            self.version_label.setText("Version:")
-            self.world_label.setText("World:")
+            self.version_label.setText("")
+            self.world_label.setText("")
             self.refresh_button.setEnabled(False)
             self.players_info_box.clear()
             self.refresh_status_button.setEnabled(False)
