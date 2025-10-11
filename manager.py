@@ -266,7 +266,7 @@ class ServerManagerApp(QMainWindow):
 
         self.mods_download_button = QPushButton("Download Mods")
         self.mods_download_button.setObjectName("blueButton")
-        self.mods_download_button.clicked.connect(self.download_mods)
+        self.mods_download_button.clicked.connect(self.switch_to_download_page)
         self.mods_download_button.show()
 
         functions_layout = QGridLayout()
@@ -292,10 +292,52 @@ class ServerManagerApp(QMainWindow):
         server_manager_page = QWidget()
         server_manager_page.setLayout(server_manager_layout)
 
+        # Page 4: Download mods page
+
+        page_layout = QHBoxLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        self.downloads_message = QLabel("")
+        self.downloads_message.setObjectName("mediumText")
+        self.downloads_message.setWordWrap(True)
+        self.downloads_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        download_button = QPushButton("Download")
+        download_button.clicked.connect(self.download_mods)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("stopButton")
+        cancel_button.clicked.connect(self.switch_to_server_manager)
+
+        center_layout.addWidget(self.downloads_message, alignment=Qt.AlignmentFlag.AlignCenter)
+        buttons_layout = QHBoxLayout()
+        buttons_layout.addStretch(1)
+        buttons_layout.addWidget(download_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        buttons_layout.addStretch(1)
+        buttons_layout.addWidget(cancel_button, alignment=Qt.AlignmentFlag.AlignRight)
+        buttons_layout.addStretch(1)
+        center_layout.addLayout(buttons_layout)
+
+        right_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(center_layout)
+        page_layout.addLayout(right_layout)
+        page_layout.setStretch(2, 1)
+
+        download_page = QWidget()
+        download_page.setLayout(page_layout)
+
+        #----------------------------------------------------
+
         # Add pages to the stacked layout
         self.stacked_layout.addWidget(connect_page)
         self.stacked_layout.addWidget(name_prompt_page)
         self.stacked_layout.addWidget(server_manager_page)
+        self.stacked_layout.addWidget(download_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -402,6 +444,9 @@ class ServerManagerApp(QMainWindow):
                             self.set_worlds_list_signal.emit(args)
                         elif key in ["start", "stop"] and args == ["refresh"]:
                             self.get_status_signal.emit()
+                        elif key in "available-mods":
+                            if args[0] == self.dropdown.currentText() and args[1] == True:
+                                self.mods_download_button.setDisabled(False)
             except socket.error as e:
                 if e.errno == 10035:
                     time.sleep(0.1)
@@ -447,6 +492,10 @@ class ServerManagerApp(QMainWindow):
         self.close_threads.clear()
         self.log_box.clear()
         self.set_status(["pinging", "", ""])
+    
+    def switch_to_download_page(self):
+        self.downloads_message.setText("Are you sure you want to download client mods for this world?")
+        self.stacked_layout.setCurrentIndex(3)
 
     def check_messages(self):
         while not self.close_threads.is_set():
@@ -473,6 +522,9 @@ class ServerManagerApp(QMainWindow):
     
     def stop_server(self):
         self.send("MANAGER-REQUEST~~>stop-server")
+    
+    def check_available_mods(self, world):
+        self.send(f"MANAGER-REQUEST~~>check-mods,{world}")
     
     def set_status(self, info):
         status, version, world = info
@@ -532,6 +584,12 @@ class ServerManagerApp(QMainWindow):
     def set_current_world_version(self, world):
         if world:
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {"Fabric" * self.worlds[world]["fabric"]}')
+            if self.worlds[world]["fabric"]:
+                self.mods_download_button.show()
+                self.mods_download_button.setDisabled(True)
+                self.check_available_mods(world)
+            else:
+                self.mods_download_button.hide()
         else:
             self.world_version_label.setText("")
     

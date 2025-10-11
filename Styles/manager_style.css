@@ -70,6 +70,7 @@ QLabel {
 
 #mediumText {
     font-size: 27px;
+    text-align: center;
 }
                
 #connectingText {

@@ -1383,6 +1383,12 @@ class ServerManagerApp(QMainWindow):
                         elif request == "restart-server":
                             self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds in the current version.</font>")
                             self.tell(client, "You are using an outdated client version. You can find the latest release at https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases.")
+                        elif request == "check-mods":
+                            folder_path = self.path(self.server_path, "worlds", args[0], "client mods")
+                            if os.path.isdir(folder_path) and len(glob.glob(self.path(folder_path, "*.jar"))) > 0:
+                                    self.send_data("available-mods", [args[0], True], client)
+                            else:
+                                self.send_data("available-mods", [args[0], False], client)
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -2428,6 +2434,7 @@ class ServerManagerApp(QMainWindow):
                     os.mkdir(self.path(world_folder, "mods"))
 
             file_funcs.open_folder_explorer(self.path(world_folder, "client mods" if client_folder else "mods"))
+            self.show_main_page(ignore_load=True)
     
     def toggle_whitelist(self):
         enabled = not self.whitelist_toggle_button.text() == "Enabled"
