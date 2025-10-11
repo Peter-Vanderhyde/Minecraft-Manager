@@ -253,6 +253,8 @@ class ServerManagerApp(QMainWindow):
         right_column_layout = QVBoxLayout()
         self.functions_label = QLabel("Functions")
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
+        self.dropdown = QComboBox()
+        self.dropdown.currentTextChanged.connect(self.set_current_world_version)
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
         self.world_version_label = QLabel("")
@@ -262,8 +264,10 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
 
-        self.dropdown = QComboBox()
-        self.dropdown.currentTextChanged.connect(self.set_current_world_version)
+        self.mods_download_button = QPushButton("Download Mods")
+        self.mods_download_button.setObjectName("blueButton")
+        self.mods_download_button.clicked.connect(self.download_mods)
+        self.mods_download_button.show()
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -271,6 +275,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.world_version_label, 2, 0, 1, 2)
         functions_layout.addWidget(self.start_button, 3, 0, 1, 2)
         functions_layout.addWidget(self.stop_button, 4, 0, 1, 2)
+        functions_layout.addWidget(self.mods_download_button, 5, 0, 1, 2)
 
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
@@ -529,6 +534,9 @@ class ServerManagerApp(QMainWindow):
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {"Fabric" * self.worlds[world]["fabric"]}')
         else:
             self.world_version_label.setText("")
+    
+    def download_mods(self):
+        pass
     
     def update_log(self, message):
         self.log_box.append(message)

@@ -39,9 +39,23 @@ QPushButton:disabled {
 }
 
 #stopButton:disabled,
+#blueButton:disabled,
 #restartButton:disabled {
     background-color: #a0a0a0; /* Slightly lighter gray for disabled */
     color: #d0d0d0; /* Lighter text color for disabled */
+}
+
+#blueButton {
+    background-color: #3b5998; /* Blue variant */
+    color: #96a9c7;
+}
+
+#blueButton:hover {
+    background-color: #2d4278; /* Darker blue on hover */
+}
+
+#blueButton:pressed {
+    background-color: #1d2951; /* Even darker blue when pressed */
 }
 
 QLineEdit, QTextEdit {
@@ -80,6 +94,8 @@ QLabel {
 #world_version {
     color: #3068c2;
     font-size: 18px;
+    background-color: rgba(55, 55, 55, 150);
+    border-radius: 10%;
 }
                
 #statusOnline {
