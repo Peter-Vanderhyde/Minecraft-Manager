@@ -1389,6 +1389,22 @@ class ServerManagerApp(QMainWindow):
                                     self.send_data("available-mods", [args[0], True], client)
                             else:
                                 self.send_data("available-mods", [args[0], False], client)
+                        elif request == "download-mods":
+                            world = args[0]
+                            folder_path = self.path(self.server_path, "worlds", world, "client mods")
+                            if os.path.isdir(folder_path):
+                                files = glob.glob(self.path(folder_path, "*.jar"))
+                                total_size = 0
+                                for file in files:
+                                    total_size += os.path.getsize(file)
+                                for i, file in enumerate(files):
+                                    filesize = os.path.getsize(file)
+                                    filename = os.path.basename(file)
+                                    header = [filename, filesize, i + 1, len(files), total_size]
+                                    self.send_data("sending-file", header, client)
+                                    with open(file, "rb") as f:
+                                        client.sendfile(f)
+                                self.send_data("file-transfer-complete", "", client)
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -1427,7 +1443,7 @@ class ServerManagerApp(QMainWindow):
                 pass
     
     def tell(self, client, message):
-        client.sendall(f"SERVER-MESSAGE~~>{message}".encode("utf-8"))
+        client.sendall(f"SERVER-MESSAGE~~>{message}\n".encode("utf-8"))
     
     def check_messages(self):
         while not self.log_queue.empty():
