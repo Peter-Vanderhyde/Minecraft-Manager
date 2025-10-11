@@ -281,7 +281,7 @@ class ServerManagerApp(QMainWindow):
         self.world_properties_button = QPushButton("Properties")
         self.world_properties_button.clicked.connect(self.show_edit_properties_page)
         self.world_mods_button = QPushButton("Mods")
-        self.world_mods_button.clicked.connect(self.open_mods_folder)
+        self.world_mods_button.clicked.connect(self.show_mods_page)
         self.modrinth_button = QPushButton("Modrinth")
         self.modrinth_button.setObjectName("blueButton")
         self.modrinth_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.modrinth.com")))
@@ -969,6 +969,51 @@ class ServerManagerApp(QMainWindow):
         commands_page_layout = QWidget()
         commands_page_layout.setLayout(page_layout)
 
+        # Page 11: Mods page
+
+        page_layout = QHBoxLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        server_mods_button = HoverButton("Server Mods")
+        server_mods_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        server_mods_button.clicked.connect(self.open_mods_folder)
+        server_mods_button.changeHovering.connect(lambda hovering: hover_label.setText("Server-side mods being run by the server" if hovering else ""))
+        client_mods_button = HoverButton("Client Mods")
+        client_mods_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        client_mods_button.clicked.connect(lambda: self.open_mods_folder(client_folder=True))
+        client_mods_button.changeHovering.connect(lambda hovering: hover_label.setText("Mods in this folder can be downloaded by clients to use" if hovering else ""))
+        cancel_mods_button = QPushButton("Back")
+        cancel_mods_button.setObjectName("smallRedButton")
+        cancel_mods_button.clicked.connect(self.show_main_page)
+
+        hover_label = QLabel("")
+        hover_label.setObjectName("smallText")
+        hover_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        center_layout.addWidget(server_mods_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center_layout.addWidget(client_mods_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center_layout.addWidget(hover_label)
+        back_layout = QHBoxLayout()
+        back_layout.addStretch(1)
+        back_layout.addWidget(cancel_mods_button)
+        back_layout.addStretch(1)
+        center_layout.addLayout(back_layout)
+
+        right_layout = QVBoxLayout()
+        version = QLabel(VERSION)
+        version.setObjectName("version_num")
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(center_layout)
+        page_layout.addLayout(right_layout)
+        page_layout.setStretch(2, 1)
+
+        mods_page = QWidget()
+        mods_page.setLayout(page_layout)
+
         #----------------------------------------------------
 
         self.stacked_layout.addWidget(server_manager_page)
@@ -981,6 +1026,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(edit_properties_page)
         self.stacked_layout.addWidget(new_world_type_page)
         self.stacked_layout.addWidget(commands_page_layout)
+        self.stacked_layout.addWidget(mods_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1181,6 +1227,9 @@ class ServerManagerApp(QMainWindow):
         self.view_distance_textbox.setText(str(self.universal_settings.get("view distance")))
         self.simulation_distance_textbox.setText(str(self.universal_settings.get("simulation distance")))
         self.stacked_layout.setCurrentIndex(9)
+    
+    def show_mods_page(self):
+        self.stacked_layout.setCurrentIndex(10)
     
     def save_properties_edit(self):
         world = self.dropdown.currentText()
@@ -2360,18 +2409,25 @@ class ServerManagerApp(QMainWindow):
         
         file_funcs.open_file(self.path(self.server_path, "worlds", world, "saved_properties.properties"))
     
-    def open_mods_folder(self):
+    def open_mods_folder(self, client_folder=False):
         world = self.dropdown.currentText()
         if world and self.worlds[world].get("fabric"):
             world_folder = self.path(self.server_path, "worlds", world)
             if os.path.exists(world_folder):
-                if not os.path.exists(self.path(world_folder, "mods")):
-                    os.mkdir(self.path(world_folder, "mods"))
+                if client_folder:
+                    if not os.path.exists(self.path(world_folder, "client mods")):
+                        os.mkdir(self.path(world_folder, "client mods"))
+                else:
+                    if not os.path.exists(self.path(world_folder, "mods")):
+                        os.mkdir(self.path(world_folder, "mods"))
             else:
                 os.mkdir(world_folder)
-                os.mkdir(self.path(world_folder, "mods"))
+                if client_folder:
+                    os.mkdir(self.path(world_folder, "client mods"))
+                else:
+                    os.mkdir(self.path(world_folder, "mods"))
 
-            file_funcs.open_folder_explorer(self.path(world_folder, "mods"))
+            file_funcs.open_folder_explorer(self.path(world_folder, "client mods" if client_folder else "mods"))
     
     def toggle_whitelist(self):
         enabled = not self.whitelist_toggle_button.text() == "Enabled"
