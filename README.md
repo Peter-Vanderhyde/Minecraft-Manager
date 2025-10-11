@@ -7,7 +7,7 @@ This is a Java Minecraft server manager that allows for basic control of a serve
 ![Manager Window](Images/window.png)
 
 ## Features
-Through this manager both the host and clients have the ability to
+Through this manager, both the host and clients have the ability to
 - Start the world they've selected in the dropdown.
 - Stop the currently running server.
 - Query the current players on the server.
@@ -23,6 +23,7 @@ The host has the ability to
 - Easily backup server worlds.
 - Update worlds to newer versions.
 - Quickly access each world's mods folder.
+- Download mods and designate them as recommended for playing on a world. Clients can download these mods directly from the host.
 - Directly edit each world's properties in the GUI.
 - Change a few settings that are universal across all worlds.
   - Enable/Disable the whitelist.
