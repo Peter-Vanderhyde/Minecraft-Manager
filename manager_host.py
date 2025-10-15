@@ -22,7 +22,7 @@ import websock_mgmt
 import html
 
 TESTING = False
-VERSION = "v2.6.0"
+VERSION = "v2.7.0"
 
 if TESTING:
     STYLE_PATH = "Styles"
