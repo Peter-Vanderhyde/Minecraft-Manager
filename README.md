@@ -1,5 +1,6 @@
 # Minecraft Manager
-***Peter Vanderhyde, 2024***
+***Peter Vanderhyde***  
+*2024 - Present*
 
 ## Description
 This is a Java Minecraft server manager that allows for basic control of a server being run on a host's Windows machine. Anyone on the same network as the host can connect to the manager and startup worlds on the server. The host can set up multiple worlds so that clients can select which world to play in. It will even handle worlds that are different versions, different settings, or using Fabric to run mods on certain worlds.
