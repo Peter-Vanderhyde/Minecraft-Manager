@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
-TESTING = False
+TESTING = True
 VERSION = "v2.6.0"
 
 if TESTING:
@@ -321,6 +321,7 @@ class ServerManagerApp(QMainWindow):
         self.downloads_message.setWordWrap(True)
         self.downloads_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.download_progress = QProgressBar()
+        self.download_progress.setTextVisible(False)
         self.download_progress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.download_progress.hide()
         self.download_button = QPushButton("Download")
@@ -513,7 +514,7 @@ class ServerManagerApp(QMainWindow):
                             self.progress_range_signal.emit(0, total_file_sizes)
                             self.file_name = filename
                             file_bytes_needed = int(filesize)
-                            self.download_message_signal.emit(f"Downloading mod {current_index}/{num_of_mods}\n{filename}")
+                            self.download_message_signal.emit(f"Downloading {current_index}/{num_of_mods}\n{filename}")
                             self.file = open(Path.home() / "Downloads" / self.file_name, "wb")
                             to_take = min(len(buf), file_bytes_needed)
                             if to_take:
@@ -723,6 +724,7 @@ class ServerManagerApp(QMainWindow):
     
     def download_complete(self):
         self.downloads_message.setText("Download complete!")
+        self.download_progress.setValue(0)
         self.finish_button.show()
         self.open_downloads_button.show()
         self.download_progress.hide()
