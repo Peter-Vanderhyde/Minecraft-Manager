@@ -87,7 +87,7 @@ QPushButton:disabled {
     color: #d0d0d0; /* Lighter text color for disabled */
 }
 
-#smallYellowButton, #smallRedButton, #smallBlueButton {
+#smallYellowButton, #smallRedButton, #smallBlueButton, #smallGreenButton {
     font-size: 12px;
 }
 
@@ -120,10 +120,14 @@ QLabel {
     font-size: 16px;
 }
 
-#world_details {
-    font-size: 16px;
+#world_details, #world_version, #ipLabel {
     background-color: rgba(55, 55, 55, 150);
     border-radius: 5%;
+    padding: 2;
+}
+
+#world_details {
+    font-size: 16px;
 }
 
 #version_num {
@@ -134,9 +138,6 @@ QLabel {
 #world_version {
     color: #4285f4;
     font-size: 14px;
-    background-color: rgba(55, 55, 55, 150);
-    border-radius: 5%;
-    padding: 1;
 }
 
 #largerText {

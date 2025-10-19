@@ -12,9 +12,10 @@ import subprocess
 import glob
 import shutil
 from datetime import datetime
+from pyperclip import copy
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor
-from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor
+from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint
 
 import queries
 import file_funcs
@@ -162,6 +163,7 @@ class ServerManagerApp(QMainWindow):
 
         self.host_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
+        self.ip_button.setText(f"IP: {self.host_ip}")
         self.clear_log_queue()
         
         if self.server_path == "" or not os.path.isdir(self.server_path):
@@ -193,11 +195,8 @@ class ServerManagerApp(QMainWindow):
 
         # Left column
         left_column_layout = QVBoxLayout()
-        temp_box = QHBoxLayout()
-        self.change_ip_button = QPushButton("Change")
-        self.change_ip_button.setObjectName("smallYellowButton")
-        self.change_ip_button.clicked.connect(self.prepare_ip_page)
-        self.host_ip_label = QLabel(f"IP: {self.host_ip}")
+        self.ip_button = QPushButton(f"IP: {self.host_ip}")
+        self.ip_button.clicked.connect(lambda: self.open_ip_context_menu(QCursor.pos()))
         self.current_players_label = QLabel("Current Players")
         self.current_players_label.setFont(QFont(self.current_players_label.font().family(), int(self.current_players_label.font().pointSize() * 1.5)))
         self.refresh_button = QPushButton("Refresh")
@@ -205,12 +204,10 @@ class ServerManagerApp(QMainWindow):
         self.players_info_box = QListWidget()
         self.players_info_box.setUniformItemSizes(True)
         self.players_info_box.itemClicked.connect(
-            lambda it: self.open_player_context_menu(self.players_info_box.visualItemRect(it).center())
+            lambda it: self.open_player_context_menu(self.players_info_box.visualItemRect(it).center(), QCursor.pos())
         )
 
-        temp_box.addWidget(self.change_ip_button)
-        temp_box.addWidget(self.host_ip_label)
-        left_column_layout.addLayout(temp_box)
+        left_column_layout.addWidget(self.ip_button)
         left_column_layout.addWidget(self.current_players_label)
         left_column_layout.addWidget(self.refresh_button)
         left_column_layout.addWidget(self.players_info_box)
@@ -1262,7 +1259,7 @@ class ServerManagerApp(QMainWindow):
         except:
             self.prepare_ip_page(failed=True)
             return
-        self.host_ip_label.setText(f"IP: {self.host_ip}")
+        self.ip_button.setText(f"IP: {self.host_ip}")
         self.show_main_page()
         self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
@@ -2531,8 +2528,8 @@ class ServerManagerApp(QMainWindow):
         self.dropdown.setCurrentText(current_selected)
         file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
     
-    def open_player_context_menu(self, pos):
-        item = self.players_info_box.itemAt(pos)
+    def open_player_context_menu(self, item_pos, cursor_pos):
+        item = self.players_info_box.itemAt(item_pos)
         if not item or not self.is_api_compatible(self.worlds[self.world]["version"]) or item.text() == "No players online":
             return
         
@@ -2581,7 +2578,7 @@ class ServerManagerApp(QMainWindow):
             
             menu.addAction(label, lambda n=name, r=remove, f=func: f(n, r))
         
-        menu.exec(self.players_info_box.viewport().mapToGlobal(pos))
+        menu.exec(cursor_pos)
     
     def op_player(self, player, remove):
         self.bus.op_player.emit(player, remove)
@@ -2672,6 +2669,16 @@ class ServerManagerApp(QMainWindow):
             self.difficulty_dropdown.clear()
             self.difficulty_dropdown.addItems(["Peaceful", "Easy", "Normal", "Hard"])
             self.difficulty_dropdown.setCurrentText(curr_diff)
+    
+    def open_ip_context_menu(self, pos: QPoint):
+        menu = QMenu(self)
+        menu.addAction("Copy", self.copy_ip)
+        menu.addAction("Change", self.prepare_ip_page)
+        menu.exec(pos)
+    
+    def copy_ip(self):
+        copy(self.host_ip)
+        self.log_queue.put("Copied IP address to clipboard.")
 
     @pyqtSlot()
     def onWindowStateChanged(self):
