@@ -11,7 +11,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopSe
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
 TESTING = False
-VERSION = "v2.7.0"
+VERSION = "v2.7.1"
 
 if TESTING:
     STYLE_PATH = "Styles"

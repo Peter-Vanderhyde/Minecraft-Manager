@@ -21,8 +21,8 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
-VERSION = "v2.7.0"
+TESTING = True
+VERSION = "v2.7.1"
 
 if TESTING:
     STYLE_PATH = "Styles"
