@@ -194,7 +194,7 @@ class ServerManagerApp(QMainWindow):
         # Left column
         left_column_layout = QVBoxLayout()
         temp_box = QHBoxLayout()
-        self.change_ip_button = QPushButton("Change IP")
+        self.change_ip_button = QPushButton("Change")
         self.change_ip_button.setObjectName("smallYellowButton")
         self.change_ip_button.clicked.connect(self.prepare_ip_page)
         self.host_ip_label = QLabel(f"IP: {self.host_ip}")
