@@ -40,7 +40,7 @@ For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to
 - Toggling the whitelist and changing the view/simulation distance through the GUI immediately applies the changes to the server world through the API.
 
 ## Host Instructions
-If you are hosting the server on your computer, you must have your `manager_host` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
+If you are hosting the server on your computer, you must have your `Manager_host` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
 >**MAKE SURE** you are downloading the **JRE** version, not the **JDK !!**
 
 
