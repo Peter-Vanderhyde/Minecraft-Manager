@@ -196,20 +196,27 @@ class ServerManagerApp(QMainWindow):
         # Left column
         left_column_layout = QVBoxLayout()
         self.ip_button = QPushButton(f"IP: {self.host_ip}")
+        self.ip_button.setObjectName("smallGreenButton")
+        self.ip_button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         self.ip_button.clicked.connect(lambda: self.open_ip_context_menu(QCursor.pos()))
+        self.refresh_button = QPushButton("\u21BB")
+        self.refresh_button.setObjectName("smallGreenButton")
+        self.refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.refresh_button.setToolTip("Refresh Players")
+        self.refresh_button.clicked.connect(self.get_players)
         self.current_players_label = QLabel("Current Players")
         self.current_players_label.setFont(QFont(self.current_players_label.font().family(), int(self.current_players_label.font().pointSize() * 1.5)))
-        self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.clicked.connect(self.get_players)
         self.players_info_box = QListWidget()
         self.players_info_box.setUniformItemSizes(True)
         self.players_info_box.itemClicked.connect(
             lambda it: self.open_player_context_menu(self.players_info_box.visualItemRect(it).center(), QCursor.pos())
         )
 
-        left_column_layout.addWidget(self.ip_button)
-        left_column_layout.addWidget(self.current_players_label)
-        left_column_layout.addWidget(self.refresh_button)
+        left_column_layout.addWidget(self.ip_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        players_label_layout = QHBoxLayout()
+        players_label_layout.addWidget(self.refresh_button)
+        players_label_layout.addWidget(self.current_players_label)
+        left_column_layout.addLayout(players_label_layout)
         left_column_layout.addWidget(self.players_info_box)
 
         # Center column
@@ -221,23 +228,6 @@ class ServerManagerApp(QMainWindow):
         self.title_font.setBold(True)
         self.title_label.setFont(self.title_font)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-
-        status_layout = QGridLayout()
-        self.server_status_label = QLabel("Status: Pinging...")  # Replace with dynamic status
-        self.server_status_label.setFont(QFont("Verdana", int(self.server_status_label.font().pointSize() * 1.5)))
-        status_layout.addWidget(self.server_status_label, 0, 0)
-        self.server_status_label.hide()
-        self.server_status_online_label = QLabel("Status: Online")  # Replace with dynamic status
-        self.server_status_online_label.setObjectName("statusOnline")
-        self.server_status_online_label.setFont(QFont("Verdana", int(self.server_status_online_label.font().pointSize() * 1.5)))
-        status_layout.addWidget(self.server_status_online_label, 0, 0)
-        self.server_status_online_label.hide()
-        self.server_status_offline_label = QLabel("Status: Offline")  # Replace with dynamic status
-        self.server_status_offline_label.setObjectName("statusOffline")
-        self.server_status_offline_label.setFont(QFont("Verdana", int(self.server_status_offline_label.font().pointSize() * 1.5)))
-        status_layout.addWidget(self.server_status_offline_label, 0, 0)
-        self.server_status_offline_label.show()
-        status_layout.setColumnStretch(1, 1)
         
         self.world_label = QLabel("Server World: ")
         self.world_label.setObjectName("world_details")
@@ -245,18 +235,39 @@ class ServerManagerApp(QMainWindow):
         self.version_label = QLabel("World Version: ")
         self.version_label.setObjectName("world_details")
         self.version_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        self.refresh_status_button = QPushButton("Refresh Status")
+
+        status_layout = QGridLayout()
+        self.refresh_status_button = QPushButton("\u21BB")
+        self.refresh_status_button.setObjectName("smallGreenButton")
+        self.refresh_status_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.refresh_status_button.setToolTip("Refresh Status")
         self.refresh_status_button.clicked.connect(self.get_status)
+        status_layout.addWidget(self.refresh_status_button, 0, 0)
+        self.server_status_label = QLabel("Status: Pinging...")  # Replace with dynamic status
+        self.server_status_label.setFont(QFont("Verdana", int(self.server_status_label.font().pointSize() * 1.5)))
+        status_layout.addWidget(self.server_status_label, 0, 1)
+        self.server_status_label.hide()
+        self.server_status_online_label = QLabel("Status: Online")  # Replace with dynamic status
+        self.server_status_online_label.setObjectName("statusOnline")
+        self.server_status_online_label.setFont(QFont("Verdana", int(self.server_status_online_label.font().pointSize() * 1.5)))
+        status_layout.addWidget(self.server_status_online_label, 0, 1)
+        self.server_status_online_label.hide()
+        self.server_status_offline_label = QLabel("Status: Offline")  # Replace with dynamic status
+        self.server_status_offline_label.setObjectName("statusOffline")
+        self.server_status_offline_label.setFont(QFont("Verdana", int(self.server_status_offline_label.font().pointSize() * 1.5)))
+        status_layout.addWidget(self.server_status_offline_label, 0, 1)
+        self.server_status_offline_label.show()
+        status_layout.setColumnStretch(2, 1)
+
         self.log_box = QTextBrowser()
         self.message_entry = QLineEdit()
         self.message_entry.setPlaceholderText("Send Message")
         self.message_entry.returnPressed.connect(self.message_entered)
 
         center_column_layout.addWidget(self.title_label)
-        center_column_layout.addLayout(status_layout)
         center_column_layout.addWidget(self.world_label)
         center_column_layout.addWidget(self.version_label)
-        center_column_layout.addWidget(self.refresh_status_button)
+        center_column_layout.addLayout(status_layout)
         center_column_layout.addWidget(self.log_box)
         center_column_layout.addWidget(self.message_entry)
 
