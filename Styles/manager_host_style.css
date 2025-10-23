@@ -133,6 +133,7 @@ QLabel {
 #version_num {
     color: #5fb18f;
     font-size: 16px;
+    background-color: transparent;
 }
 
 #world_version {

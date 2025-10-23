@@ -323,8 +323,10 @@ class ServerManagerApp(QMainWindow):
 
         right_column_layout.addLayout(functions_layout)
         right_column_layout.addStretch(1)  # Add empty space at the bottom
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         server_manager_layout.addLayout(left_column_layout, 2)  # Make the left column twice as wide
@@ -378,8 +380,10 @@ class ServerManagerApp(QMainWindow):
         center_column_layout.addLayout(bot_box)
 
         right_column_layout = QVBoxLayout()
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         error_layout.setColumnStretch(0, 1)
@@ -454,8 +458,10 @@ class ServerManagerApp(QMainWindow):
 
         right_column_layout = QVBoxLayout()
 
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         server_path_layout.setColumnStretch(0, 1)
@@ -515,8 +521,10 @@ class ServerManagerApp(QMainWindow):
 
         right_column_layout = QVBoxLayout()
 
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         connect_layout.setColumnStretch(0, 1)
@@ -563,8 +571,10 @@ class ServerManagerApp(QMainWindow):
 
         right_layout = QVBoxLayout()
 
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         world_layout.setColumnStretch(0, 1)
@@ -723,8 +733,10 @@ class ServerManagerApp(QMainWindow):
 
         right_layout = QVBoxLayout()
 
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         add_world_layout.setColumnStretch(0, 1)
@@ -772,8 +784,10 @@ class ServerManagerApp(QMainWindow):
 
         right_layout = QVBoxLayout()
 
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         remove_world_layout.setColumnStretch(0, 1)
@@ -820,8 +834,10 @@ class ServerManagerApp(QMainWindow):
 
         right_layout = QVBoxLayout()
 
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         edit_properties_layout = QGridLayout()
@@ -859,8 +875,10 @@ class ServerManagerApp(QMainWindow):
         center_layout.addLayout(back_layout)
 
         right_layout = QVBoxLayout()
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
@@ -957,8 +975,10 @@ class ServerManagerApp(QMainWindow):
         center_layout.addStretch(1)
 
         right_layout = QVBoxLayout()
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
@@ -1001,8 +1021,10 @@ class ServerManagerApp(QMainWindow):
         center_layout.addLayout(back_layout)
 
         right_layout = QVBoxLayout()
-        version = QLabel(VERSION)
+        version = QPushButton(VERSION)
         version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
