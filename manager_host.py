@@ -22,7 +22,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = True
+TESTING = False
 VERSION = "v2.8.0"
 
 if TESTING:
