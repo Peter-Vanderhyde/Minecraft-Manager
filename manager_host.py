@@ -1348,11 +1348,12 @@ class ServerManagerApp(QMainWindow):
                 
                 time.sleep(1)
         
-        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
-        self.tell(client, "You have joined the room!")
+        t_stamp = self.timestamp()
+        self.log_queue.put(f"{t_stamp} <font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
+        self.tell(client, f"{t_stamp} You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
-                self.tell(send_client, f"<font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
+                self.tell(send_client, f"{t_stamp} <font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
         
         self.delay(1)
 
@@ -1372,7 +1373,7 @@ class ServerManagerApp(QMainWindow):
                         continue
 
                     if not message.startswith("MANAGER-REQUEST"):
-                        self.log_queue.put(f'<font color="blue">{html.escape(self.clients[client])}: {message}</font>')
+                        self.log_queue.put(f'{self.timestamp()} <font color="blue">{html.escape(self.clients[client])}: {message}</font>')
                         self.broadcast(message, client)
                     else:
                         data = message.split('~~>')[-1].split(',')
@@ -1438,7 +1439,7 @@ class ServerManagerApp(QMainWindow):
             time.sleep(0.5)
         
         client.close()
-        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
+        self.log_queue.put(f"{self.timestamp()} <font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
         self.broadcast(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
         self.clients.pop(client)
 
@@ -1450,16 +1451,19 @@ class ServerManagerApp(QMainWindow):
         else:
             self.broadcast(f"DATA-RETURN({topic})~~>{json.dumps(data)}")
     
-    def broadcast(self, message, owner=None):
+    def broadcast(self, message, owner=None, admin_message=False):
         for client, name in self.clients.items():
             try:
                 if owner:
                     if client is owner:
-                        self.tell(client, f'<font color="green">You: {message}</font>')
+                        self.tell(client, f'{self.timestamp()} <font color="green">You: {message}</font>')
                     else:
-                        self.tell(client, f'<font color="blue">{self.clients[owner]}: {message}</font>')
+                        self.tell(client, f'{self.timestamp()} <font color="blue">{self.clients[owner]}: {message}</font>')
                 else:
-                    self.tell(client, message)
+                    if admin_message:
+                        self.tell(client, f"{self.timestamp()} {message}")
+                    else:
+                        self.tell(client, message)
             except Exception as e:
                 pass
     
@@ -1522,8 +1526,8 @@ class ServerManagerApp(QMainWindow):
         message = self.message_entry.text()
         if message != "":
             self.message_entry.clear()
-            self.log_queue.put(f'<font color="green">You: {message}</font>')
-            self.broadcast(f'<font color="blue">Admin: {message}</font>')
+            self.log_queue.put(f'{self.timestamp()} <font color="green">You: {message}</font>')
+            self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
     
     def get_api_version(self, version):
         game_versions = queries.get_mc_versions(include_snapshots=True)
