@@ -239,12 +239,12 @@ class ServerManagerApp(QMainWindow):
         self.server_status_offline_label.show()
         status_layout.setColumnStretch(1, 1)
         
-        self.version_label = QLabel("Server Version: ")
-        self.version_label.setObjectName("world_details")
-        self.version_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.world_label = QLabel("Server World: ")
         self.world_label.setObjectName("world_details")
         self.world_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.version_label = QLabel("World Version: ")
+        self.version_label.setObjectName("world_details")
+        self.version_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
         self.refresh_status_button = QPushButton("Refresh Status")
         self.refresh_status_button.clicked.connect(self.get_status)
         self.log_box = QTextBrowser()
@@ -254,8 +254,8 @@ class ServerManagerApp(QMainWindow):
 
         center_column_layout.addWidget(self.title_label)
         center_column_layout.addLayout(status_layout)
-        center_column_layout.addWidget(self.version_label)
         center_column_layout.addWidget(self.world_label)
+        center_column_layout.addWidget(self.version_label)
         center_column_layout.addWidget(self.refresh_status_button)
         center_column_layout.addWidget(self.log_box)
         center_column_layout.addWidget(self.message_entry)
@@ -1525,7 +1525,7 @@ class ServerManagerApp(QMainWindow):
                 self.delay(1)
                 waited += 1
             self.get_status_signal.emit()
-            self.log_queue.put(f"Server world '{self.world}' has been started.")
+            self.log_queue.put(f"{self.timestamp()} Server world '{self.world}' has been started.")
             self.broadcast(f"Server world '{self.world}' has been started.")
             self.send_data("start", "refresh")
         else:
@@ -1537,7 +1537,7 @@ class ServerManagerApp(QMainWindow):
     def api_closed(self):
         self.shutdown_bus()
         self.get_status_signal.emit()
-        self.log_queue.put("Server has been stopped.")
+        self.log_queue.put(f"{self.timestamp()} Server has been stopped.")
         self.broadcast("Server has been stopped.")
         self.send_data("stop", "refresh")
         if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
@@ -1873,8 +1873,8 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.show()
             self.server_status_online_label.hide()
-            self.version_label.setText("Version:")
-            self.world_label.setText("World:")
+            self.version_label.setText("")
+            self.world_label.setText("")
             self.refresh_button.setEnabled(False)
             self.players_info_box.clear()
             self.refresh_status_button.setEnabled(True)
@@ -1968,14 +1968,14 @@ class ServerManagerApp(QMainWindow):
         self.curr_players.remove(player_obj["name"])
         self.update_players_list()
         formatted_text = self.color_segments([player_obj['name'], " disconnected ", "from the server."], ["purple", "red", None])
-        self.log_queue.put(formatted_text)
+        self.log_queue.put(f"{self.timestamp()} {formatted_text}")
         self.broadcast(formatted_text)
     
     def add_player(self, player_obj):
         self.curr_players.append(player_obj["name"])
         self.update_players_list()
         formatted_text = self.color_segments([player_obj['name'], " joined ", "the server."], ["purple", "green", None])
-        self.log_queue.put(formatted_text)
+        self.log_queue.put(f"{self.timestamp()} {formatted_text}")
         self.broadcast(formatted_text)
     
     def set_worlds_list(self):
@@ -2038,7 +2038,7 @@ class ServerManagerApp(QMainWindow):
             
         file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         
-        self.change_ip_button.setEnabled(False)
+        self.ip_button.setEnabled(False)
         self.refresh_button.setEnabled(False)
         self.refresh_status_button.setEnabled(False)
         self.start_button.setEnabled(False)
@@ -2062,7 +2062,7 @@ class ServerManagerApp(QMainWindow):
             self.server_path = path
             self.message_timer.start(1000)
 
-            self.change_ip_button.setEnabled(True)
+            self.ip_button.setEnabled(True)
             self.refresh_button.setEnabled(True)
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
@@ -2679,6 +2679,15 @@ class ServerManagerApp(QMainWindow):
     def copy_ip(self):
         copy(self.host_ip)
         self.log_queue.put("Copied IP address to clipboard.")
+    
+    def timestamp(self):
+        t = time.localtime(time.time())
+        hour = t.tm_hour
+        min = t.tm_min
+        if min < 10:
+            min = f"0{t.tm_min}"
+        timestamp = f"[{hour}:{min}]"
+        return timestamp
 
     @pyqtSlot()
     def onWindowStateChanged(self):
