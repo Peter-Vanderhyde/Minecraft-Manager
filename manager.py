@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
-TESTING = True
+TESTING = False
 VERSION = "v2.8.0"
 
 if TESTING:
@@ -662,6 +662,8 @@ class ServerManagerApp(QMainWindow):
     
     def set_status(self, info):
         status, version, world = info
+        if version and version.startswith("vanilla "):
+            version = version.removeprefix("vanilla ")
         if status == "online":
             self.status = "online"
             self.server_status_label.hide()

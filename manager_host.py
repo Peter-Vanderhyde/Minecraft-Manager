@@ -1661,7 +1661,7 @@ class ServerManagerApp(QMainWindow):
             return error
         else:
             try:
-                self.log_queue.put(f"Preparing for {'fabric ' if fabric else ''} version {version}.")
+                self.log_queue.put(f"Preparing for {'Fabric ' if fabric else ''}version {version}.")
                 if seed is not None:
                     if seed != "":
                         self.log_queue.put(f"Generating {level_type} world with seed '{seed}'...")
@@ -2109,7 +2109,7 @@ class ServerManagerApp(QMainWindow):
             self.open_folder_button.setEnabled(True)
             
             if not self.check_eula():
-                self.show_error_page("By accepting, you are indicating your agreement<br> to Minecraft's EULA.",
+                self.show_error_page("By accepting, you are agreeing to<br>Minecraft's EULA.",
                                     "(https://aka.ms/MinecraftEULA)", eula=True)
             else:
                 self.start_manager_server()
