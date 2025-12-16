@@ -1639,8 +1639,7 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put(f"<font color='red'>Your Java version is out of date!<br>"
                                     f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
                                     f"You are currently running version {self.java_version}.<br>"
-                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version from <i>www.adoptium.net/temurin/releases/</i><br>"
-                                    "(Scroll down to select JRE instead of JDK.)</font>")
+                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version from <i>www.adoptium.net/temurin/releases/</i><br></font>")
                 
                 return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
 
