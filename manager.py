@@ -5,13 +5,14 @@ import time
 import threading
 import json
 import os
+import requests
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
-TESTING = False
-VERSION = "v2.8.0"
+TESTING = True
+VERSION = "v2.8.1"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -266,6 +267,7 @@ class ServerManagerApp(QMainWindow):
         status_layout.setColumnStretch(2, 1)
 
         self.log_box = QTextBrowser()
+        self.log_box.setOpenExternalLinks(True)
         self.log_box.setReadOnly(True)
         self.message_entry = QLineEdit()
         self.message_entry.setPlaceholderText("Send Message")
@@ -640,6 +642,29 @@ class ServerManagerApp(QMainWindow):
     def first_connect(self):
         self.get_worlds_list()
         self.get_status()
+
+        try:
+            response = requests.get("https://api.github.com/repos/Peter-Vanderhyde/Minecraft-Manager/releases/latest")
+        except:
+            return
+        
+        if response.status_code == 200:
+            content = response.json()
+            latest_ver = content["tag_name"]
+            if VERSION != latest_ver:
+                latest_version = content["name"]
+            else:
+                return
+        
+        files = content["assets"]
+        download_link = ""
+        for file in files:
+            if file["name"] == "Manager.exe":
+                download_link = file["browser_download_url"]
+        
+        self.log_queue.put(f"{latest_version} is available!")
+        self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
+        self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
 
     def get_status(self):
         self.set_status(["pinging",None,None])

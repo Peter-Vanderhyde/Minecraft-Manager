@@ -166,3 +166,17 @@ def get_player_uuid(name):
     
     if response.status_code == 200:
         return response.json()
+
+def check_for_newer_app_version(curr_ver):
+    try:
+        response = requests.get("https://api.github.com/repos/Peter-Vanderhyde/Minecraft-Manager/releases/latest")
+    except:
+        return False, {}
+    
+    if response.status_code == 200:
+        content = response.json()
+        latest_ver = content["tag_name"]
+        if curr_ver != latest_ver:
+            return content["name"], content
+        
+        return False, {}

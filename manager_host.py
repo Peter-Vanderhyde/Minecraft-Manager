@@ -23,7 +23,7 @@ import websock_mgmt
 import html
 
 TESTING = True
-VERSION = "v2.8.0"
+VERSION = "v2.8.1"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -260,6 +260,7 @@ class ServerManagerApp(QMainWindow):
         status_layout.setColumnStretch(2, 1)
 
         self.log_box = QTextBrowser()
+        self.log_box.setOpenExternalLinks(True)
         self.message_entry = QLineEdit()
         self.message_entry.setPlaceholderText("Send Message")
         self.message_entry.returnPressed.connect(self.message_entered)
@@ -1302,6 +1303,18 @@ class ServerManagerApp(QMainWindow):
         if not self.dropdown.currentText():
             self.log_queue.put("<br>You do not currently have any worlds added to your list.")
             self.log_queue.put("Click 'World Manager' to add a new world.")
+        
+        latest_version, content = queries.check_for_newer_app_version(VERSION)
+        if latest_version:
+            files = content["assets"]
+            download_link = ""
+            for file in files:
+                if file["name"] == "Manager_host.exe":
+                    download_link = file["browser_download_url"]
+            
+            self.log_queue.put(f"<br>{latest_version} is available!")
+            self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
+            self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.")
     
     def receive(self):
         handlers = []
