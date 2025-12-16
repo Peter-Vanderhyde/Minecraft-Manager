@@ -138,7 +138,7 @@ class ServerManagerApp(QMainWindow):
             self.show_error_page(
                 "Java Runtime Not Found",
                 "Minecraft servers require a Java Runtime Environment (<b>JRE</b>) to run.<br>"
-                "Download it from:<br>"
+                "Download the MSI from:<br>"
                 "Adoptium Temurin JRE (www.adoptium.net/temurin/releases/)<br><br>"
                 "The latest versions of Minecraft will require the latest version of Java.",
                 eula=False
@@ -155,7 +155,7 @@ class ServerManagerApp(QMainWindow):
                 self.show_error_page("Your Java version is out of date!",
                                     f"Minecraft version {latest_mc_version} requires Java version {required_java_version}.<br>"
                                     f"You are currently running version {self.java_version}.<br>"
-                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version from <i>www.adoptium.net/temurin/releases/</i>",
+                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version MSI from <i>www.adoptium.net/temurin/releases/</i>",
                                     eula=False)
                 
                 return
@@ -1639,7 +1639,7 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put(f"<font color='red'>Your Java version is out of date!<br>"
                                     f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
                                     f"You are currently running version {self.java_version}.<br>"
-                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version from <i>www.adoptium.net/temurin/releases/</i><br></font>")
+                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version MSI from <i>www.adoptium.net/temurin/releases/</i><br></font>")
                 
                 return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
 
