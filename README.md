@@ -14,6 +14,7 @@ Through this manager, both the host and clients have the ability to
 - Query the current players on the server.
 - Query the current status of the server including the version and the world name.
 - Chat with others connected to the manager.
+- Download mods directly from the host. The host can select mods for each Fabric world that can be downloaded from them.
   
 The host has the ability to
 - Choose what worlds they would like the clients to be able to choose from (including worlds running Fabric.)
@@ -41,7 +42,7 @@ For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to
 
 ## Host Instructions
 If you are hosting the server on your computer, you must have your `Manager_host` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
->**MAKE SURE** you are downloading the **JRE** version, not the **JDK !!**
+>**MAKE SURE** you are downloading the **JRE** MSI version, not the **JDK !!**
 
 
 ### Initial Startup
