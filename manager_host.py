@@ -22,7 +22,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = True
+TESTING = False
 VERSION = "v2.8.1"
 
 if TESTING:
@@ -1068,7 +1068,7 @@ class ServerManagerApp(QMainWindow):
         self.setWindowTitle("Server Manager")
 
         # Set the window icon
-        icon = QIcon(self.path(IMAGE_PATH, "app_icon.png"))
+        icon = QIcon(self.path(IMAGE_PATH, "app_icon.ico"))
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
