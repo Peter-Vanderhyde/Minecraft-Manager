@@ -76,8 +76,10 @@ def download_latest_server_jar(server_path, log_queue):
     return latest_version
 
 def get_required_java_version(version, log_queue):
+    print(version)
     if "." in version:
-        if int(version.split(".")[1]) < 7:
+        version_segments = version.split(".")
+        if int(version_segments[0]) == 1 and int(version_segments[1]) < 7:
             return 8
     success, response = get_json(version, log_queue)
     if success:

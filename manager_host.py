@@ -22,7 +22,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
+TESTING = True
 VERSION = "v2.8.0"
 
 if TESTING:
@@ -1639,8 +1639,7 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put(f"<font color='red'>Your Java version is out of date!<br>"
                                     f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
                                     f"You are currently running version {self.java_version}.<br>"
-                                    "Download an updated version from www.adoptium.net/temurin/releases/</font>",
-                                    eula=False)
+                                    "Download an updated version from www.adoptium.net/temurin/releases/</font>")
                 
                 return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
 
@@ -1985,7 +1984,7 @@ class ServerManagerApp(QMainWindow):
                 opped_players = [p["name"] for p in json.loads(f.read())]
         for player in self.curr_players:
             if player in opped_players:
-                player = f"{player} [op]"
+                player = f"[op] {player}"
             item = QListWidgetItem(html.escape(player))
             item.setForeground(QColor("purple"))
             self.players_info_box.addItem(item)
