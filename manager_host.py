@@ -13,7 +13,7 @@ import glob
 import shutil
 from datetime import datetime
 from pyperclip import copy
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint
 
@@ -22,8 +22,8 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = False
-VERSION = "v2.8.1"
+TESTING = True
+VERSION = "v2.9.0"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -259,8 +259,16 @@ class ServerManagerApp(QMainWindow):
         self.server_status_offline_label.show()
         status_layout.setColumnStretch(2, 1)
 
+        self.chat_tabs = QTabWidget()
+
         self.log_box = QTextBrowser()
         self.log_box.setOpenExternalLinks(True)
+        self.chat_tabs.addTab(self.log_box, "Manager")
+
+        self.server_chat = QTextBrowser()
+        self.chat_tabs.addTab(self.server_chat, "Server")
+        self.chat_tabs.setTabEnabled(1, False)
+
         self.message_entry = QLineEdit()
         self.message_entry.setPlaceholderText("Send Message")
         self.message_entry.returnPressed.connect(self.message_entered)
@@ -269,7 +277,7 @@ class ServerManagerApp(QMainWindow):
         center_column_layout.addWidget(self.world_label)
         center_column_layout.addWidget(self.version_label)
         center_column_layout.addLayout(status_layout)
-        center_column_layout.addWidget(self.log_box)
+        center_column_layout.addWidget(self.chat_tabs)
         center_column_layout.addWidget(self.message_entry)
 
         # Right column
