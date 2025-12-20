@@ -6,13 +6,16 @@ import threading
 import json
 import os
 import requests
+import winreg
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
 TESTING = False
-VERSION = "v2.9.0"
+VERSION = "v2.9.1"
+
+KEY_PATH = "Software\\MinecraftManager"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -71,7 +74,7 @@ class ServerManagerApp(QMainWindow):
         super().__init__()
 
         # Default IP
-        self.host_ip = ""
+        self.host_ip = self.load_ip()
         self.port = 5555
         self.client = None
         self.close_threads = threading.Event()
@@ -134,10 +137,15 @@ class ServerManagerApp(QMainWindow):
         self.host_ip_entry.setMaximumWidth(self.width() // 2)
         self.host_ip_entry.setFont(QFont(self.host_ip_entry.font().family(), int(self.host_ip_entry.font().pointSize() * 1.5)))
         self.host_ip_entry.setPlaceholderText("IP Address")
+
+        self.default_ip_checkbox = QCheckBox("Set as default IP")
+        self.default_ip_checkbox.setChecked(False)
+
         self.connect_button = QPushButton("Connect")
 
         input_layout.addWidget(host_ip_label)
         input_layout.addWidget(self.host_ip_entry)
+        input_layout.addWidget(self.default_ip_checkbox)
         input_layout.addWidget(self.connect_button)
 
         # Shown when connection failure
@@ -211,6 +219,8 @@ class ServerManagerApp(QMainWindow):
 
         # Left column
         left_column_layout = QVBoxLayout()
+        self.change_ip = QPushButton("Change IP")
+        self.change_ip.pressed.connect(self.switch_to_connect_page)
         self.refresh_button = QPushButton("\u21BB")
         self.refresh_button.setObjectName("smallGreenButton")
         self.refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -223,6 +233,7 @@ class ServerManagerApp(QMainWindow):
         players_label_layout = QHBoxLayout()
         players_label_layout.addWidget(self.refresh_button)
         players_label_layout.addWidget(self.current_players_label)
+        left_column_layout.addWidget(self.change_ip)
         left_column_layout.addLayout(players_label_layout)
         left_column_layout.addWidget(self.players_info_box)
 
@@ -409,11 +420,30 @@ class ServerManagerApp(QMainWindow):
         while time.time() < end_time:
             QApplication.processEvents()
     
+    def save_ip(self):
+        try:
+            key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, KEY_PATH)
+            winreg.SetValueEx(key, "DefaultIP", 0, winreg.REG_SZ, self.host_ip)
+            winreg.CloseKey(key)
+        except:
+            return
+    
+    def load_ip(self):
+        try:
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, KEY_PATH)
+            value, _ = winreg.QueryValueEx(key, "DefaultIP")
+            winreg.CloseKey(key)
+            return value
+        except:
+            return ""
+    
     def start_connection_thread(self):
         if self.host_ip_entry.text() == "":
             return
         
         self.host_ip = self.host_ip_entry.text()
+        if self.default_ip_checkbox.isChecked():
+            self.save_ip()
         
         self.connecting_label.setText("Connecting...")
         delay = 0.5
@@ -637,6 +667,9 @@ class ServerManagerApp(QMainWindow):
         while not self.close_threads.is_set():
             while not self.log_queue.empty():
                 message = self.log_queue.get()
+                if message == "CLOSING":
+                    continue
+
                 self.update_log_signal.emit(message)
 
     def first_connect(self):

@@ -72,6 +72,10 @@ QLabel {
     color: white;
 }
 
+QCheckBox {
+    color: white;
+}
+
 #mediumText {
     font-size: 27px;
     text-align: center;
