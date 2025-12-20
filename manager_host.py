@@ -13,7 +13,7 @@ import glob
 import shutil
 from datetime import datetime
 from pyperclip import copy
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QTextEdit
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint
 
@@ -113,6 +113,13 @@ class ServerManagerApp(QMainWindow):
         self.curr_players = []
         self.log_queue = queue.Queue()
         self.result_queue = queue.Queue()
+
+        self.server_chat_thread = None
+        self.server_chat_players_updater = queue.Queue()
+        self.server_log_queue = queue.Queue()
+        self.world_closed = threading.Event()
+        self.toggle_only_chat = threading.Event()
+        self.refresh_logs = threading.Event()
 
         self.no_clients = True
         self.stop_threads = threading.Event()
@@ -260,14 +267,25 @@ class ServerManagerApp(QMainWindow):
         status_layout.setColumnStretch(2, 1)
 
         self.chat_tabs = QTabWidget()
+        self.chat_tabs.tabBar().hide()
 
         self.log_box = QTextBrowser()
         self.log_box.setOpenExternalLinks(True)
         self.chat_tabs.addTab(self.log_box, "Manager")
 
         self.server_chat = QTextBrowser()
+        # self.server_chat.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.server_chat.append(f'<font color="gray">Loading logs...</font>')
         self.chat_tabs.addTab(self.server_chat, "Server")
-        self.chat_tabs.setTabEnabled(1, False)
+
+        self.chat_toggle = QCheckBox("Only show chat")
+        self.chat_toggle.setObjectName("chatCheckBox")
+        self.chat_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chat_toggle.setChecked(True)
+        self.chat_toggle.hide()
+        self.chat_toggle.stateChanged.connect(self.toggled_chat_mode)
+
+        self.chat_tabs.tabBar().currentChanged.connect(self.switched_tabs)
 
         self.message_entry = QLineEdit()
         self.message_entry.setPlaceholderText("Send Message")
@@ -278,6 +296,7 @@ class ServerManagerApp(QMainWindow):
         center_column_layout.addWidget(self.version_label)
         center_column_layout.addLayout(status_layout)
         center_column_layout.addWidget(self.chat_tabs)
+        center_column_layout.addWidget(self.chat_toggle)
         center_column_layout.addWidget(self.message_entry)
 
         # Right column
@@ -1508,13 +1527,22 @@ class ServerManagerApp(QMainWindow):
             self.log_box.append(message)
             scrollbar = self.log_box.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
+        
+        while not self.server_log_queue.empty():
+            messages = self.server_log_queue.get()
+            side_scroll = self.server_chat.horizontalScrollBar()
+            last_horiz = side_scroll.value()
+
+            for msg in messages:
+                self.server_chat.append(msg)
+            scrollbar = self.server_chat.verticalScrollBar()
+            scrollbar.setValue(scrollbar.maximum())
+            side_scroll.setValue(last_horiz)
     
     def first_load(self):
         self.verify_world_formatting() # Update oudated formatting from previous versions
         self.set_worlds_list()
         self.get_status()
-        if self.status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]):
-            self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
     
     def verify_world_formatting(self):
         outdated = False
@@ -1558,8 +1586,11 @@ class ServerManagerApp(QMainWindow):
         message = self.message_entry.text()
         if message != "":
             self.message_entry.clear()
-            self.log_queue.put(f'{self.timestamp()} <font color="green">You: {message}</font>')
-            self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
+            if self.chat_tabs.currentIndex() == 0:
+                self.log_queue.put(f'{self.timestamp()} <font color="green">You: {message}</font>')
+                self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
+            else:
+                self.send_chat_msg("<Admin> " + message)
     
     def get_api_version(self, version):
         game_versions = queries.get_mc_versions(include_snapshots=True)
@@ -1888,7 +1919,9 @@ class ServerManagerApp(QMainWindow):
             return status, f"{brand} {version}", world
     
     def query_players(self):
-        return queries.players(self.host_ip, self.server_port)
+        players = queries.players(self.host_ip, self.server_port)
+        self.server_chat_players_updater.put(players)
+        return players
     
     def query_worlds(self):
         return (self.worlds, self.world_order)
@@ -1898,8 +1931,24 @@ class ServerManagerApp(QMainWindow):
         status = self.query_status()
         self.set_status(status)
         self.send_data("status", status)
-        if status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]) and not self.bus and self.bus_shutdown_complete.is_set():
-            self.create_bus(self.worlds[self.world]["version"])
+        if self.status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]):
+            if not self.bus and self.bus_shutdown_complete.is_set():
+                self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
+            self.chat_tabs.tabBar().show()
+            if not self.server_chat_thread or not self.server_chat_thread.is_alive():
+                self.server_chat_thread = threading.Thread(target=self.check_for_server_messages, args=(self.curr_players,))
+                self.server_chat_thread.start()
+                self.server_chat.clear()
+                self.server_chat.append(f'<font color="gray">Loading logs...</font>')
+                if not self.chat_toggle.isChecked():
+                    self.toggle_only_chat.set()
+        else:
+            self.chat_tabs.tabBar().hide()
+            self.chat_tabs.setCurrentIndex(0)
+            self.server_chat.clear()
+            if self.server_chat_thread and self.server_chat_thread.is_alive():
+                self.world_closed.set()
+
 
     def get_players(self):
         # Used with the player refresh button
@@ -1991,6 +2040,7 @@ class ServerManagerApp(QMainWindow):
         self.update_players_list()
 
     def update_players_list(self):
+        self.server_chat_players_updater.put(self.curr_players)
         self.send_data("players", self.curr_players)
         self.players_info_box.clear()
         if len(self.curr_players) == 0:
@@ -2590,7 +2640,7 @@ class ServerManagerApp(QMainWindow):
         if not item or not self.is_api_compatible(self.worlds[self.world]["version"]) or item.text() == "No players online":
             return
         
-        name = item.text().removesuffix(" [op]")
+        name = item.text().removeprefix("[op] ")
         menu = QMenu(self)
         options = [
             {
@@ -2660,6 +2710,9 @@ class ServerManagerApp(QMainWindow):
     
     def msg_player(self, player, msg):
         self.bus.msg_player.emit(player, msg)
+    
+    def send_chat_msg(self, msg):
+        self.bus.chat_msg.emit(msg)
     
     def change_snapshot_state(self, state: Qt.CheckState):
         if self.update_existing_world_button.isHidden():
@@ -2745,6 +2798,77 @@ class ServerManagerApp(QMainWindow):
             min = f"0{t.tm_min}"
         timestamp = f"[{hour}:{min}]"
         return timestamp
+
+    def check_for_server_messages(self, connected_players):
+        LOG_PATH = self.path(self.server_path, "logs", "latest.log")
+        chat_only = True
+        last_size = 0
+        last_line = 0
+        while not self.stop_threads.is_set():
+            chats = []
+            if self.world_closed.is_set():
+                self.world_closed.clear()
+                return
+            
+            while not self.server_chat_players_updater.empty():
+                connected_players = self.server_chat_players_updater.get()
+
+            if self.toggle_only_chat.is_set() or self.refresh_logs.is_set():
+                if self.toggle_only_chat.is_set():
+                    chat_only = not chat_only
+                
+                self.toggle_only_chat.clear()
+                self.refresh_logs.clear()
+                last_size = 0
+                last_line = 0
+
+            curr_size = os.path.getsize(LOG_PATH)
+            if curr_size > last_size:
+                last_size = curr_size
+                with open(LOG_PATH, 'r') as f:
+                    lines = f.readlines()[last_line:]
+                
+                last_line += len(lines)
+                
+                for line in lines:
+                    try:
+                        timestamp, rest = line.split('] ')
+                        timestamp += "]"
+                        _, message = rest.split(']:')
+                    except:
+                        timestamp = ""
+                        message = line
+                    
+                    def html_escape(text):
+                        return (
+                            text.replace("&", "&amp;")
+                                .replace("<", "&lt;")
+                                .replace(">", "&gt;")
+                        )
+
+                    
+                    if message.find("Broadcast system message (overlay: false):") != -1:
+                        chats.append(timestamp + f" <font color='green'>{html_escape(message.split("Broadcast system message (overlay: false): ")[1].strip("\n'"))}</font>")
+                    elif message.find("<") != -1 and message.find(">") != -1:
+                        chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+                    elif not chat_only:
+                        chats.append(timestamp + message.strip('\n'))
+                        
+                self.server_log_queue.put(chats)
+            
+            time.sleep(1)
+    
+    def switched_tabs(self):
+        if self.chat_tabs.currentIndex() == 1:
+            self.chat_toggle.show()
+            self.server_chat.verticalScrollBar().setValue(self.server_chat.verticalScrollBar().maximumHeight())
+        else:
+            self.chat_toggle.hide()
+    
+    def toggled_chat_mode(self):
+        self.server_chat.clear()
+        self.server_chat.append(f'<font color="gray">Loading logs...</font>')
+        self.toggle_only_chat.set()
 
     @pyqtSlot()
     def onWindowStateChanged(self):
