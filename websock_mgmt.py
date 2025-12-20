@@ -26,10 +26,11 @@ class MgmtBus(QObject):
     ban_player = pyqtSignal(str)
     notify_player = pyqtSignal(str, str)
     msg_player = pyqtSignal(str, str)
+    chat_msg = pyqtSignal(str)
     view_distance = pyqtSignal(int)
     simulation_distance = pyqtSignal(int)
 
-    def __init__(self, api_version):
+    def __init__(self, api_version: int):
         super().__init__()
         self.api_version = api_version
         self.close_server.connect(self.send_close)
@@ -40,6 +41,7 @@ class MgmtBus(QObject):
         self.ban_player.connect(self.send_ban)
         self.notify_player.connect(self.send_notification_to_player)
         self.msg_player.connect(self.send_message_to_player)
+        self.chat_msg.connect(self.send_chat_message)
         self.view_distance.connect(self.send_view_distance)
         self.simulation_distance.connect(self.send_simulation_distance)
         self.cmd_queue = queue.Queue()
@@ -280,6 +282,9 @@ class MgmtBus(QObject):
     def send_notification_to_player(self, name, msg):
         self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": True})
     
+    def send_chat_message(self, msg):
+        self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [], "message": {"literal": msg}, "overlay": False})
+
     def send_message_to_player(self, name, msg):
         self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": False})
     
