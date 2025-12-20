@@ -22,7 +22,7 @@ import file_funcs
 import websock_mgmt
 import html
 
-TESTING = True
+TESTING = False
 VERSION = "v2.9.0"
 
 if TESTING:
@@ -1931,9 +1931,11 @@ class ServerManagerApp(QMainWindow):
         status = self.query_status()
         self.set_status(status)
         self.send_data("status", status)
-        if self.status == "online" and self.is_api_compatible(self.worlds[self.world]["version"]):
-            if not self.bus and self.bus_shutdown_complete.is_set():
-                self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
+        if self.status == "online":
+            if self.is_api_compatible(self.worlds[self.world]["version"]):
+                if not self.bus and self.bus_shutdown_complete.is_set():
+                    self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
+
             self.chat_tabs.tabBar().show()
             if not self.server_chat_thread or not self.server_chat_thread.is_alive():
                 self.server_chat_thread = threading.Thread(target=self.check_for_server_messages, args=(self.curr_players,))
@@ -1943,6 +1945,7 @@ class ServerManagerApp(QMainWindow):
                 if not self.chat_toggle.isChecked():
                     self.toggle_only_chat.set()
         else:
+            self.message_entry.show()
             self.chat_tabs.tabBar().hide()
             self.chat_tabs.setCurrentIndex(0)
             self.server_chat.clear()
@@ -2861,9 +2864,13 @@ class ServerManagerApp(QMainWindow):
     def switched_tabs(self):
         if self.chat_tabs.currentIndex() == 1:
             self.chat_toggle.show()
+            if not self.is_api_compatible(self.worlds[self.world]["version"]):
+                self.message_entry.hide()
+            
             self.server_chat.verticalScrollBar().setValue(self.server_chat.verticalScrollBar().maximumHeight())
         else:
             self.chat_toggle.hide()
+            self.message_entry.show()
     
     def toggled_chat_mode(self):
         self.server_chat.clear()

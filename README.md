@@ -32,6 +32,7 @@ The host has the ability to
   - Add usernames to the whitelist.
   - Set the view distance.
   - Set the simulation distance.
+- See all server LOG info.
 
 ### Extra Features
 For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to receive notifications from the server, and also to send commands to the server. This means there are more features available for those worlds.
@@ -39,6 +40,7 @@ For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to
 - The host can click player's names in the list to perform specific actions on them such as whitelisting, kicking, etc.
 - The host is informed each time the whitelist, ban, or op status of a player changes.
 - Toggling the whitelist and changing the view/simulation distance through the GUI immediately applies the changes to the server world through the API.
+- Chat with and see chats in the game chat.
 
 ## Host Instructions
 If you are hosting the server on your computer, you must have your `Manager_host` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
