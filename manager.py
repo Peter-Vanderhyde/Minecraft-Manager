@@ -13,7 +13,7 @@ from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopSe
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
 TESTING = False
-VERSION = "v2.9.1"
+VERSION = "v2.10.0"
 
 KEY_PATH = "Software\\MinecraftManager"
 
@@ -145,8 +145,8 @@ class ServerManagerApp(QMainWindow):
 
         input_layout.addWidget(host_ip_label)
         input_layout.addWidget(self.host_ip_entry)
-        input_layout.addWidget(self.default_ip_checkbox)
         input_layout.addWidget(self.connect_button)
+        input_layout.addWidget(self.default_ip_checkbox)
 
         # Shown when connection failure
         message_layout = QVBoxLayout()

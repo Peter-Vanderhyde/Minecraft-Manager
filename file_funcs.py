@@ -239,10 +239,10 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
                     line = b.read()
             except:
                 # No run.bat but will create new one with default "java -jar <file>" commands
-                line = "javaw -jar "
+                line = "java -jar "
             command, previous_file = line.split(" -jar ")
-            command.replace("java", "javaw") # Ensure using javaw instead of java
-            new_command = f"{command or 'javaw'} -jar {new_name}"
+            command.replace("javaw", "java") # Ensure using java instead of javaw
+            new_command = f"{command or 'java'} -jar {new_name}"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
                 b.write(new_command)
             time.sleep(1)
@@ -264,9 +264,9 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
                     line = b.read()
             except:
                 # No run.bat but will create new one with default "java -jar <file>" commands
-                line = "javaw -jar "
+                line = "java -jar "
             command, file = line.split(" -jar ")
-            command.replace("java", "javaw") # Ensure using javaw instead of java
+            command.replace("javaw", "java") # Ensure using java instead of javaw
             new_command = f"{command} -jar fabric-server-{version}.jar"
             with open(os.path.join(server_path, "run.bat"), 'w') as b:
                 b.write(new_command)

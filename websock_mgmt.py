@@ -33,17 +33,17 @@ class MgmtBus(QObject):
     def __init__(self, api_version: int):
         super().__init__()
         self.api_version = api_version
-        self.close_server.connect(self.send_close)
-        self.op_player.connect(self.send_op)
-        self.enable_whitelist.connect(self.send_whitelist_enable)
-        self.whitelist_player.connect(self.send_whitelist)
-        self.kick_player.connect(self.send_kick)
-        self.ban_player.connect(self.send_ban)
-        self.notify_player.connect(self.send_notification_to_player)
-        self.msg_player.connect(self.send_message_to_player)
-        self.chat_msg.connect(self.send_chat_message)
-        self.view_distance.connect(self.send_view_distance)
-        self.simulation_distance.connect(self.send_simulation_distance)
+        self.close_server.connect(self._send_close)
+        self.op_player.connect(self._send_op)
+        self.enable_whitelist.connect(self._send_whitelist_enable)
+        self.whitelist_player.connect(self._send_whitelist)
+        self.kick_player.connect(self._send_kick)
+        self.ban_player.connect(self._send_ban)
+        self.notify_player.connect(self._send_notification_to_player)
+        self.msg_player.connect(self._send_message_to_player)
+        self.chat_msg.connect(self._send_chat_message)
+        self.view_distance.connect(self._send_view_distance)
+        self.simulation_distance.connect(self._send_simulation_distance)
         self.cmd_queue = queue.Queue()
         self._shutdown = asyncio.Event()
     
@@ -254,42 +254,42 @@ class MgmtBus(QObject):
         
         self.cmd_queue.put(data)
 
-    def send_close(self):
+    def _send_close(self):
         self.assemble_data("minecraft:server/stop")
     
-    def send_op(self, name, remove=False):
+    def _send_op(self, name, remove=False):
         if not remove:
             self.assemble_data(f"minecraft:operators/add", [{"player": {"name": name}}])
         else:
             self.assemble_data(f"minecraft:operators/remove", [{"name": name}])
     
-    def send_whitelist_enable(self, enable):
+    def _send_whitelist_enable(self, enable):
         self.assemble_data(f"minecraft:serversettings/use_allowlist/set", enable)
     
-    def send_whitelist(self, name, remove=False):
+    def _send_whitelist(self, name, remove=False):
         command = "add" if not remove else "remove"
         self.assemble_data(f"minecraft:allowlist/{command}", [{"name": name}])
     
-    def send_kick(self, name):
+    def _send_kick(self, name):
         if self.api_version >= 4:
             self.assemble_data(f"minecraft:players/kick", {"kick": [{"player": {"name": name}, "message": {"literal": "You have been kicked? What were you doing?!"}}]})
         else:
             self.assemble_data(f"minecraft:players/kick", {"players": [{"name": name}], "message": {"literal": "You have been kicked? What were you doing?!"}})
     
-    def send_ban(self, name):
+    def _send_ban(self, name):
         self.assemble_data(f"minecraft:bans/add", [{"player": {"name": name}, "reason": "You done messed up."}])
     
-    def send_notification_to_player(self, name, msg):
+    def _send_notification_to_player(self, name, msg):
         self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": True})
     
-    def send_chat_message(self, msg):
+    def _send_chat_message(self, msg):
         self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [], "message": {"literal": msg}, "overlay": False})
 
-    def send_message_to_player(self, name, msg):
+    def _send_message_to_player(self, name, msg):
         self.assemble_data(f"minecraft:server/system_message", {"receiving_players": [{"name": name}], "message": {"literal": msg}, "overlay": False})
     
-    def send_view_distance(self, distance):
+    def _send_view_distance(self, distance):
         self.assemble_data(f"minecraft:serversettings/view_distance/set", distance)
     
-    def send_simulation_distance(self, distance):
+    def _send_simulation_distance(self, distance):
         self.assemble_data(f"minecraft:serversettings/simulation_distance/set", distance)

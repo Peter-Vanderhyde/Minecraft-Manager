@@ -21,9 +21,10 @@ import queries
 import file_funcs
 import websock_mgmt
 import html
+import supervisor
 
-TESTING = False
-VERSION = "v2.9.1"
+TESTING = True
+VERSION = "v2.10.0"
 
 if TESTING:
     STYLE_PATH = "Styles"
@@ -115,11 +116,15 @@ class ServerManagerApp(QMainWindow):
         self.result_queue = queue.Queue()
 
         self.server_chat_thread = None
-        self.server_chat_players_updater = queue.Queue()
         self.server_log_queue = queue.Queue()
         self.world_closed = threading.Event()
         self.toggle_only_chat = threading.Event()
         self.refresh_logs = threading.Event()
+
+        self.create_supervisor_process()
+        self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue)
+        self.async_runner = supervisor.AsyncRunner()
+        self.async_runner.submit(self.supervisor_connector.connect())
 
         self.no_clients = True
         self.stop_threads = threading.Event()
@@ -1764,32 +1769,14 @@ class ServerManagerApp(QMainWindow):
                         self.worlds[world].pop("seed")
                         file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
             
-                os.system(f'start "" /min cmd /C "title Server Ignition && cd /d "{self.server_path}" && run.bat"')
-                loop = True
-                window = None
-                ignition_window = None
-                timer_amount = 60
-                end_time = time.time() + timer_amount
-                while loop and not self.stop_threads.is_set():
-                    QApplication.processEvents()
-                    windows = pgw.getAllTitles()
-                    for w in windows:
-                        if w == "Minecraft server":
-                            loop = False
-                            window = pgw.getWindowsWithTitle(w)[0]
-                        elif ignition_window is None and "Server Ignition" in w:
-                            ignition_window = pgw.getWindowsWithTitle(w)[0]
-                    
-                    if time.time() > end_time:
-                        self.log_queue.put("<font color='red'>Timed out waiting for the server to start up.</font>")
-                        return "<font color='red'>Timed out waiting for the server to start.</font>"
+                with open(self.path(self.server_path, "run.bat"), 'r') as f:
+                    args = f.read()
                 
-                if self.stop_threads.is_set():
-                    return
-
-                window.minimize()
-                if ignition_window:
-                    ignition_window.close()
+                args = args.strip().split(" ")
+                if "nogui" not in args:
+                    args.append("nogui")
+                
+                self.start_supervisor_server(args)
                 
                 self.world = world
                 self.world_version = version
@@ -1824,9 +1811,20 @@ class ServerManagerApp(QMainWindow):
                     except:
                         pass
                 
-                self.log_queue.put("Waiting for chunks to generate...")
+                while not self.supervisor_connector.loading_chunks.is_set():
+                    if self.stop_threads.is_set():
+                        return
+                    
+                    if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
+                        print("second fail")
+                        print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
+                        self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                        return "<font color='red'>Failed to start server.</font>"
+                    
+                    self.delay(1)
+                
+                self.log_queue.put("Generating chunks...")
                 if self.is_api_compatible(version):
-                    # The bus is the asynchronous threads that listen to the api
                     self.create_bus(self.get_api_version(version))
                 else:
                     if seed:
@@ -1842,6 +1840,11 @@ class ServerManagerApp(QMainWindow):
                         else:
                             check_status -= 1
 
+                    if not self.supervisor_connector.connected() or self.supervisor_connector.failed_to_load.is_set():
+                        print("third fail")
+                        self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                        return "<font color='red'>Failed to start server.</font>"
+                    
                     # Older versions assume the world will start soon, even if the wait timer was exhausted
                     self.get_status_signal.emit()
                     self.log_queue.put(f"Server world '{world}' has been started.")
@@ -1860,8 +1863,35 @@ class ServerManagerApp(QMainWindow):
 
         self.broadcast("Stopping server...")
         self.log_queue.put("Stopping server...")
-        if self.is_api_compatible(self.worlds[world]["version"]):
+
+        # Connected via supervisor
+        if self.supervisor_connector.connected():
+            if len(self.curr_players) > 0:
+                self.log_queue.put("Warning players...")
+                self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": "delayed"}))
+            else:
+                self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": "immediate"}))
+            
+            if not self.is_api_compatible(self.worlds[world]["version"]):
+                self.delay(3)
+                self.get_status_signal.emit()
+                if self.status == "offline":
+                    self.log_queue.put("Server has been stopped.")
+                    self.broadcast("Server has been stopped.")
+                    self.send_data("stop", "refresh")
+
+        # No supervisor, only api
+        elif self.is_api_compatible(self.worlds[world]["version"]):
+            if len(self.curr_players) > 0:
+                self.log_queue.put("Warning players...")
+                self.bus.chat_msg.emit("[Server] The host has closed the server.")
+                self.bus.chat_msg.emit("[Server] Shutting down in 10 seconds...")
+                for i in range(10):
+                    self.bus.notify_player.emit(str(10 - i))
+                    self.delay(1)
+            
             self.bus.close_server.emit()
+        # No supervisor or api, must close with keystrokes
         else:
             windows = pgw.getWindowsWithTitle("Minecraft server")
             window = None
@@ -1895,9 +1925,10 @@ class ServerManagerApp(QMainWindow):
             self.delay(3)
 
             self.get_status_signal.emit()
-            self.log_queue.put("Server has been stopped.")
-            self.broadcast("Server has been stopped.")
-            self.send_data("stop", "refresh")
+            if self.status == "offline":
+                self.log_queue.put("Server has been stopped.")
+                self.broadcast("Server has been stopped.")
+                self.send_data("stop", "refresh")
 
             # Hacky way to delete the mods folder after closing for old version
             if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
@@ -1920,7 +1951,6 @@ class ServerManagerApp(QMainWindow):
     
     def query_players(self):
         players = queries.players(self.host_ip, self.server_port)
-        self.server_chat_players_updater.put(players)
         return players
     
     def query_worlds(self):
@@ -1938,7 +1968,7 @@ class ServerManagerApp(QMainWindow):
 
             self.chat_tabs.tabBar().show()
             if not self.server_chat_thread or not self.server_chat_thread.is_alive():
-                self.server_chat_thread = threading.Thread(target=self.check_for_server_messages, args=(self.curr_players,))
+                self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
                 self.server_chat_thread.start()
                 self.server_chat.clear()
                 self.server_chat.append(f'<font color="gray">Loading logs...</font>')
@@ -2043,7 +2073,6 @@ class ServerManagerApp(QMainWindow):
         self.update_players_list()
 
     def update_players_list(self):
-        self.server_chat_players_updater.put(self.curr_players)
         self.send_data("players", self.curr_players)
         self.players_info_box.clear()
         if len(self.curr_players) == 0:
@@ -2802,7 +2831,7 @@ class ServerManagerApp(QMainWindow):
         timestamp = f"[{hour}:{min}]"
         return timestamp
 
-    def check_for_server_messages(self, connected_players):
+    def check_for_server_messages(self):
         LOG_PATH = self.path(self.server_path, "logs", "latest.log")
         chat_only = True
         last_size = 0
@@ -2812,9 +2841,6 @@ class ServerManagerApp(QMainWindow):
             if self.world_closed.is_set():
                 self.world_closed.clear()
                 return
-            
-            while not self.server_chat_players_updater.empty():
-                connected_players = self.server_chat_players_updater.get()
 
             if self.toggle_only_chat.is_set() or self.refresh_logs.is_set():
                 if self.toggle_only_chat.is_set():
@@ -2852,7 +2878,7 @@ class ServerManagerApp(QMainWindow):
                     
                     if message.find("Broadcast system message (overlay: false):") != -1:
                         chats.append(timestamp + f" <font color='green'>{html_escape(message.split("Broadcast system message (overlay: false): ")[1].strip("\n'"))}</font>")
-                    elif message.find("<") != -1 and message.find(">") != -1:
+                    elif (message.find("<") != -1 and message.find(">") != -1) or "[Server]" in message:
                         chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
                     elif not chat_only:
                         chats.append(timestamp + message.strip('\n'))
@@ -2876,6 +2902,23 @@ class ServerManagerApp(QMainWindow):
         self.server_chat.clear()
         self.server_chat.append(f'<font color="gray">Loading logs...</font>')
         self.toggle_only_chat.set()
+    
+    def create_supervisor_process(self):
+        print("Creating it")
+        curr_script = os.path.abspath(sys.argv[0])
+        log = open("supervisor_debug.log", "a", buffering=1, encoding="utf-8")
+        subprocess.Popen(
+            [sys.executable, curr_script, "--supervisor"],
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=log,
+            close_fds=True
+        )
+
+    
+    def start_supervisor_server(self, server_args):
+        self.async_runner.submit(self.supervisor_connector.send({"type": "start_server", "args": [self.server_path, server_args]}))
 
     @pyqtSlot()
     def onWindowStateChanged(self):
@@ -2887,6 +2930,8 @@ class ServerManagerApp(QMainWindow):
     def stop_server_threads(self):
         self.stop_threads.set()
         self.shutdown_bus()
+        if self.supervisor_connector.connected():
+            self.async_runner.submit(self.supervisor_connector.close())
         if self.receive_thread.is_alive():
             self.receive_thread.join(timeout=2.0)
         if self.server:
@@ -2901,8 +2946,13 @@ class ServerManagerApp(QMainWindow):
         event.accept()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    server_manager_app = ServerManagerApp()
+    if "--supervisor" in sys.argv:
+        print("Creating supervisor")
+        supervisor.create_supervisor()
+    else:
+        print("New app")
+        app = QApplication(sys.argv)
+        server_manager_app = ServerManagerApp()
 
-    server_manager_app.show()
-    sys.exit(app.exec())
+        server_manager_app.show()
+        sys.exit(app.exec())
