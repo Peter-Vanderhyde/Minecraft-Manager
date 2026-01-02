@@ -2044,7 +2044,12 @@ class ServerManagerApp(QMainWindow):
             self.version_label.setText("")
             self.world_label.setText("")
             self.refresh_button.setEnabled(False)
+
             self.players_info_box.clear()
+            item = QListWidgetItem("Server offline")
+            item.setForeground(QColor("red"))
+            self.players_info_box.addItem(item)
+
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
@@ -2079,7 +2084,12 @@ class ServerManagerApp(QMainWindow):
             self.version_label.setText("")
             self.world_label.setText("")
             self.refresh_button.setEnabled(False)
+
             self.players_info_box.clear()
+            item = QListWidgetItem("Server offline")
+            item.setForeground(QColor("red"))
+            self.players_info_box.addItem(item)
+
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)

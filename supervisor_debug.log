@@ -60,3 +60,8 @@ Supervisor Received: {'type': 'close', 'mode': 'immediate'}
 Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
 Supervisor Received: {'type': 'close', 'mode': 'immediate'}
 Total shutdown complete
+Creating supervisor
+Supervisor listening on ws://127.0.0.1:5675
+Supervisor Received: {'type': 'loaded_status'}
+Supervisor Received: {'type': 'close', 'mode': 'immediate'}
+Total shutdown complete
