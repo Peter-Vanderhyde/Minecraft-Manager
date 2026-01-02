@@ -25,6 +25,7 @@ class Supervisor:
         self._waiting_for_feedback = asyncio.Event()
         self._set_feedback_value = asyncio.Event()
         self._feedback_value = False
+        self._clients_num = 0
     
     def create_mc_server_process(self, server_path, server_args):
         self._loading_complete.clear()
@@ -48,6 +49,16 @@ class Supervisor:
     
     def _mc_is_alive(self):
         return self._mc_server and self._mc_server.poll() is None
+
+    async def wait_for_server_shutdown(self, process: subprocess.Popen):
+        if not process or process.poll() is not None:
+            return
+        
+        try:
+            await asyncio.wait_for(asyncio.to_thread(process.wait), timeout=10)
+        except asyncio.TimeoutError:
+            process.kill()
+            await asyncio.to_thread(process.wait)
     
     async def server_listener(self):
         server_loaded = False
@@ -117,6 +128,8 @@ class Supervisor:
 
         self._client = wsocket
         await self.send_to_client({"type": "handshake_ok"})
+        self._clients_num += 1
+        await self.send_to_client({"type": "log", "client_id": self._clients_num})
 
         if self._ui_disconnection.is_set():
             self._ui_disconnection.clear()
@@ -128,10 +141,9 @@ class Supervisor:
                 msg = json.loads(raw)
                 print("Supervisor Received:", msg)
                 if msg.get("type") == "close":
-                    await wsocket.close(code=1000, reason="closed")
                     if msg.get("mode") == "immediate":
-                        self._shutdown_event.set()
-                        return
+                        self.send_server_cmd("/stop")
+                        await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "delayed":
                         self._waiting_for_feedback.set()
                         self.send_server_cmd("/gamerule send_command_feedback")
@@ -161,8 +173,8 @@ class Supervisor:
                             self.send_server_cmd(f"/gamerule send_command_feedback true")
                             await asyncio.sleep(1)
                         
-                        self._shutdown_event.set()
-                        return
+                        self.send_server_cmd("/stop")
+                        self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "keep alive":
                         self.send_server_cmd('/title @a subtitle {"text": "Players cannot currently close the server", "color": "white"}')
                         self.send_server_cmd('/title @a title {"text": "The server manager host is offline", "color": "yellow"}')
@@ -178,7 +190,7 @@ class Supervisor:
                     path, args = msg.get("args")
                     self.create_mc_server_process(path, args)
         finally:
-            if not self._shutdown_event.is_set() and not self._ui_disconnection.is_set():
+            if not self._ui_disconnection.is_set():
                 self._shutdown_event.set()
             
             if self._client is wsocket:
@@ -191,7 +203,8 @@ class Supervisor:
         
         if self._mc_is_alive():
             self.send_server_cmd("/stop")
-            await asyncio.sleep(2)
+            await self.wait_for_server_shutdown(self._mc_server)
+
         if self._mc_server and self._mc_server.stdin:
             self._mc_server.stdin.close()
         if self._listener_task and not self._listener_task.done():
@@ -202,8 +215,9 @@ class Supervisor:
             except asyncio.CancelledError:
                 pass
         if self._client is not None:
-            await self.send_to_client({"type": "log", "msg": "Server stopped"})
             await self._client.close()
+        
+        print("Total shutdown complete")
 
 
 class SupervisorConnector:
@@ -237,9 +251,6 @@ class SupervisorConnector:
         if self._client:
             print("Already connected")
             return True
-        else:
-            self.loading_complete.clear()
-            self.loading_chunks.clear()
 
         uri = "ws://127.0.0.1:5675"
 
@@ -261,8 +272,9 @@ class SupervisorConnector:
             await wsocket.send(json.dumps({"type": "loaded_status"}))
             print("Sent loaded status request")
             return True
-        except Exception:
+        except Exception as e:
             print("Failed to connect")
+            print(e)
             self.failed_to_load.set()
             return False
     
@@ -305,6 +317,9 @@ class SupervisorConnector:
             return
         
         try:
+            if obj.get("type") == "close":
+                self.loading_complete.clear()
+                self.loading_chunks.clear()
             await self._client.send(json.dumps(obj))
         except Exception:
             await self.close()

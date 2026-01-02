@@ -1111,6 +1111,8 @@ class ServerManagerApp(QMainWindow):
         return os.path.normpath(os.path.join(*args))
     
     def create_bus(self, api_version):
+        self.bus_shutdown_complete.clear()
+        print("API VERSION: " + str(api_version))
         self.bus = websock_mgmt.MgmtBus(api_version)
         self.bus.log.connect(self.log_queue.put)
         self.bus.recvd_result.connect(self.result_queue.put)
@@ -1858,6 +1860,19 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
                 return error
     
+    def close_supervisor_server(self, mode: str="auto"):
+        if mode not in ["auto", "delayed", "immediate", "keep alive"]:
+            raise Exception("Invalid closing mode: ", mode)
+
+        if mode == "auto":
+            if len(self.curr_players) > 0:
+                self.log_queue.put("Giving players 10 seconds notice...")
+                mode = "delayed"
+            else:
+                mode = "immediate"
+        
+        self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": mode}))
+    
     def stop_server(self):
         status, _, world = self.query_status()
         if status == "offline":
@@ -1869,12 +1884,8 @@ class ServerManagerApp(QMainWindow):
 
         # Connected via supervisor
         if self.supervisor_connector.connected():
-            if len(self.curr_players) > 0:
-                self.log_queue.put("Warning players...")
-                self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": "delayed"}))
-            else:
-                self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": "immediate"}))
-            
+            self.close_supervisor_server()
+
             if not self.is_api_compatible(self.worlds[world]["version"]):
                 self.delay(3)
                 self.get_status_signal.emit()
@@ -1886,7 +1897,7 @@ class ServerManagerApp(QMainWindow):
         # No supervisor, only api
         elif self.is_api_compatible(self.worlds[world]["version"]):
             if len(self.curr_players) > 0:
-                self.log_queue.put("Warning players...")
+                self.log_queue.put("Giving players 10 seconds notice...")
                 self.bus.chat_msg.emit("[Server] The host has closed the server.")
                 self.bus.chat_msg.emit("[Server] Shutting down in 10 seconds...")
                 for i in range(10):
@@ -2943,6 +2954,8 @@ class ServerManagerApp(QMainWindow):
         self.stop_threads.set()
         self.shutdown_bus()
         if self.supervisor_connector.connected():
+            self.close_supervisor_server()
+            self.delay(1)
             self.async_runner.submit(self.supervisor_connector.close())
         if self.receive_thread.is_alive():
             self.receive_thread.join(timeout=2.0)
