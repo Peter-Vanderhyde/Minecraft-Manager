@@ -1782,6 +1782,19 @@ class ServerManagerApp(QMainWindow):
                     args.append("nogui")
                 
                 self.start_supervisor_server(args)
+                while not self.supervisor_connector.spooling_up.is_set():
+                    if self.stop_threads.is_set():
+                        return
+                    
+                    if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
+                        print("first fail")
+                        print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
+                        self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                        return "<font color='red'>Failed to start server.</font>"
+                    
+                    self.delay(0.1)
+                
+                self.log_queue.put("Server is spooling up...")
                 
                 self.world = world
                 self.world_version = version

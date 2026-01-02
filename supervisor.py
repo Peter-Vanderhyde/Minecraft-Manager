@@ -225,6 +225,7 @@ class SupervisorConnector:
         self.log_output_queue = log_output_queue
         self._client: websockets.ClientConnection | None = None
         self.found_connection = threading.Event()
+        self.spooling_up = threading.Event()
         self.loading_chunks = threading.Event()
         self.loading_complete = threading.Event()
         self.failed_to_load = threading.Event()
@@ -283,6 +284,8 @@ class SupervisorConnector:
             async for raw in self._client:
                 msg: dict = json.loads(raw)
                 print("UI Received:", msg)
+                if not self.spooling_up.is_set() and not self.loading_complete.is_set() and not self.loading_chunks.is_set():
+                    self.spooling_up.set()
                 if msg.get("type") == "loading":
                     state = msg.get("state")
                     if state == "chunks":
@@ -320,6 +323,7 @@ class SupervisorConnector:
             if obj.get("type") == "close":
                 self.loading_complete.clear()
                 self.loading_chunks.clear()
+                self.spooling_up.clear()
             await self._client.send(json.dumps(obj))
         except Exception:
             await self.close()
