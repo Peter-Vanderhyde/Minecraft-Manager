@@ -121,10 +121,8 @@ class ServerManagerApp(QMainWindow):
         self.toggle_only_chat = threading.Event()
         self.refresh_logs = threading.Event()
 
-        self.create_supervisor_process()
         self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue)
         self.async_runner = supervisor.AsyncRunner()
-        self.async_runner.submit(self.supervisor_connector.connect())
 
         self.no_clients = True
         self.stop_threads = threading.Event()
@@ -1327,6 +1325,8 @@ class ServerManagerApp(QMainWindow):
             return
         self.ip_button.setText(f"IP: {self.host_ip}")
         self.show_main_page()
+        self.create_supervisor_process()
+        self.async_runner.submit(self.supervisor_connector.connect())
         self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
@@ -1890,7 +1890,9 @@ class ServerManagerApp(QMainWindow):
                 self.bus.chat_msg.emit("[Server] The host has closed the server.")
                 self.bus.chat_msg.emit("[Server] Shutting down in 10 seconds...")
                 for i in range(10):
-                    self.bus.notify_player.emit(str(10 - i))
+                    for player in self.curr_players:
+                        player = player.removeprefix("[op] ")
+                        self.bus.notify_player.emit(player, str(10 - i))
                     self.delay(1)
             
             self.bus.close_server.emit()

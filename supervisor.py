@@ -22,6 +22,9 @@ class Supervisor:
         self._listener_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
         self._ui_disconnection = asyncio.Event()
+        self._waiting_for_feedback = asyncio.Event()
+        self._set_feedback_value = asyncio.Event()
+        self._feedback_value = False
     
     def create_mc_server_process(self, server_path, server_args):
         self._loading_complete.clear()
@@ -64,6 +67,13 @@ class Supervisor:
                         server_loaded = True
                         self._loading_complete.set()
                         self._loading_started.clear()
+                        
+                if self._waiting_for_feedback.is_set():
+                    if "Gamerule send_command_feedback is currently set to: " in line:
+                        self._feedback_value = line.split("Gamerule send_command_feedback is currently set to: ")[1] == "true"
+                        self._set_feedback_value.set()
+                        self._waiting_for_feedback.clear()
+                        continue
                 await self.send_to_client({"type": "log", "msg": line})
         
         if not server_loaded:
@@ -123,6 +133,20 @@ class Supervisor:
                         self._shutdown_event.set()
                         return
                     elif msg.get("mode") == "delayed":
+                        self._waiting_for_feedback.set()
+                        self.send_server_cmd("/gamerule send_command_feedback")
+                        try:
+                            await asyncio.wait_for(self._set_feedback_value.wait(), timeout=2.0)
+                        except asyncio.TimeoutError:
+                            feedback = True
+                        else:
+                            feedback = self._feedback_value
+                        finally:
+                            self._set_feedback_value.clear()
+
+                        if feedback:
+                            self.send_server_cmd("/gamerule send_command_feedback false")
+                        
                         self.send_server_cmd('/title @a subtitle {"text": "Closing in 10 seconds...", "color": "yellow"}')
                         self.send_server_cmd('/title @a title {"text": "Server Closed", "color": "red", "bold": true}')
                         for i in range(10):
@@ -133,6 +157,10 @@ class Supervisor:
                             }
                             self.send_server_cmd(f"/title @a actionbar {json.dumps(command)}")
                             await asyncio.sleep(1)
+                        if feedback:
+                            self.send_server_cmd(f"/gamerule send_command_feedback true")
+                            await asyncio.sleep(1)
+                        
                         self._shutdown_event.set()
                         return
                     elif msg.get("mode") == "keep alive":
@@ -191,6 +219,9 @@ class SupervisorConnector:
         return self._client is not None
     
     async def close(self):
+        if self._client is None:
+            return
+        
         print("Closing now")
         ws = self._client
         self._client = None
