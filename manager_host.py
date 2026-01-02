@@ -1537,6 +1537,7 @@ class ServerManagerApp(QMainWindow):
         
         while not self.server_log_queue.empty():
             messages = self.server_log_queue.get()
+            messages = self.format_logs(messages, self.chat_toggle.isChecked())
             side_scroll = self.server_chat.horizontalScrollBar()
             last_horiz = side_scroll.value()
 
@@ -1996,13 +1997,15 @@ class ServerManagerApp(QMainWindow):
                     self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
 
             self.chat_tabs.tabBar().show()
-            if not self.server_chat_thread or not self.server_chat_thread.is_alive():
+            if not self.supervisor_connector.connected() and (not self.server_chat_thread or not self.server_chat_thread.is_alive()):
                 self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
                 self.server_chat_thread.start()
-                self.server_chat.clear()
-                self.server_chat.append(f'<font color="gray">Loading logs...</font>')
-                if not self.chat_toggle.isChecked():
-                    self.toggle_only_chat.set()
+            
+            self.server_chat.clear()
+            self.server_chat.append(f'<font color="gray">Loading logs...</font>')
+            if not self.chat_toggle.isChecked():
+                self.toggle_only_chat.set()
+
         else:
             self.message_entry.show()
             self.chat_tabs.tabBar().hide()
@@ -2876,7 +2879,6 @@ class ServerManagerApp(QMainWindow):
         last_size = 0
         last_line = 0
         while not self.stop_threads.is_set():
-            chats = []
             if self.world_closed.is_set():
                 self.world_closed.clear()
                 return
@@ -2889,7 +2891,7 @@ class ServerManagerApp(QMainWindow):
                 self.refresh_logs.clear()
                 last_size = 0
                 last_line = 0
-
+            
             curr_size = os.path.getsize(LOG_PATH)
             if curr_size > last_size:
                 last_size = curr_size
@@ -2897,41 +2899,47 @@ class ServerManagerApp(QMainWindow):
                     lines = f.readlines()[last_line:]
                 
                 last_line += len(lines)
-                
-                for line in lines:
-                    try:
-                        timestamp, rest = line.split('] ')
-                        timestamp += "]"
-                        _, message = rest.split(']:')
-                    except:
-                        timestamp = ""
-                        message = line
-                    
-                    def html_escape(text):
-                        return (
-                            text.replace("&", "&amp;")
-                                .replace("<", "&lt;")
-                                .replace(">", "&gt;")
-                        )
 
-                    
-                    if message.find("Broadcast system message (overlay: false):") != -1:
-                        chats.append(timestamp + f" <font color='green'>{html_escape(message.split("Broadcast system message (overlay: false): ")[1].strip("\n'"))}</font>")
-                    elif (message.find("<") != -1 and message.find(">") != -1) or "[Server]" in message:
-                        chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
-                    elif not chat_only:
-                        chats.append(timestamp + message.strip('\n'))
-                        
-                self.server_log_queue.put(chats)
+                self.server_log_queue.put(lines)
             
             time.sleep(1)
+    
+    def format_logs(self, logs: list[str], chat_only: bool):
+        chats = []
+        for line in logs:
+            if line is None:
+                continue
+            
+            try:
+                timestamp, rest = line.split('] ')
+                timestamp += "]"
+                _, message = rest.split(']:')
+            except:
+                timestamp = ""
+                message = line
+            
+            def html_escape(text: str):
+                return (
+                    text.replace("&", "&amp;")
+                        .replace("<", "&lt;")
+                        .replace(">", "&gt;")
+                )
+
+            if message.find("Broadcast system message (overlay: false):") != -1:
+                chats.append(timestamp + f" <font color='green'>{html_escape(message.split("Broadcast system message (overlay: false): ")[1].strip("\n'"))}</font>")
+            elif (message.find("<") != -1 and message.find(">") != -1) or "[Server thread/INFO]: [Not Secure] [Server]" in message:
+                chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+            elif not chat_only:
+                chats.append(timestamp + message.strip('\n'))
+        
+        return chats
     
     def switched_tabs(self):
         if self.chat_tabs.currentIndex() == 1:
             self.chat_toggle.show()
             if not self.is_api_compatible(self.worlds[self.world]["version"]):
                 self.message_entry.hide()
-            elif not self.chat_toggle.isChecked() and self.supervisor_connector.connected():
+            elif self.supervisor_connector.connected() and not self.chat_toggle.isChecked():
                 self.message_entry.setPlaceholderText("Send Command")
             
             self.server_chat.verticalScrollBar().setValue(self.server_chat.verticalScrollBar().maximumHeight())
@@ -2946,8 +2954,11 @@ class ServerManagerApp(QMainWindow):
         self.toggle_only_chat.set()
         if self.chat_toggle.isChecked():
             self.message_entry.setPlaceholderText("Send Message")
+            if self.supervisor_connector.connected():
+                self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
         elif self.supervisor_connector.connected():
             self.message_entry.setPlaceholderText("Send Command")
+            self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
     
     def create_supervisor_process(self):
         print("Creating it")

@@ -26,6 +26,8 @@ class Supervisor:
         self._set_feedback_value = asyncio.Event()
         self._feedback_value = False
         self._clients_num = 0
+        self._logs = []
+        self._log_lock = asyncio.Lock()
     
     def create_mc_server_process(self, server_path, server_args):
         self._loading_complete.clear()
@@ -68,8 +70,11 @@ class Supervisor:
                 await asyncio.sleep(0.01)
                 continue
 
+            line = line.rstrip('\n')
+            async with self._log_lock:
+                self._logs.append(line)
+            
             if self._client is not None:
-                line = line.rstrip('\n')
                 if not server_loaded:
                     if CHUNK_RE.search(line) is not None:
                         await self.send_to_client({"type": "loading", "state": "chunks"})
@@ -85,6 +90,7 @@ class Supervisor:
                         self._set_feedback_value.set()
                         self._waiting_for_feedback.clear()
                         continue
+                
                 await self.send_to_client({"type": "log", "msg": line})
         
         if not server_loaded:
@@ -174,12 +180,10 @@ class Supervisor:
                             await asyncio.sleep(1)
                         
                         self.send_server_cmd("/stop")
-                        self.wait_for_server_shutdown(self._mc_server)
+                        await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "keep alive":
                         self.send_server_cmd('/title @a subtitle {"text": "Players cannot currently close the server", "color": "white"}')
                         self.send_server_cmd('/title @a title {"text": "The server manager host is offline", "color": "yellow"}')
-                        # self.send_server_cmd("/say The server manager host is offline.")
-                        # self.send_server_cmd("/say Players cannot currently close the server.")
                         self._ui_disconnection.set()
                         return
                 elif msg.get("type") == "command":
@@ -189,6 +193,9 @@ class Supervisor:
                 elif msg.get("type") == "start_server":
                     path, args = msg.get("args")
                     self.create_mc_server_process(path, args)
+                elif msg.get("type") == "get_logs":
+                    async with self._log_lock:
+                        await self.send_to_client({"type": "logs_list", "logs": self._logs})
         finally:
             if not self._ui_disconnection.is_set():
                 self._shutdown_event.set()
@@ -284,8 +291,6 @@ class SupervisorConnector:
             async for raw in self._client:
                 msg: dict = json.loads(raw)
                 print("UI Received:", msg)
-                if not self.spooling_up.is_set() and not self.loading_complete.is_set() and not self.loading_chunks.is_set():
-                    self.spooling_up.set()
                 if msg.get("type") == "loading":
                     state = msg.get("state")
                     if state == "chunks":
@@ -300,8 +305,12 @@ class SupervisorConnector:
                     else:
                         self.loading_complete.clear()
                 elif msg.get("type") == "log":
+                    if not self.spooling_up.is_set() and not self.loading_complete.is_set() and not self.loading_chunks.is_set():
+                        self.spooling_up.set()
                     self.log_output_queue.put([msg.get("msg")])
-        except Exception:
+                elif msg.get("type") == "logs_list":
+                    self.log_output_queue.put(msg.get("logs"))
+        except:
             pass
         finally:
             await self.close()
@@ -312,7 +321,7 @@ class SupervisorConnector:
         
         try:
             await self._client.send(json.dumps({"type": "command", "cmd": cmd}))
-        except Exception:
+        except:
             await self.close()
     
     async def send(self, obj: dict):
@@ -325,7 +334,7 @@ class SupervisorConnector:
                 self.loading_chunks.clear()
                 self.spooling_up.clear()
             await self._client.send(json.dumps(obj))
-        except Exception:
+        except:
             await self.close()
 
 class AsyncRunner:

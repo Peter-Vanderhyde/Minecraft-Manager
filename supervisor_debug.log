@@ -2,66 +2,22 @@ Creating supervisor
 Supervisor listening on ws://127.0.0.1:5675
 Supervisor Received: {'type': 'loaded_status'}
 Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
+Supervisor Received: {'type': 'get_logs'}
+Supervisor Received: {'type': 'command', 'cmd': '/say new chat'}
+Supervisor Received: {'type': 'get_logs'}
 Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Total shutdown complete
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Total shutdown complete
-c:\Users\peter\Documents\Programming\Personal\Minecraft-Manager\supervisor.py:174: RuntimeWarning: coroutine 'Supervisor.wait_for_server_shutdown' was never awaited
-  self.wait_for_server_shutdown(self._mc_server)
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'delayed'}
-Total shutdown complete
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Total shutdown complete
-c:\Users\peter\Documents\Programming\Personal\Minecraft-Manager\supervisor.py:177: RuntimeWarning: coroutine 'Supervisor.wait_for_server_shutdown' was never awaited
-  self.wait_for_server_shutdown(self._mc_server)
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'delayed'}
-Total shutdown complete
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Total shutdown complete
-c:\Users\peter\Documents\Programming\Personal\Minecraft-Manager\supervisor.py:177: RuntimeWarning: coroutine 'Supervisor.wait_for_server_shutdown' was never awaited
-  self.wait_for_server_shutdown(self._mc_server)
-RuntimeWarning: Enable tracemalloc to get the object allocation traceback
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'delayed'}
-Total shutdown complete
-Creating supervisor
-Supervisor listening on ws://127.0.0.1:5675
-Supervisor Received: {'type': 'loaded_status'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
-Supervisor Received: {'type': 'close', 'mode': 'immediate'}
-Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
+Supervisor Received: {'type': 'get_logs'}
 Supervisor Received: {'type': 'close', 'mode': 'immediate'}
 Total shutdown complete
 Creating supervisor
 Supervisor listening on ws://127.0.0.1:5675
 Supervisor Received: {'type': 'loaded_status'}
+Supervisor Received: {'type': 'start_server', 'args': ['C:/Users/peter/Documents/Programming/Personal/Minecraft-Manager/Server', ['javaw', '-jar', 'server-26.1-snapshot-1.jar', 'nogui']]}
+Supervisor Received: {'type': 'get_logs'}
+Supervisor Received: {'type': 'command', 'cmd': '/say test blue'}
+Supervisor Received: {'type': 'get_logs'}
+Supervisor Received: {'type': 'get_logs'}
+Supervisor Received: {'type': 'get_logs'}
+Supervisor Received: {'type': 'get_logs'}
 Supervisor Received: {'type': 'close', 'mode': 'immediate'}
 Total shutdown complete
