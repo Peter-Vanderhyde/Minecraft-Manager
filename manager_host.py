@@ -1329,6 +1329,11 @@ class ServerManagerApp(QMainWindow):
         self.show_main_page()
         self.create_supervisor_process()
         self.async_runner.submit(self.supervisor_connector.connect())
+        while not self.supervisor_connector.connected():
+            if self.supervisor_connector.failed_to_load.is_set():
+                self.log_queue.put("<font color='red'>Failed to connect to supervisor.</font>")
+                break
+        
         self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
