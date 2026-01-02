@@ -1595,7 +1595,10 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put(f'{self.timestamp()} <font color="green">You: {message}</font>')
                 self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
             else:
-                self.send_chat_msg("<Admin> " + message)
+                if not self.chat_toggle.isChecked() and self.supervisor_connector.connected():
+                    self.async_runner.submit(self.supervisor_connector.send_cmd(message))
+                else:
+                    self.send_chat_msg("<Admin> " + message)
     
     def get_api_version(self, version):
         game_versions = queries.get_mc_versions(include_snapshots=True)
@@ -2892,16 +2895,23 @@ class ServerManagerApp(QMainWindow):
             self.chat_toggle.show()
             if not self.is_api_compatible(self.worlds[self.world]["version"]):
                 self.message_entry.hide()
+            elif not self.chat_toggle.isChecked() and self.supervisor_connector.connected():
+                self.message_entry.setPlaceholderText("Send Command")
             
             self.server_chat.verticalScrollBar().setValue(self.server_chat.verticalScrollBar().maximumHeight())
         else:
             self.chat_toggle.hide()
             self.message_entry.show()
+            self.message_entry.setPlaceholderText("Send Message")
     
     def toggled_chat_mode(self):
         self.server_chat.clear()
         self.server_chat.append(f'<font color="gray">Loading logs...</font>')
         self.toggle_only_chat.set()
+        if self.chat_toggle.isChecked():
+            self.message_entry.setPlaceholderText("Send Message")
+        elif self.supervisor_connector.connected():
+            self.message_entry.setPlaceholderText("Send Command")
     
     def create_supervisor_process(self):
         print("Creating it")
