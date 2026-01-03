@@ -13,8 +13,8 @@ import glob
 import shutil
 from datetime import datetime
 from pyperclip import copy
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QTextEdit
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint
 
 import queries
@@ -281,7 +281,7 @@ class ServerManagerApp(QMainWindow):
         self.server_chat.append(f'<font color="gray">Loading logs...</font>')
         self.chat_tabs.addTab(self.server_chat, "Server")
 
-        self.chat_toggle = QCheckBox("Only show chat")
+        self.chat_toggle = QCheckBox("Chat Mode")
         self.chat_toggle.setObjectName("chatCheckBox")
         self.chat_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
         self.chat_toggle.setChecked(True)
@@ -1327,33 +1327,10 @@ class ServerManagerApp(QMainWindow):
             return
         self.ip_button.setText(f"IP: {self.host_ip}")
         self.show_main_page()
-        self.create_supervisor_process()
-        self.async_runner.submit(self.supervisor_connector.connect())
-        while not self.supervisor_connector.connected():
-            if self.supervisor_connector.failed_to_load.is_set():
-                self.log_queue.put("<font color='red'>Failed to connect to supervisor.</font>")
-                break
-        
         self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
         self.receive_thread.start()
         self.message_timer.start(1000)
-        self.log_queue.put("Waiting for connections...")
-        if not self.dropdown.currentText():
-            self.log_queue.put("<br>You do not currently have any worlds added to your list.")
-            self.log_queue.put("Click 'World Manager' to add a new world.")
-        
-        latest_version, content = queries.check_for_newer_app_version(VERSION)
-        if latest_version:
-            files = content["assets"]
-            download_link = ""
-            for file in files:
-                if file["name"] == "Manager_host.exe":
-                    download_link = file["browser_download_url"]
-            
-            self.log_queue.put(f"<br>{latest_version} is available!")
-            self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
-            self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.")
     
     def receive(self):
         handlers = []
@@ -1552,9 +1529,55 @@ class ServerManagerApp(QMainWindow):
             scrollbar.setValue(scrollbar.maximum())
             side_scroll.setValue(last_horiz)
     
+    def connect_supervisor(self):
+        self.log_queue.put("Looking for running servers...")
+        self.delay(1)
+        self.async_runner.submit(self.supervisor_connector.connect())
+        while not self.supervisor_connector.connected():
+            if self.supervisor_connector.failed_to_load.is_set():
+                self.supervisor_connector.failed_to_load.clear()
+                self.log_queue.put("None found.")
+                self.log_queue.put("Creating new supervisor...")
+                self.create_supervisor_process()
+                self.delay(1)
+                self.async_runner.submit(self.supervisor_connector.connect())
+                while not self.supervisor_connector.connected():
+                    if self.supervisor_connector.failed_to_load.is_set():
+                        self.log_queue.put("<font color='red'>Failed to connect to supervisor</font>")
+                        break
+                if not self.supervisor_connector.failed_to_load.is_set():
+                    self.log_queue.put("<font color='green'>Success.</font>")
+                break
+        
+        if not self.supervisor_connector.connected() and (not self.server_chat_thread or not self.server_chat_thread.is_alive()):
+            self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
+            self.server_chat_thread.start()
+        
+        self.log_queue.put("Waiting for connections...")
+        if not self.dropdown.currentText():
+            self.log_queue.put("<br>You do not currently have any worlds added to your list.")
+            self.log_queue.put("Click 'World Manager' to add a new world.")
+        
+        latest_version, content = queries.check_for_newer_app_version(VERSION)
+        if latest_version:
+            files = content["assets"]
+            download_link = ""
+            for file in files:
+                if file["name"] == "Manager_host.exe":
+                    download_link = file["browser_download_url"]
+            
+            self.log_queue.put(f"<br>{latest_version} is available!")
+            self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
+            self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
+    
     def first_load(self):
-        self.verify_world_formatting() # Update oudated formatting from previous versions
+        self.verify_world_formatting() # Update outdated formatting from previous versions
         self.set_worlds_list()
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.timeout.connect(self.connect_supervisor)
+        timer.start(1500)
+        
         self.get_status()
     
     def verify_world_formatting(self):
@@ -1606,7 +1629,10 @@ class ServerManagerApp(QMainWindow):
                 if not self.chat_toggle.isChecked() and self.supervisor_connector.connected():
                     self.async_runner.submit(self.supervisor_connector.send_cmd(message))
                 else:
-                    self.send_chat_msg("<Admin> " + message)
+                    if self.supervisor_connector.connected():
+                        self.async_runner.submit(self.supervisor_connector.send_cmd("/say <Admin> " + message))
+                    else:
+                        self.send_chat_msg("<Admin> " + message)
     
     def get_api_version(self, version):
         game_versions = queries.get_mc_versions(include_snapshots=True)
@@ -2002,9 +2028,6 @@ class ServerManagerApp(QMainWindow):
                     self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
 
             self.chat_tabs.tabBar().show()
-            if not self.supervisor_connector.connected() and (not self.server_chat_thread or not self.server_chat_thread.is_alive()):
-                self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
-                self.server_chat_thread.start()
             
             self.server_chat.clear()
             self.server_chat.append(f'<font color="gray">Loading logs...</font>')
@@ -2930,9 +2953,12 @@ class ServerManagerApp(QMainWindow):
                         .replace(">", "&gt;")
                 )
 
-            if message.find("Broadcast system message (overlay: false):") != -1:
-                chats.append(timestamp + f" <font color='green'>{html_escape(message.split("Broadcast system message (overlay: false): ")[1].strip("\n'"))}</font>")
-            elif (message.find("<") != -1 and message.find(">") != -1) or "[Server thread/INFO]: [Not Secure] [Server]" in message:
+            if "[Server thread/INFO]: [Not Secure] [Server]" in message:
+                timestamp, message = message.split("[Server thread/INFO]: [Not Secure] ")
+                if message.startswith("[Server] <Admin>"):
+                    message = message.replace("[Server] ", "")
+                chats.append(timestamp + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
+            elif (message.find("<") != -1 and message.find(">") != -1):
                 chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
             elif not chat_only:
                 chats.append(timestamp + message.strip('\n'))
@@ -2958,12 +2984,16 @@ class ServerManagerApp(QMainWindow):
         self.server_chat.append(f'<font color="gray">Loading logs...</font>')
         self.toggle_only_chat.set()
         if self.chat_toggle.isChecked():
+            self.chat_toggle.setText("Chat Mode")
             self.message_entry.setPlaceholderText("Send Message")
             if self.supervisor_connector.connected():
                 self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
         elif self.supervisor_connector.connected():
+            self.chat_toggle.setText("Log Mode")
             self.message_entry.setPlaceholderText("Send Command")
             self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
+        else:
+            self.chat_toggle.setText("Log Mode")
     
     def create_supervisor_process(self):
         print("Creating it")
@@ -2989,25 +3019,51 @@ class ServerManagerApp(QMainWindow):
         else:
             self.message_timer.start(1000)
     
-    def stop_server_threads(self):
+    def stop_server_threads(self, close_server=True):
         self.stop_threads.set()
         self.shutdown_bus()
         if self.supervisor_connector.connected():
-            self.close_supervisor_server()
+            if close_server:
+                self.close_supervisor_server("auto")
+            else:
+                self.close_supervisor_server("keep alive")
             self.delay(1)
             self.async_runner.submit(self.supervisor_connector.close())
         if self.receive_thread.is_alive():
             self.receive_thread.join(timeout=2.0)
         if self.server:
             self.server.close()
+    
+    def exit_prompt(self, event: QCloseEvent):
+        box = QMessageBox(self)
+        box.setWindowTitle("Exit Application")
+        # box.setText("The server is still running.")
+        # box.setInformativeText("What would you like to do?")
+        stop_and_exit = box.addButton("Stop Server and Exit", QMessageBox.ButtonRole.AcceptRole)
+        exit = box.addButton("Exit Without Stopping", QMessageBox.ButtonRole.DestructiveRole)
+        cancel = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
 
-    def closeEvent(self, event):
-        try:
-            self.broadcast("CLOSING")
-        except:
-            pass
-        self.stop_server_threads()
-        event.accept()
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked == stop_and_exit:
+            self.stop_server_threads(close_server=True)
+            event.accept()
+        elif clicked == exit:
+            self.stop_server_threads(close_server=False)
+            event.accept()
+        elif clicked == cancel:
+            event.ignore()
+
+    def closeEvent(self, event: QCloseEvent):
+        if self.status == "online":
+            self.exit_prompt(event)
+        else:
+            try:
+                self.broadcast("CLOSING")
+            except:
+                pass
+            self.stop_server_threads()
+            event.accept()
 
 if __name__ == "__main__":
     if "--supervisor" in sys.argv:

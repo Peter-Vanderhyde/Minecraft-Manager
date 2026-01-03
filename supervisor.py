@@ -39,6 +39,7 @@ class Supervisor:
         if self._mc_is_alive():
             return
         
+        self._logs.clear()
         self._mc_server = subprocess.Popen(
             process_args,
             cwd=server_path,
@@ -139,7 +140,10 @@ class Supervisor:
 
         if self._ui_disconnection.is_set():
             self._ui_disconnection.clear()
-            self.send_server_cmd("/say The server manager host has reconnected.")
+            async with self._log_lock:
+                await self.send_to_client({"type": "logs_list", "logs": self._logs})
+            self.send_server_cmd('/title @a subtitle {"text": "Host app reconnected", "color": "white"}')
+            self.send_server_cmd('/title @a title {"text": ""}')
             self.send_server_cmd("/say Players are able to close the server.")
 
         try:
@@ -182,8 +186,9 @@ class Supervisor:
                         self.send_server_cmd("/stop")
                         await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "keep alive":
-                        self.send_server_cmd('/title @a subtitle {"text": "Players cannot currently close the server", "color": "white"}')
-                        self.send_server_cmd('/title @a title {"text": "The server manager host is offline", "color": "yellow"}')
+                        self.send_server_cmd('/title @a subtitle {"text": "Host app closed", "color": "white"}')
+                        self.send_server_cmd('/title @a title {"text": ""}')
+                        self.send_server_cmd("/say Players cannot close the server.")
                         self._ui_disconnection.set()
                         return
                 elif msg.get("type") == "command":
