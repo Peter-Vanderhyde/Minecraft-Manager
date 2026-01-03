@@ -308,12 +308,14 @@ class ServerManagerApp(QMainWindow):
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
+        self.start_button.setEnabled(False)
         self.world_version_label = QLabel("")
         self.world_version_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.world_version_label.setObjectName("world_version")
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("redButton")
+        self.stop_button.setEnabled(False)
 
         separator = QFrame(self)
         separator.setFrameShape(QFrame.Shape.HLine)
@@ -1552,6 +1554,8 @@ class ServerManagerApp(QMainWindow):
         if not self.supervisor_connector.connected() and (not self.server_chat_thread or not self.server_chat_thread.is_alive()):
             self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
             self.server_chat_thread.start()
+        elif self.supervisor_connector.connected() and self.status == "offline":
+            self.start_button.setEnabled(True)
         
         self.log_queue.put("Waiting for connections...")
         if not self.dropdown.currentText():
@@ -1701,209 +1705,215 @@ class ServerManagerApp(QMainWindow):
                 self.tell(client, error)
     
     def start_server(self, world):
-        if world == "":
-            self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
-            return f"<font color='red'>There is no world selected.</font>"
-        
-        if not self.bus_shutdown_complete.is_set():
-            self.bus_shutdown_complete.wait(timeout=5.0)
-            if not self.bus_shutdown_complete.is_set():
-                self.shutdown_bus()
-        
-        status, _, _ = self.query_status()
-        if status == "online":
-            self.log_queue.put("Server is already online.")
-            return "already online"
-        
-        version, gamemode, difficulty, fabric, level_type = None, None, None, None, None
-        if self.worlds.get(world):
-            version = self.worlds[world].get("version")
-            fabric = self.worlds[world].get("fabric")
-            seed = self.worlds[world].get("seed", None)
-            difficulty = self.worlds[world].setdefault("difficulty", "Easy")
-            gamemode = self.worlds[world].setdefault("gamemode", "Survival")
-            level_type = self.worlds[world].setdefault("level-type", "Normal")
-        if not version:
-            self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
-            return f"<font color='red'>ERROR: World {world} is missing version.</font>"
-        
-        required_java_version = queries.get_required_java_version(version, self.log_queue)
-        if required_java_version:
-            if required_java_version > self.java_version:
-                self.log_queue.put(f"<font color='red'>Your Java version is out of date!<br>"
-                                    f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
-                                    f"You are currently running version {self.java_version}.<br>"
-                                    "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version MSI from <i>www.adoptium.net/temurin/releases/</i><br></font>")
-                
-                return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
-
-        self.broadcast("Starting server...")
-        self.log_queue.put("Starting server...")
-        QApplication.processEvents()
-        old_jars = glob.glob(self.path(self.server_path, "*.jar"))
-        for path in old_jars:
-            os.remove(path)
-        data = self.worlds.get(world)
-        path = self.path(self.server_path, "worlds", world)
-        if not data:
-            self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
-            return f"<font color='red'>Manager doesn't recognize that world.</font>"
-        elif not os.path.exists(path) and self.worlds[world].get("seed") is None:
-            error = f"<font color='red'>Uh oh. Path to world '{world}' no longer exists.</font>"
-            self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
-            return error
-        else:
-            try:
-                self.log_queue.put(f"Preparing for {'Fabric ' if fabric else ''}version {version}.")
-                if seed is not None:
-                    if seed != "":
-                        self.log_queue.put(f"Generating {level_type} world with seed '{seed}'...")
-                    else:
-                        self.log_queue.put(f"Generating {level_type} world with random seed...")
-                self.delay(1)
-
-                # Erase old properties for fresh start each time
-                with open(self.path(self.server_path, "server.properties"), 'w') as props:
-                    props.write("")
-                
-                # Copy world properties to the server properties
-                if os.path.isfile(self.path(path, "saved_properties.properties")):
-                    lines = []
-                    with open(self.path(path, "saved_properties.properties"), 'r') as world_props:
-                        lines = world_props.readlines()
-                    for i in range(len(lines)):
-                        if lines[i].startswith("management-server-secret="):
-                            lines[i] = ""
-                    with open(self.path(self.server_path, "server.properties"), 'w') as props:
-                        props.writelines(lines)
-                elif not os.path.isdir(path):
-                    os.mkdir(path)
-                
-                # Apply settings such as whitelist etc.
-                file_funcs.apply_universal_settings(self.server_path)
-                
-                world_mods_folder = self.path(path, "mods")
-                server_mods_folder = self.path(self.server_path, "mods")
-                if fabric and os.path.exists(world_mods_folder):
-                    if os.path.exists(server_mods_folder):
-                        shutil.rmtree(server_mods_folder)
-                    shutil.copytree(world_mods_folder, server_mods_folder)
-                elif fabric:
-                    if os.path.exists(server_mods_folder):
-                        shutil.rmtree(server_mods_folder)
-                        os.mkdir(server_mods_folder)
-                else:
-                    if os.path.exists(server_mods_folder):
-                        shutil.rmtree(server_mods_folder)
-
-                if self.is_api_compatible(version):
-                    api_version = self.get_api_version(version)
-                    file_funcs.get_api_settings(self.server_path, api_version)
-                if not file_funcs.prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, self.server_path, self.log_queue, seed):
-                    raise RuntimeError("Failed to prepare settings.")
-                else:
-                    if seed is not None:
-                        self.worlds[world].pop("seed")
-                        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+        try:
+            if world == "":
+                self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
+                return f"<font color='red'>There is no world selected.</font>"
             
-                with open(self.path(self.server_path, "run.bat"), 'r') as f:
-                    args = f.read()
-                
-                args = args.strip().split(" ")
-                if "nogui" not in args:
-                    args.append("nogui")
-                
-                self.start_supervisor_server(args)
-                while not self.supervisor_connector.spooling_up.is_set():
-                    if self.stop_threads.is_set():
-                        return
+            if not self.bus_shutdown_complete.is_set():
+                self.bus_shutdown_complete.wait(timeout=5.0)
+                if not self.bus_shutdown_complete.is_set():
+                    self.shutdown_bus()
+            
+            status, _, _ = self.query_status()
+            if status == "online":
+                self.log_queue.put("Server is already online.")
+                return "already online"
+            
+            version, gamemode, difficulty, fabric, level_type = None, None, None, None, None
+            if self.worlds.get(world):
+                version = self.worlds[world].get("version")
+                fabric = self.worlds[world].get("fabric")
+                seed = self.worlds[world].get("seed", None)
+                difficulty = self.worlds[world].setdefault("difficulty", "Easy")
+                gamemode = self.worlds[world].setdefault("gamemode", "Survival")
+                level_type = self.worlds[world].setdefault("level-type", "Normal")
+            if not version:
+                self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
+                return f"<font color='red'>ERROR: World {world} is missing version.</font>"
+            
+            required_java_version = queries.get_required_java_version(version, self.log_queue)
+            if required_java_version:
+                if required_java_version > self.java_version:
+                    self.log_queue.put(f"<font color='red'>Your Java version is out of date!<br>"
+                                        f"Minecraft version {queries.get_latest_release(self.log_queue)} requires Java version {required_java_version}.<br>"
+                                        f"You are currently running version {self.java_version}.<br>"
+                                        "Download an updated <b>JRE <i>(NOT</i> JDK)</b> version MSI from <i>www.adoptium.net/temurin/releases/</i><br></font>")
                     
-                    if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
-                        print("first fail")
-                        print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
-                        self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                        return "<font color='red'>Failed to start server.</font>"
-                    
-                    self.delay(0.1)
-                
-                self.log_queue.put("Server is spooling up...")
-                
-                self.world = world
-                self.world_version = version
-                self.move_world_to_top(world)
+                    return f"<font color='red'>ERROR: Host is running an older version of Java that does not support version {version}.</font>"
 
-                if not os.path.isfile(self.path(path, "saved_properties.properties")):
-                    lines = []
-                    with open(self.path(self.server_path, "server.properties"), 'r') as props:
-                        lines = props.readlines()
-                    with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
-                        world_props.writelines(lines)
-                else:
-                    with open(self.path(self.server_path, "server.properties"), 'r') as serv:
-                        serv_lines = serv.readlines()
-                    
-                    with open(self.path(path, "saved_properties.properties"), 'r') as saved:
-                        saved_lines = saved.readlines()
-                    
-                    if len(serv_lines) > len(saved_lines):
-                        with open(self.path(path, "saved_properties.properties"), 'w') as saved:
-                            saved.writelines(serv_lines)
-                    
-                    if world == self.dropdown.currentText():
-                        self.world_properties_button.setEnabled(True)
-                        if fabric:
-                            self.world_mods_button.setEnabled(True)
-                            self.modrinth_button.show()
-                
-                if fabric and not os.path.exists(world_mods_folder):
-                    try:
-                        os.mkdir(world_mods_folder)
-                    except:
-                        pass
-                
-                while not self.supervisor_connector.loading_chunks.is_set():
-                    if self.stop_threads.is_set():
-                        return
-                    
-                    if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
-                        print("second fail")
-                        print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
-                        self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                        return "<font color='red'>Failed to start server.</font>"
-                    
-                    self.delay(1)
-                
-                self.log_queue.put("Generating chunks...")
-                if self.is_api_compatible(version):
-                    self.create_bus(self.get_api_version(version))
-                else:
-                    if seed:
-                        # Wait longer
-                        check_status = 5
-                    else:
-                        check_status = 10
-                    
-                    while check_status != 0:
-                        self.delay(5)
-                        if self.query_status()[0] == "online":
-                            check_status = 0
-                        else:
-                            check_status -= 1
-
-                    if not self.supervisor_connector.connected() or self.supervisor_connector.failed_to_load.is_set():
-                        print("third fail")
-                        self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                        return "<font color='red'>Failed to start server.</font>"
-                    
-                    # Older versions assume the world will start soon, even if the wait timer was exhausted
-                    self.get_status_signal.emit()
-                    self.log_queue.put(f"Server world '{world}' has been started.")
-                    self.broadcast(f"Server world '{world}' has been started.")
-                    self.send_data("start", "refresh")
-            except Exception as e:
-                error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
-                self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
+            self.start_button.setEnabled(False)
+            self.refresh_button.setEnabled(False)
+            self.refresh_status_button.setEnabled(False)
+            self.broadcast("Starting server...")
+            self.log_queue.put("Starting server...")
+            QApplication.processEvents()
+            old_jars = glob.glob(self.path(self.server_path, "*.jar"))
+            for path in old_jars:
+                os.remove(path)
+            data = self.worlds.get(world)
+            path = self.path(self.server_path, "worlds", world)
+            if not data:
+                self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
+                return f"<font color='red'>Manager doesn't recognize that world.</font>"
+            elif not os.path.exists(path) and self.worlds[world].get("seed") is None:
+                error = f"<font color='red'>Uh oh. Path to world '{world}' no longer exists.</font>"
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
                 return error
+            else:
+                try:
+                    self.log_queue.put(f"Preparing for {'Fabric ' if fabric else ''}version {version}.")
+                    if seed is not None:
+                        if seed != "":
+                            self.log_queue.put(f"Generating {level_type} world with seed '{seed}'...")
+                        else:
+                            self.log_queue.put(f"Generating {level_type} world with random seed...")
+                    self.delay(1)
+
+                    # Erase old properties for fresh start each time
+                    with open(self.path(self.server_path, "server.properties"), 'w') as props:
+                        props.write("")
+                    
+                    # Copy world properties to the server properties
+                    if os.path.isfile(self.path(path, "saved_properties.properties")):
+                        lines = []
+                        with open(self.path(path, "saved_properties.properties"), 'r') as world_props:
+                            lines = world_props.readlines()
+                        for i in range(len(lines)):
+                            if lines[i].startswith("management-server-secret="):
+                                lines[i] = ""
+                        with open(self.path(self.server_path, "server.properties"), 'w') as props:
+                            props.writelines(lines)
+                    elif not os.path.isdir(path):
+                        os.mkdir(path)
+                    
+                    # Apply settings such as whitelist etc.
+                    file_funcs.apply_universal_settings(self.server_path)
+                    
+                    world_mods_folder = self.path(path, "mods")
+                    server_mods_folder = self.path(self.server_path, "mods")
+                    if fabric and os.path.exists(world_mods_folder):
+                        if os.path.exists(server_mods_folder):
+                            shutil.rmtree(server_mods_folder)
+                        shutil.copytree(world_mods_folder, server_mods_folder)
+                    elif fabric:
+                        if os.path.exists(server_mods_folder):
+                            shutil.rmtree(server_mods_folder)
+                            os.mkdir(server_mods_folder)
+                    else:
+                        if os.path.exists(server_mods_folder):
+                            shutil.rmtree(server_mods_folder)
+
+                    if self.is_api_compatible(version):
+                        api_version = self.get_api_version(version)
+                        file_funcs.get_api_settings(self.server_path, api_version)
+                    if not file_funcs.prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, self.server_path, self.log_queue, seed):
+                        raise RuntimeError("Failed to prepare settings.")
+                    else:
+                        if seed is not None:
+                            self.worlds[world].pop("seed")
+                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+                
+                    with open(self.path(self.server_path, "run.bat"), 'r') as f:
+                        args = f.read()
+                    
+                    args = args.strip().split(" ")
+                    if "nogui" not in args:
+                        args.append("nogui")
+                    
+                    self.start_supervisor_server(args)
+                    while not self.supervisor_connector.spooling_up.is_set():
+                        if self.stop_threads.is_set():
+                            return
+                        
+                        if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
+                            print("first fail")
+                            print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
+                            self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                            return "<font color='red'>Failed to start server.</font>"
+                        
+                        self.delay(0.1)
+                    
+                    self.log_queue.put("Server is spooling up...")
+                    
+                    self.world = world
+                    self.world_version = version
+                    self.move_world_to_top(world)
+
+                    if not os.path.isfile(self.path(path, "saved_properties.properties")):
+                        lines = []
+                        with open(self.path(self.server_path, "server.properties"), 'r') as props:
+                            lines = props.readlines()
+                        with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
+                            world_props.writelines(lines)
+                    else:
+                        with open(self.path(self.server_path, "server.properties"), 'r') as serv:
+                            serv_lines = serv.readlines()
+                        
+                        with open(self.path(path, "saved_properties.properties"), 'r') as saved:
+                            saved_lines = saved.readlines()
+                        
+                        if len(serv_lines) > len(saved_lines):
+                            with open(self.path(path, "saved_properties.properties"), 'w') as saved:
+                                saved.writelines(serv_lines)
+                        
+                        if world == self.dropdown.currentText():
+                            self.world_properties_button.setEnabled(True)
+                            if fabric:
+                                self.world_mods_button.setEnabled(True)
+                                self.modrinth_button.show()
+                    
+                    if fabric and not os.path.exists(world_mods_folder):
+                        try:
+                            os.mkdir(world_mods_folder)
+                        except:
+                            pass
+                    
+                    while not self.supervisor_connector.loading_chunks.is_set():
+                        if self.stop_threads.is_set():
+                            return
+                        
+                        if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
+                            print("second fail")
+                            print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
+                            self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                            return "<font color='red'>Failed to start server.</font>"
+                        
+                        self.delay(1)
+                    
+                    self.log_queue.put("Generating chunks...")
+                    if self.is_api_compatible(version):
+                        self.create_bus(self.get_api_version(version))
+                    else:
+                        if seed:
+                            # Wait longer
+                            check_status = 5
+                        else:
+                            check_status = 10
+                        
+                        while check_status != 0:
+                            self.delay(5)
+                            if self.query_status()[0] == "online":
+                                check_status = 0
+                            else:
+                                check_status -= 1
+
+                        if not self.supervisor_connector.connected() or self.supervisor_connector.failed_to_load.is_set():
+                            print("third fail")
+                            self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                            return "<font color='red'>Failed to start server.</font>"
+                        
+                        # Older versions assume the world will start soon, even if the wait timer was exhausted
+                        self.get_status_signal.emit()
+                        self.log_queue.put(f"Server world '{world}' has been started.")
+                        self.broadcast(f"Server world '{world}' has been started.")
+                        self.send_data("start", "refresh")
+                except Exception as e:
+                    error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
+                    self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
+                    return error
+        finally:
+            self.get_status()
     
     def close_supervisor_server(self, mode: str="auto"):
         if mode not in ["auto", "delayed", "immediate", "keep alive"]:
@@ -1924,6 +1934,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("Server is already offline.")
             return "already offline"
 
+        self.stop_button.setEnabled(False)
         self.broadcast("Stopping server...")
         self.log_queue.put("Stopping server...")
 
@@ -2082,7 +2093,8 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.addItem(item)
 
             self.refresh_status_button.setEnabled(True)
-            self.start_button.setEnabled(True)
+            if self.supervisor_connector.connected():
+                self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
     
     def set_status(self, info):
@@ -2122,7 +2134,8 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.addItem(item)
 
             self.refresh_status_button.setEnabled(True)
-            self.start_button.setEnabled(True)
+            if self.supervisor_connector.connected():
+                self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
         elif status == "pinging":
             self.status = "pinging"
@@ -3036,9 +3049,7 @@ class ServerManagerApp(QMainWindow):
     
     def exit_prompt(self, event: QCloseEvent):
         box = QMessageBox(self)
-        box.setWindowTitle("Exit Application")
-        # box.setText("The server is still running.")
-        # box.setInformativeText("What would you like to do?")
+        box.setWindowTitle("Exit Application?")
         stop_and_exit = box.addButton("Stop Server and Exit", QMessageBox.ButtonRole.AcceptRole)
         exit = box.addButton("Exit Without Stopping", QMessageBox.ButtonRole.DestructiveRole)
         cancel = box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
