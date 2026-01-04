@@ -38,19 +38,32 @@ def get_json(version, log_queue):
 def download_server_jar(version, output_directory, log_queue):
     success, response = get_json(version, log_queue)
     if success:
-        server_jar_url = response["downloads"]["server"]["url"]
-        server_jar_response = requests.get(server_jar_url)
+        try:
+            server_jar_url = response["downloads"]["server"]["url"]
+            server_jar_response = requests.get(server_jar_url)
+        except:
+            log_queue.put(f"Failed to download server JAR.")
+            sections = version.split(".")
+            if int(sections[1]) > 2:
+                return False
+            elif len(sections) > 2 and int(sections[2]) >= 5:
+                return False
+            log_queue.put("Minecraft only supports servers from version 1.2.5 and later.")
+            return False
         
         if server_jar_response.status_code == 200:
             # Save the server JAR to the specified directory
             output_path = os.path.join(output_directory, f'server-{version}.jar')
             with open(output_path, 'wb') as file:
                 file.write(server_jar_response.content)
+            return True
             # log_queue.put(f"Server JAR for version {version} downloaded to {output_path}")
         else:
             log_queue.put(f"Failed to download server JAR. Status code: {server_jar_response.status_code}")
+            return False
     else:
         log_queue.put(f"Failed to fetch version manifest. Status code: {response.status_code}")
+        return False
 
 def get_latest_release(log_queue):
     version_url = 'https://launchermeta.mojang.com/mc/game/version_manifest.json'
@@ -147,12 +160,27 @@ def get_mc_versions(include_snapshots=False):
     except:
         return None
     
+    def supported_version(version: dict, allow_snapshots=True):
+        if version["type"] == "old_beta":
+            return False
+        
+        elif version["type"] == "snapshot" and allow_snapshots:
+            return True
+        
+        elif version["type"] == "release":
+            sections = version["id"].split(".")
+            if len(sections) == 2 and int(sections[1]) <= 2:
+                return False
+            elif len(sections) == 3 and int(sections[1]) == 2 and int(sections[2]) <= 4:
+                return False
+
+            return True
+
+        return False
+    
     if response.status_code == 200:
         versions = response.json()["versions"]
-        if include_snapshots:
-            versions = [version["id"] for version in versions]
-        else:
-            versions = [version["id"] for version in versions if version["type"] == "release"]
+        versions = [version["id"] for version in versions if supported_version(version, allow_snapshots=include_snapshots)]
         return versions
     else:
         return None

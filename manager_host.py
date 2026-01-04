@@ -1534,9 +1534,11 @@ class ServerManagerApp(QMainWindow):
     def connect_supervisor(self):
         self.log_queue.put("Looking for running servers...")
         self.delay(1)
+        existing = True
         self.async_runner.submit(self.supervisor_connector.connect())
         while not self.supervisor_connector.connected():
             if self.supervisor_connector.failed_to_load.is_set():
+                existing = False
                 self.supervisor_connector.failed_to_load.clear()
                 self.log_queue.put("None found.")
                 self.log_queue.put("Creating new supervisor...")
@@ -1550,6 +1552,9 @@ class ServerManagerApp(QMainWindow):
                 if not self.supervisor_connector.failed_to_load.is_set():
                     self.log_queue.put("<font color='green'>Success.</font>")
                 break
+        
+        if existing:
+            self.log_queue.put("<font color='green'>Found server.</font>")
         
         if not self.supervisor_connector.connected() and (not self.server_chat_thread or not self.server_chat_thread.is_alive()):
             self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
@@ -2981,15 +2986,12 @@ class ServerManagerApp(QMainWindow):
     def switched_tabs(self):
         if self.chat_tabs.currentIndex() == 1:
             self.chat_toggle.show()
-            if not self.is_api_compatible(self.worlds[self.world]["version"]):
-                self.message_entry.hide()
-            elif self.supervisor_connector.connected() and not self.chat_toggle.isChecked():
+            if self.supervisor_connector.connected() and not self.chat_toggle.isChecked():
                 self.message_entry.setPlaceholderText("Send Command")
             
             self.server_chat.verticalScrollBar().setValue(self.server_chat.verticalScrollBar().maximumHeight())
         else:
             self.chat_toggle.hide()
-            self.message_entry.show()
             self.message_entry.setPlaceholderText("Send Message")
     
     def toggled_chat_mode(self):

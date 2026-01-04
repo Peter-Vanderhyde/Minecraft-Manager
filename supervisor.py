@@ -77,7 +77,7 @@ class Supervisor:
             
             if self._client is not None:
                 if not server_loaded:
-                    if CHUNK_RE.search(line) is not None:
+                    if CHUNK_RE.search(line) is not None or "Preparing level" in line:
                         await self.send_to_client({"type": "loading", "state": "chunks"})
                     elif DONE_RE.search(line) is not None:
                         await self.send_to_client({"type": "loading", "state": "done"})

@@ -225,7 +225,9 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
             for jar in jars:
                 os.remove(jar)
             
-            queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue)
+            if not queries.download_server_jar(version, os.path.join(server_path, "versions", version), log_queue):
+                return False
+            
             time.sleep(1)
             # Delete libraries and re-extract them
             if os.path.isdir(os.path.join(server_path, "libraries")):
@@ -273,7 +275,8 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
             time.sleep(1)
         
         return True
-    except:
+    except Exception as e:
+        print(e)
         return False
 
 def get_api_settings(server_path, api_version=1):
