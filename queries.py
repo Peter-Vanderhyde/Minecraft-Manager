@@ -185,6 +185,21 @@ def get_mc_versions(include_snapshots=False):
     else:
         return None
 
+def version_comparison(version, test_version, before=False, after=False):
+    print(version)
+    versions = get_mc_versions(include_snapshots=True)
+    if versions[0] == test_version and after:
+        return False
+    
+    v_index = versions.index(version)
+    test_index = versions.index(test_version)
+    if v_index > test_index and before:
+        return True
+    elif v_index < test_index and after:
+        return True
+    else:
+        return False
+
 def get_player_uuid(name):
     url = "https://api.minecraftservices.com/minecraft/profile/lookup/name/" + name
     try:

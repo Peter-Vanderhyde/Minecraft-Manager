@@ -87,6 +87,7 @@ class ServerManagerApp(QMainWindow):
     update_players_list_signal = pyqtSignal(list)
     start_server_signal = pyqtSignal(list) # [client, world_name]
     stop_server_signal = pyqtSignal(object)
+    wait_for_server_shutdown_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -113,16 +114,8 @@ class ServerManagerApp(QMainWindow):
         self.universal_settings = {}
         self.curr_players = []
         self.log_queue = queue.Queue()
-        self.result_queue = queue.Queue()
 
-        self.server_chat_thread = None
         self.server_log_queue = queue.Queue()
-        self.world_closed = threading.Event()
-        self.toggle_only_chat = threading.Event()
-        self.refresh_logs = threading.Event()
-
-        self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue)
-        self.async_runner = supervisor.AsyncRunner()
 
         self.no_clients = True
         self.stop_threads = threading.Event()
@@ -134,6 +127,11 @@ class ServerManagerApp(QMainWindow):
         self.update_players_list_signal.connect(self.update_players_list)
         self.start_server_signal.connect(self.client_start_server)
         self.stop_server_signal.connect(self.client_stop_server)
+        self.wait_for_server_shutdown_signal.connect(self.wait_for_server_shutdown)
+
+        self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue, self.wait_for_server_shutdown_signal)
+        self.waiting_for_server_shutdown = threading.Event()
+        self.async_runner = supervisor.AsyncRunner()
 
         # Minecraft Server Management Protocol Listener
         self.bus = None
@@ -239,10 +237,10 @@ class ServerManagerApp(QMainWindow):
         self.title_label.setFont(self.title_font)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         
-        self.world_label = QLabel("Server World: ")
+        self.world_label = QLabel(" ")
         self.world_label.setObjectName("world_details")
         self.world_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        self.version_label = QLabel("World Version: ")
+        self.version_label = QLabel(" ")
         self.version_label.setObjectName("world_details")
         self.version_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
 
@@ -1117,7 +1115,6 @@ class ServerManagerApp(QMainWindow):
         print("API VERSION: " + str(api_version))
         self.bus = websock_mgmt.MgmtBus(api_version)
         self.bus.log.connect(self.log_queue.put)
-        self.bus.recvd_result.connect(self.result_queue.put)
         self.bus.connected.connect(self.api_connection)
         self.bus.server_closing.connect(self.bus_shutdown_complete.clear)
         self.bus.server_closed.connect(self.api_closed)
@@ -1138,10 +1135,6 @@ class ServerManagerApp(QMainWindow):
     def disconnect_bus(self):
         try:
             self.bus.log.disconnect(self.log_queue.put)
-        except:
-            pass
-        try:
-            self.bus.recvd_result.disconnect(self.result_queue.put)
         except:
             pass
         try:
@@ -1547,7 +1540,7 @@ class ServerManagerApp(QMainWindow):
                 self.async_runner.submit(self.supervisor_connector.connect())
                 while not self.supervisor_connector.connected():
                     if self.supervisor_connector.failed_to_load.is_set():
-                        self.log_queue.put("<font color='red'>Failed to connect to supervisor</font>")
+                        self.log_queue.put("<font color='red'>Failed to connect to supervisor<br>Please restart manager.</font>")
                         break
                 if not self.supervisor_connector.failed_to_load.is_set():
                     self.log_queue.put("<font color='green'>Success.</font>")
@@ -1556,10 +1549,7 @@ class ServerManagerApp(QMainWindow):
         if existing:
             self.log_queue.put("<font color='green'>Found server.</font>")
         
-        if not self.supervisor_connector.connected() and (not self.server_chat_thread or not self.server_chat_thread.is_alive()):
-            self.server_chat_thread = threading.Thread(target=self.check_for_server_messages)
-            self.server_chat_thread.start()
-        elif self.supervisor_connector.connected() and self.status == "offline":
+        if self.supervisor_connector.connected() and self.status == "offline":
             self.start_button.setEnabled(True)
         
         self.log_queue.put("Waiting for connections...")
@@ -1578,6 +1568,8 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<br>{latest_version} is available!")
             self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
             self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
+        
+        self.get_status()
     
     def first_load(self):
         self.verify_world_formatting() # Update outdated formatting from previous versions
@@ -1586,8 +1578,6 @@ class ServerManagerApp(QMainWindow):
         timer.setSingleShot(True)
         timer.timeout.connect(self.connect_supervisor)
         timer.start(1500)
-        
-        self.get_status()
     
     def verify_world_formatting(self):
         outdated = False
@@ -1637,11 +1627,8 @@ class ServerManagerApp(QMainWindow):
             else:
                 if not self.chat_toggle.isChecked() and self.supervisor_connector.connected():
                     self.async_runner.submit(self.supervisor_connector.send_cmd(message))
-                else:
-                    if self.supervisor_connector.connected():
-                        self.async_runner.submit(self.supervisor_connector.send_cmd("/say <Admin> " + message))
-                    else:
-                        self.send_chat_msg("<Admin> " + message)
+                elif self.supervisor_connector.connected():
+                    self.async_runner.submit(self.supervisor_connector.send_cmd("say <Admin> " + message))
     
     def get_api_version(self, version):
         game_versions = queries.get_mc_versions(include_snapshots=True)
@@ -1775,6 +1762,16 @@ class ServerManagerApp(QMainWindow):
                             self.log_queue.put(f"Generating {level_type} world with random seed...")
                     self.delay(1)
 
+                    older_files = ["banned-players.txt", "banned-ips.txt", "ops.txt", "whitelist.txt", "server.log"]
+                    for file in older_files:
+                        try:
+                            if os.path.isfile(self.path(self.server_path, file)):
+                                os.remove(self.path(self.server_path, file))
+                            if os.path.isfile(self.path(self.server_path, file + ".converted")):
+                                os.remove(self.path(self.server_path, file + ".converted"))
+                        except:
+                            pass
+
                     # Erase old properties for fresh start each time
                     with open(self.path(self.server_path, "server.properties"), 'w') as props:
                         props.write("")
@@ -1794,6 +1791,22 @@ class ServerManagerApp(QMainWindow):
                     
                     # Apply settings such as whitelist etc.
                     file_funcs.apply_universal_settings(self.server_path)
+
+                    # Convert new files to old files
+                    if queries.version_comparison(self.worlds[world]["version"], "1.7.6", before=True):
+                        older_files = ["banned-ips", "banned-players", "ops", "whitelist"]
+                        for file in older_files:
+                            try:
+                                with open(self.path(self.server_path, file + ".json"), 'r') as f:
+                                    data = json.loads(f.read())
+                                print(file)
+                                print(data)
+                                names = [player["name"] for player in data]
+                                print(names)
+                                with open(self.path(self.server_path, file + ".txt"), 'w') as f:
+                                    f.writelines(names)
+                            except:
+                                pass
                     
                     world_mods_folder = self.path(path, "mods")
                     server_mods_folder = self.path(self.server_path, "mods")
@@ -1890,26 +1903,15 @@ class ServerManagerApp(QMainWindow):
                     if self.is_api_compatible(version):
                         self.create_bus(self.get_api_version(version))
                     else:
-                        if seed:
-                            # Wait longer
-                            check_status = 5
-                        else:
-                            check_status = 10
+                        while not self.supervisor_connector.loading_complete.is_set():
+                            if self.stop_threads.is_set():
+                                return
+                            
+                            if not self.supervisor_connector.connected() or self.supervisor_connector.failed_to_load.is_set():
+                                print("third fail")
+                                self.log_queue.put("<font color='red'>Failed to start server.</font>")
+                                return "<font color='red'>Failed to start server.</font>"
                         
-                        while check_status != 0:
-                            self.delay(5)
-                            if self.query_status()[0] == "online":
-                                check_status = 0
-                            else:
-                                check_status -= 1
-
-                        if not self.supervisor_connector.connected() or self.supervisor_connector.failed_to_load.is_set():
-                            print("third fail")
-                            self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                            return "<font color='red'>Failed to start server.</font>"
-                        
-                        # Older versions assume the world will start soon, even if the wait timer was exhausted
-                        self.get_status_signal.emit()
                         self.log_queue.put(f"Server world '{world}' has been started.")
                         self.broadcast(f"Server world '{world}' has been started.")
                         self.send_data("start", "refresh")
@@ -1918,20 +1920,28 @@ class ServerManagerApp(QMainWindow):
                     self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
                     return error
         finally:
-            self.get_status()
+            self.get_status_signal.emit()
+    
+    def get_command_version_index(self, version: str):
+        if version == "1.2.5":
+            return 0
+        
+        return 1
     
     def close_supervisor_server(self, mode: str="auto"):
         if mode not in ["auto", "delayed", "immediate", "keep alive"]:
             raise Exception("Invalid closing mode: ", mode)
 
         if mode == "auto":
-            if len(self.curr_players) > 0:
+            if self.query_status()[0] == "offline":
+                mode = "immediate"
+            elif len(self.query_players()) > 0:
                 self.log_queue.put("Giving players 10 seconds notice...")
                 mode = "delayed"
             else:
                 mode = "immediate"
         
-        self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": mode}))
+        self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": mode, "version_index": self.get_command_version_index(self.world_version)}))
     
     def stop_server(self):
         status, _, world = self.query_status()
@@ -1949,11 +1959,12 @@ class ServerManagerApp(QMainWindow):
 
             if not self.is_api_compatible(self.worlds[world]["version"]):
                 self.delay(3)
-                self.get_status_signal.emit()
-                if self.status == "offline":
-                    self.log_queue.put("Server has been stopped.")
-                    self.broadcast("Server has been stopped.")
-                    self.send_data("stop", "refresh")
+                # Hacky way to delete the mods folder after closing for old version
+                if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
+                    try:
+                        shutil.rmtree(self.path(self.server_path, "mods"))
+                    except:
+                        pass
 
         # No supervisor, only api
         elif self.is_api_compatible(self.worlds[world]["version"]):
@@ -1970,50 +1981,54 @@ class ServerManagerApp(QMainWindow):
             self.bus.close_server.emit()
         # No supervisor or api, must close with keystrokes
         else:
-            windows = pgw.getWindowsWithTitle("Minecraft server")
-            window = None
-            for w in windows:
-                if w.title == "Minecraft server":
-                    window = w
-            
-            pgw.getActiveWindow().title
-            window.restore()
-            window.activate()
-
-            # Check if caps lock is on
-            user32 = ctypes.WinDLL("user32")
-            caps_lock_state = user32.GetKeyState(0x14)
-            if bool(caps_lock_state):
-                pag.keyDown("capslock")
-                pag.keyUp("capslock")
-
-            target_pos = pag.Point(window.bottomright.x - 30, window.bottomright.y - 30)
-            while pag.position() != target_pos:
-                pag.moveTo(target_pos.x, target_pos.y)
-
-            pag.click()
-            pag.typewrite("stop")
-            pag.keyDown("enter")
-
-            if bool(caps_lock_state):
-                pag.keyDown("capslock")
-                pag.keyUp("capslock")
-
-            self.delay(3)
-
+            self.log_queue.put("<font color='red'>Unable to communicate with server.</font>")
+    
+    def wait_for_server_shutdown(self):
+        if self.is_api_compatible(self.worlds[self.world]["version"]):
+            return
+        
+        self.waiting_for_server_shutdown.set()
+        self.get_status_signal.emit()
+        while not self.status == "offline":
+            self.delay(1)
             self.get_status_signal.emit()
-            if self.status == "offline":
-                self.log_queue.put("Server has been stopped.")
-                self.broadcast("Server has been stopped.")
-                self.send_data("stop", "refresh")
+        
+        self.log_queue.put("Server has been stopped.")
+        self.broadcast("Server has been stopped.")
+        self.send_data("stop", "refresh")
+        self.waiting_for_server_shutdown.clear()
 
-            # Hacky way to delete the mods folder after closing for old version
-            if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
+        # Not sure how to save from old files to new with extra data
+
+        if queries.version_comparison(self.worlds[self.world]["version"], "1.7.6", before=True):
+            older_files = ["banned-ips", "banned-players", "ops", "whitelist"]
+            for file in older_files:
                 try:
-                    shutil.rmtree(self.path(self.server_path, "mods"))
+                    print(file + ".txt")
+                    with open(self.path(self.server_path, file + ".txt"), 'r') as f:
+                        names = f.readlines()
+                    print(names)
+                    data = []
+                    for name in names:
+                        if not name:
+                            continue
+
+                        name = name.strip('\n')
+                        id_data = queries.get_player_uuid(name)
+                        if id_data:
+                            obj = {
+                                "uuid": id_data["id"],
+                                "name": id_data["name"],
+                                "level": 4,
+                                "bypassesPlayerLimit": False
+                            }
+                            data.append(obj)
+                    with open(self.path(self.server_path, file + ".json"), 'w') as f:
+                        print(data)
+                        f.write(json.dumps(data, indent=4))
+                        print("Wrote data")
                 except:
                     pass
-            return None
 
     def query_status(self):
         status, brand, version, world = queries.status(self.host_ip, self.server_port)
@@ -2046,17 +2061,14 @@ class ServerManagerApp(QMainWindow):
             self.chat_tabs.tabBar().show()
             
             self.server_chat.clear()
-            self.server_chat.append(f'<font color="gray">Loading logs...</font>')
-            if not self.chat_toggle.isChecked():
-                self.toggle_only_chat.set()
+            loading_msg = "chats" if self.chat_toggle.isChecked() else "logs"
+            self.server_chat.append(f'<font color="gray">Loading {loading_msg}...</font>')
 
         else:
             self.message_entry.show()
             self.chat_tabs.tabBar().hide()
             self.chat_tabs.setCurrentIndex(0)
             self.server_chat.clear()
-            if self.server_chat_thread and self.server_chat_thread.is_alive():
-                self.world_closed.set()
 
 
     def get_players(self):
@@ -2807,6 +2819,7 @@ class ServerManagerApp(QMainWindow):
         
         menu.exec(cursor_pos)
     
+    #TODO Change all these to direct commands instead of using the API so old versions can use it too
     def op_player(self, player, remove):
         self.bus.op_player.emit(player, remove)
         if remove:
@@ -2918,37 +2931,6 @@ class ServerManagerApp(QMainWindow):
             min = f"0{t.tm_min}"
         timestamp = f"[{hour}:{min}]"
         return timestamp
-
-    def check_for_server_messages(self):
-        LOG_PATH = self.path(self.server_path, "logs", "latest.log")
-        chat_only = True
-        last_size = 0
-        last_line = 0
-        while not self.stop_threads.is_set():
-            if self.world_closed.is_set():
-                self.world_closed.clear()
-                return
-
-            if self.toggle_only_chat.is_set() or self.refresh_logs.is_set():
-                if self.toggle_only_chat.is_set():
-                    chat_only = not chat_only
-                
-                self.toggle_only_chat.clear()
-                self.refresh_logs.clear()
-                last_size = 0
-                last_line = 0
-            
-            curr_size = os.path.getsize(LOG_PATH)
-            if curr_size > last_size:
-                last_size = curr_size
-                with open(LOG_PATH, 'r') as f:
-                    lines = f.readlines()[last_line:]
-                
-                last_line += len(lines)
-
-                self.server_log_queue.put(lines)
-            
-            time.sleep(1)
     
     def format_logs(self, logs: list[str], chat_only: bool):
         chats = []
@@ -2996,18 +2978,19 @@ class ServerManagerApp(QMainWindow):
     
     def toggled_chat_mode(self):
         self.server_chat.clear()
-        self.server_chat.append(f'<font color="gray">Loading logs...</font>')
-        self.toggle_only_chat.set()
         if self.chat_toggle.isChecked():
+            self.server_chat.append(f'<font color="gray">Loading chats...</font>')
             self.chat_toggle.setText("Chat Mode")
             self.message_entry.setPlaceholderText("Send Message")
             if self.supervisor_connector.connected():
                 self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
         elif self.supervisor_connector.connected():
+            self.server_chat.append(f'<font color="gray">Loading logs...</font>')
             self.chat_toggle.setText("Log Mode")
             self.message_entry.setPlaceholderText("Send Command")
             self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
         else:
+            self.server_chat.append(f'<font color="gray">Loading logs...</font>')
             self.chat_toggle.setText("Log Mode")
     
     def create_supervisor_process(self):
@@ -3022,7 +3005,6 @@ class ServerManagerApp(QMainWindow):
             stderr=log,
             close_fds=True
         )
-
     
     def start_supervisor_server(self, server_args):
         self.async_runner.submit(self.supervisor_connector.send({"type": "start_server", "args": [self.server_path, server_args]}))
@@ -3080,10 +3062,8 @@ class ServerManagerApp(QMainWindow):
 
 if __name__ == "__main__":
     if "--supervisor" in sys.argv:
-        print("Creating supervisor")
         supervisor.create_supervisor()
     else:
-        print("New app")
         app = QApplication(sys.argv)
         server_manager_app = ServerManagerApp()
 

@@ -92,6 +92,9 @@ class Supervisor:
                         self._waiting_for_feedback.clear()
                         continue
                 
+                if "Stopping server" in line:
+                    await self.send_to_client({"type": "closing_server"})
+                
                 await self.send_to_client({"type": "log", "msg": line})
         
         if not server_loaded:
@@ -142,53 +145,64 @@ class Supervisor:
             self._ui_disconnection.clear()
             async with self._log_lock:
                 await self.send_to_client({"type": "logs_list", "logs": self._logs})
-            self.send_server_cmd('/title @a subtitle {"text": "Host app reconnected", "color": "white"}')
-            self.send_server_cmd('/title @a title {"text": ""}')
-            self.send_server_cmd("/say Players are able to close the server.")
+            self.send_server_cmd('title @a subtitle {"text": "Host app reconnected", "color": "white"}')
+            self.send_server_cmd('title @a title {"text": ""}')
+            self.send_server_cmd("say Host app reconnected.")
+            self.send_server_cmd("say Players are able to close the server.")
 
         try:
             async for raw in wsocket:
                 msg = json.loads(raw)
                 print("Supervisor Received:", msg)
                 if msg.get("type") == "close":
+                    version_index = msg.get("version_index")
                     if msg.get("mode") == "immediate":
-                        self.send_server_cmd("/stop")
+                        self.send_server_cmd("stop")
                         await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "delayed":
                         self._waiting_for_feedback.set()
-                        self.send_server_cmd("/gamerule send_command_feedback")
-                        try:
-                            await asyncio.wait_for(self._set_feedback_value.wait(), timeout=2.0)
-                        except asyncio.TimeoutError:
-                            feedback = True
+                        if version_index == 0:
+                            self.send_server_cmd("say Server Closed")
+                            self.send_server_cmd("say Closing in 10 seconds...")
+                            await asyncio.sleep(10)
                         else:
-                            feedback = self._feedback_value
-                        finally:
-                            self._set_feedback_value.clear()
+                            self.send_server_cmd("gamerule send_command_feedback")
+                            try:
+                                await asyncio.wait_for(self._set_feedback_value.wait(), timeout=2.0)
+                            except asyncio.TimeoutError:
+                                feedback = True
+                            else:
+                                feedback = self._feedback_value
+                            finally:
+                                self._set_feedback_value.clear()
 
-                        if feedback:
-                            self.send_server_cmd("/gamerule send_command_feedback false")
+                            if feedback:
+                                self.send_server_cmd("gamerule send_command_feedback false")
                         
-                        self.send_server_cmd('/title @a subtitle {"text": "Closing in 10 seconds...", "color": "yellow"}')
-                        self.send_server_cmd('/title @a title {"text": "Server Closed", "color": "red", "bold": true}')
-                        for i in range(10):
-                            color = "red" if i > 6 else "white"
-                            command = {
-                                "text": str(10 - i),
-                                "color": color
-                            }
-                            self.send_server_cmd(f"/title @a actionbar {json.dumps(command)}")
-                            await asyncio.sleep(1)
-                        if feedback:
-                            self.send_server_cmd(f"/gamerule send_command_feedback true")
-                            await asyncio.sleep(1)
+                            self.send_server_cmd('title @a subtitle {"text": "Closing in 10 seconds...", "color": "yellow"}')
+                            self.send_server_cmd('title @a title {"text": "Server Closed", "color": "red", "bold": true}')
+                            for i in range(10):
+                                color = "red" if i > 6 else "white"
+                                command = {
+                                    "text": str(10 - i),
+                                    "color": color
+                                }
+                                self.send_server_cmd(f"title @a actionbar {json.dumps(command)}")
+                                await asyncio.sleep(1)
+                            if feedback:
+                                self.send_server_cmd(f"gamerule send_command_feedback true")
+                                await asyncio.sleep(1)
                         
-                        self.send_server_cmd("/stop")
+                        self.send_server_cmd("stop")
                         await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "keep alive":
-                        self.send_server_cmd('/title @a subtitle {"text": "Host app closed", "color": "white"}')
-                        self.send_server_cmd('/title @a title {"text": ""}')
-                        self.send_server_cmd("/say Players cannot close the server.")
+                        if version_index == 0:
+                            self.send_server_cmd("say Host app closed.")
+                            self.send_server_cmd("say Players cannot close the server.")
+                        else:
+                            self.send_server_cmd('title @a subtitle {"text": "Host app closed", "color": "white"}')
+                            self.send_server_cmd('title @a title {"text": ""}')
+                            self.send_server_cmd("say Players cannot close the server.")
                         self._ui_disconnection.set()
                         return
                 elif msg.get("type") == "command":
@@ -214,7 +228,7 @@ class Supervisor:
             await self._shutdown_event.wait()
         
         if self._mc_is_alive():
-            self.send_server_cmd("/stop")
+            self.send_server_cmd("stop")
             await self.wait_for_server_shutdown(self._mc_server)
 
         if self._mc_server and self._mc_server.stdin:
@@ -233,8 +247,9 @@ class Supervisor:
 
 
 class SupervisorConnector:
-    def __init__(self, log_output_queue: queue.Queue):
+    def __init__(self, log_output_queue: queue.Queue, server_stopped_signal):
         self.log_output_queue = log_output_queue
+        self.server_stopped_signal = server_stopped_signal
         self._client: websockets.ClientConnection | None = None
         self.found_connection = threading.Event()
         self.spooling_up = threading.Event()
@@ -315,6 +330,8 @@ class SupervisorConnector:
                     self.log_output_queue.put([msg.get("msg")])
                 elif msg.get("type") == "logs_list":
                     self.log_output_queue.put(msg.get("logs"))
+                elif msg.get("type") == "closing_server":
+                    self.server_stopped_signal.emit()
         except:
             pass
         finally:
