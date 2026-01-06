@@ -8,6 +8,7 @@ import subprocess
 from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
+from queries import version_comparison
 
 def load_settings(log_queue, file_lock):
     data = {
@@ -154,7 +155,10 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
                 lines[i] = f"difficulty={difficulty.lower()}\n"
                 found_difficulty = True
             elif line.startswith("level-type"):
-                lines[i] = f"level-type=minecraft\\:{level_type.lower().replace(' ', '_')}\n"
+                if version_comparison(version, "1.13", before=True):
+                    lines[i] = f"level-type={level_type.upper().replace(' ', '')}\n"
+                else:
+                    lines[i] = f"level-type=minecraft\\:{level_type.lower().replace(' ', '_')}\n"
                 found_level_type = True
             elif line.startswith("enable-query="):
                 lines[i] = "enable-query=true\n"
@@ -193,7 +197,10 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
         if not found_difficulty:
             lines.append(f"difficulty={difficulty.lower()}\n")
         if not found_level_type:
-            lines.append(f"level-type=minecraft\\:{level_type.lower().replace(' ', '_')}\n")
+            if version_comparison(version, "1.13", before=True):
+                lines.append(f"level-type={level_type.upper().replace(' ', '')}\n")
+            else:
+                lines.append(f"level-type=minecraft\\:{level_type.lower().replace(' ', '_')}\n")
         if not found_query:
             lines.append("enable-query=true\n")
         if not found_port:
@@ -367,7 +374,7 @@ def open_file(path):
     except FileNotFoundError:
         return False
 
-def save_world_properties(folder_path, properties):
+def save_world_properties(folder_path, properties: dict):
     file_path = os.path.join(folder_path, "saved_properties.properties")
     if not os.path.isfile(file_path):
         with open(file_path, 'w') as f:
@@ -405,7 +412,11 @@ def save_world_properties(folder_path, properties):
             lines[i] = f"fabric={"true" if properties.get("fabric", False) else "false"}\n"
             found_fabric = True
         elif line.startswith("level-type="):
-            lines[i] = f"level-type=minecraft\\:{properties.get("level-type", "Normal").lower().replace(' ', '_')}\n"
+            version = properties.get("version") or "1.13"
+            if version_comparison(version, "1.13", before=True):
+                lines[i] = f"level-type={properties.get("level-type", "Normal").upper().replace(' ', '')}\n"
+            else:
+                lines[i] = f"level-type=minecraft\\:{properties.get("level-type", "Normal").lower().replace(' ', '_')}\n"
             found_level_type = True
     
     if not found_version:
@@ -426,7 +437,11 @@ def save_world_properties(folder_path, properties):
     if not found_fabric:
         lines.append(f"fabric={"true" if properties.get("fabric", False) else "false"}\n")
     if not found_level_type:
-        lines.append(f"level-type=minecraft\\:{properties.get("level-type", "Normal").lower().replace(' ', '_')}\n")
+        version = properties.get("version") or "1.13"
+        if version_comparison(version, "1.13", before=True):
+            lines.append(f"level-type={properties.get("level-type", "Normal").upper().replace(' ', '')}\n")
+        else:
+            lines.append(f"level-type=minecraft\\:{properties.get("level-type", "Normal").lower().replace(' ', '_')}\n")
     
     with open(file_path, 'w') as props:
         props.writelines(lines)

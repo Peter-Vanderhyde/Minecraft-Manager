@@ -215,6 +215,12 @@ class Supervisor:
                 elif msg.get("type") == "get_logs":
                     async with self._log_lock:
                         await self.send_to_client({"type": "logs_list", "logs": self._logs})
+        except (websockets.ConnectionClosedOK, websockets.ConnectionClosedError, websockets.ConnectionClosed) as e:
+            return
+
+        except Exception as e:
+            print(f"Handler error: {type(e).__name__}: {e!r}")
+            raise
         finally:
             if not self._ui_disconnection.is_set():
                 self._shutdown_event.set()

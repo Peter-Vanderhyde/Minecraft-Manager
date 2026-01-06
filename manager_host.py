@@ -114,6 +114,7 @@ class ServerManagerApp(QMainWindow):
         self.universal_settings = {}
         self.curr_players = []
         self.log_queue = queue.Queue()
+        self.running_version = lambda: self.worlds[self.world]["version"]
 
         self.server_log_queue = queue.Queue()
 
@@ -1192,6 +1193,18 @@ class ServerManagerApp(QMainWindow):
     def clear_log(self):
         self.log_box.clear()
     
+    def supervisor_send(self, obj: dict):
+        if self.supervisor_connector.connected():
+            self.async_runner.submit(self.supervisor_connector.send(obj))
+        else:
+            self.log_queue.put("<font color='red'>Not connected to supervisor. Please restart.</font>")
+    
+    def supervisor_send_cmd(self, cmd: str):
+        if self.supervisor_connector.connected():
+            self.async_runner.submit(self.supervisor_connector.send_cmd(cmd))
+        else:
+            self.log_queue.put("<font color='red'>Not connected to supervisor. Please restart.</font>")
+    
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
             saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
@@ -1267,7 +1280,7 @@ class ServerManagerApp(QMainWindow):
             self.show_world_manager_page()
     
     def show_commands_page(self):
-        if self.status == "online" and not self.is_api_compatible(self.worlds[self.world]["version"]):
+        if self.status == "online" and not self.is_api_compatible(self.running_version()):
             self.commands_warning_label.show()
         else:
             self.commands_warning_label.hide()
@@ -1625,10 +1638,10 @@ class ServerManagerApp(QMainWindow):
                 self.log_queue.put(f'{self.timestamp()} <font color="green">You: {message}</font>')
                 self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
             else:
-                if not self.chat_toggle.isChecked() and self.supervisor_connector.connected():
-                    self.async_runner.submit(self.supervisor_connector.send_cmd(message))
-                elif self.supervisor_connector.connected():
-                    self.async_runner.submit(self.supervisor_connector.send_cmd("say <Admin> " + message))
+                if not self.chat_toggle.isChecked():
+                    self.supervisor_send_cmd(message)
+                else:
+                    self.supervisor_send_cmd("say <Admin> " + message)
     
     def get_api_version(self, version):
         game_versions = queries.get_mc_versions(include_snapshots=True)
@@ -1762,7 +1775,7 @@ class ServerManagerApp(QMainWindow):
                             self.log_queue.put(f"Generating {level_type} world with random seed...")
                     self.delay(1)
 
-                    older_files = ["banned-players.txt", "banned-ips.txt", "ops.txt", "whitelist.txt", "server.log"]
+                    older_files = ["banned-players.txt", "banned-ips.txt", "ops.txt", "white-list.txt", "server.log"]
                     for file in older_files:
                         try:
                             if os.path.isfile(self.path(self.server_path, file)):
@@ -1803,6 +1816,8 @@ class ServerManagerApp(QMainWindow):
                                 print(data)
                                 names = [player["name"] for player in data]
                                 print(names)
+                                if file == "whitelist":
+                                    file = "white-list"
                                 with open(self.path(self.server_path, file + ".txt"), 'w') as f:
                                     f.writelines(names)
                             except:
@@ -1941,7 +1956,7 @@ class ServerManagerApp(QMainWindow):
             else:
                 mode = "immediate"
         
-        self.async_runner.submit(self.supervisor_connector.send({"type": "close", "mode": mode, "version_index": self.get_command_version_index(self.world_version)}))
+        self.supervisor_send({"type": "close", "mode": mode, "version_index": self.get_command_version_index(self.world_version)})
     
     def stop_server(self):
         status, _, world = self.query_status()
@@ -1984,7 +1999,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("<font color='red'>Unable to communicate with server.</font>")
     
     def wait_for_server_shutdown(self):
-        if self.is_api_compatible(self.worlds[self.world]["version"]):
+        if self.is_api_compatible(self.running_version()):
             return
         
         self.waiting_for_server_shutdown.set()
@@ -2000,8 +2015,8 @@ class ServerManagerApp(QMainWindow):
 
         # Not sure how to save from old files to new with extra data
 
-        if queries.version_comparison(self.worlds[self.world]["version"], "1.7.6", before=True):
-            older_files = ["banned-ips", "banned-players", "ops", "whitelist"]
+        if queries.version_comparison(self.running_version(), "1.7.6", before=True):
+            older_files = ["banned-ips", "banned-players", "ops", "white-list"]
             for file in older_files:
                 try:
                     print(file + ".txt")
@@ -2023,9 +2038,11 @@ class ServerManagerApp(QMainWindow):
                                 "bypassesPlayerLimit": False
                             }
                             data.append(obj)
+                    if file == "white-list":
+                        file = "whitelist"
                     with open(self.path(self.server_path, file + ".json"), 'w') as f:
                         print(data)
-                        f.write(json.dumps(data, indent=4))
+                        json.dump(data, f, indent=2)
                         print("Wrote data")
                 except:
                     pass
@@ -2054,9 +2071,9 @@ class ServerManagerApp(QMainWindow):
         self.set_status(status)
         self.send_data("status", status)
         if self.status == "online":
-            if self.is_api_compatible(self.worlds[self.world]["version"]):
+            if self.is_api_compatible(self.running_version()):
                 if not self.bus and self.bus_shutdown_complete.is_set():
-                    self.create_bus(self.get_api_version(self.worlds[self.world]["version"]))
+                    self.create_bus(self.get_api_version(self.running_version()))
 
             self.chat_tabs.tabBar().show()
             
@@ -2182,15 +2199,26 @@ class ServerManagerApp(QMainWindow):
             return
 
         opped_players = []
-        if os.path.isfile(self.path(self.server_path, "ops.json")):
-            with open(self.path(self.server_path, "ops.json"), 'r') as f:
-                opped_players = [p["name"] for p in json.loads(f.read())]
-        for player in self.curr_players:
-            if player in opped_players:
-                player = f"[op] {player}"
-            item = QListWidgetItem(html.escape(player))
-            item.setForeground(QColor("purple"))
-            self.players_info_box.addItem(item)
+        if queries.version_comparison(self.running_version(), "1.7.6", before=True):
+            if os.path.isfile(self.path(self.server_path, "ops.txt")):
+                with open(self.path(self.server_path, "ops.txt"), 'r') as f:
+                    opped_players = [line.strip('\n') for line in f.readlines() if line.strip('\n')]
+            for player in self.curr_players:
+                if player.lower() in opped_players:
+                    player = f"[op] {player}"
+                item = QListWidgetItem(html.escape(player))
+                item.setForeground(QColor("purple"))
+                self.players_info_box.addItem(item)
+        else:
+            if os.path.isfile(self.path(self.server_path, "ops.json")):
+                with open(self.path(self.server_path, "ops.json"), 'r') as f:
+                    opped_players = [p["name"] for p in json.loads(f.read())]
+            for player in self.curr_players:
+                if player in opped_players:
+                    player = f"[op] {player}"
+                item = QListWidgetItem(html.escape(player))
+                item.setForeground(QColor("purple"))
+                self.players_info_box.addItem(item)
     
     def color_segments(self, segs, colors):
         msg = ""
@@ -2613,18 +2641,25 @@ class ServerManagerApp(QMainWindow):
                 with open(self.path(self.server_path, "worlds", self.add_world_label.text(), "version.txt"), 'r') as f:
                     old_version = f.readline()
         
+        new_version = self.mc_version_dropdown.currentText()
         if old_version:
-            new_version = self.mc_version_dropdown.currentText()
-            found_old = False
-            for version in queries.get_mc_versions(True):
-                if version == new_version:
-                    if found_old:
-                        self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
-                    else:
-                        self.add_world_error.setText("")
-                    return
-                elif version == old_version:
-                    found_old = True
+            if queries.version_comparison(new_version, old_version, before=True):
+                self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
+            else:
+                self.add_world_error.setText("")
+        
+        if queries.version_comparison(new_version, "1.7", before=True):
+            old_options = ["Normal", "Flat"]
+            current = self.level_type_dropdown.currentText()
+            self.level_type_dropdown.clear()
+            self.level_type_dropdown.addItems(old_options)
+            self.level_type_dropdown.setCurrentText(current if current in old_options else "Normal")
+        else:
+            new_options = ["Normal", "Flat", "Large Biomes", "Amplified"]
+            current = self.level_type_dropdown.currentText()
+            self.level_type_dropdown.clear()
+            self.level_type_dropdown.addItems(new_options)
+            self.level_type_dropdown.setCurrentText(current)
     
     def remove_world(self, updating=""):
         if not updating:
@@ -2703,37 +2738,48 @@ class ServerManagerApp(QMainWindow):
         enabled = self.whitelist_toggle_button.text() == "Enabled"
         self.universal_settings["whitelist enabled"] = enabled
 
-        if self.status == "online" and self.bus is not None:
+        status = self.query_status()[0]
+        if status == "online" and self.bus is not None:
             self.bus.enable_whitelist.emit(enabled)
+        elif status == "online":
+            on_off = "on" if enabled else "off"
+            self.supervisor_send_cmd(f"whitelist {on_off}")
+            self.supervisor_send_cmd("whitelist reload")
 
     def add_player_to_whitelist(self):
         player = self.whitelist_add_textbox.text()
-        if player:
-            player_obj = queries.get_player_uuid(player)
-            if player_obj:
-                try:
-                    with open(self.path(self.server_path, "whitelist.json"), 'r') as f:
-                        curr_whitelists = json.loads(f.read())
-                except FileNotFoundError:
-                    with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
-                        json.dump([player_obj], f, indent=2)
-                    self.whitelist_add_textbox.clear()
-                    return
-                
-                already_whitelisted = False
-                for obj in curr_whitelists:
-                    if obj["name"] == player:
-                        already_whitelisted = True
-                        break
-                
-                if not already_whitelisted:
-                    curr_whitelists.append(player_obj)
-                    with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
-                        json.dump(curr_whitelists, f, indent=2)
-            if self.status == "online" and self.bus is not None:
+        if not player:
+            return
+        
+        status = self.query_status()[0]
+        if status == "online":
+            self.whitelist_add_textbox.clear()
+            if self.is_api_compatible(self.running_version()):
                 self.bus.whitelist_player.emit(player, False)
+            else:
+                self.supervisor_send_cmd(f"whitelist add {player}")
+                self.supervisor_send_cmd("whitelist reload")
+        else:
+            player_obj = queries.get_player_uuid(player)
+            if not player_obj:
+                return
             
             self.whitelist_add_textbox.clear()
+            try:
+                with open(self.path(self.server_path, "whitelist.json"), 'r') as f:
+                    curr_whitelists = json.loads(f.read())
+            except FileNotFoundError:
+                with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
+                    json.dump([player_obj], f, indent=2)
+                return
+            
+            whitelisted = [player["id"] for player in curr_whitelists]
+            if player_obj["id"] in whitelisted:
+                return
+            
+            curr_whitelists.append(player_obj)
+            with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
+                json.dump(curr_whitelists, f, indent=2)
     
     def update_view_distance(self):
         distance = self.view_distance_textbox.text()
@@ -2769,83 +2815,162 @@ class ServerManagerApp(QMainWindow):
     
     def open_player_context_menu(self, item_pos, cursor_pos):
         item = self.players_info_box.itemAt(item_pos)
-        if not item or not self.is_api_compatible(self.worlds[self.world]["version"]) or item.text() == "No players online":
+        if not item or (not self.is_api_compatible(self.running_version()) and not self.supervisor_connector.connected()) or item.text() == "No players online":
             return
         
         name = item.text().removeprefix("[op] ")
         menu = QMenu(self)
         options = [
             {
-                "file": "ops.json",
+                "file": "ops",
                 "default": "Op",
                 "remove": "De-Op",
-                "func": self.op_player
+                "func": self.op_player,
+                "version": "1.2.5"
             },
             {
-                "file": "whitelist.json",
+                "file": "whitelist",
                 "default": "Whitelist",
                 "remove": "Remove Whitelist",
-                "func": self.whitelist_player
+                "func": self.whitelist_player,
+                "version": "1.3.1"
             },
             {
                 "file": None,
                 "default": "Kick",
-                "func": self.kick_player
+                "func": self.kick_player,
+                "version": "1.2.5"
             },
             {
                 "file": None,
                 "default": "Ban",
-                "func": self.ban_player
+                "func": self.ban_player,
+                "version": "1.2.5"
             }
         ]
 
         for option in options:
+            if not queries.version_comparison(self.running_version(), option.get("version"), after=True, equal=True):
+                continue
+
             label = option.get("default")
             func = option.get("func")
             if not option.get("file"):
                 menu.addAction(label, lambda n=name, f=func: f(n))
                 continue
             
-            with open(self.path(self.server_path, option.get("file")), 'r') as f:
-                players = json.loads(f.read())
-            
-            remove = False
-            for player in players:
-                if player.get("name") == name:
-                    label = option.get("remove")
-                    remove = True
+            if queries.version_comparison(self.running_version(), "1.7.6", before=True):
+                file = option.get("file")
+                if file == "whitelist":
+                    file = "white-list"
+                with open(self.path(self.server_path, file + ".txt"), 'r') as f:
+                    players = [line.strip('\n') for line in f.readlines() if (line.strip('\n') and not line.startswith('#'))]
+                
+                remove = False
+                for player in players:
+                    if player == name.lower():
+                        label = option.get("remove")
+                        remove = True
+            else:
+                with open(self.path(self.server_path, option.get("file") + ".json"), 'r') as f:
+                    players = json.loads(f.read())
+                
+                remove = False
+                for player in players:
+                    if player.get("name") == name:
+                        label = option.get("remove")
+                        remove = True
             
             menu.addAction(label, lambda n=name, r=remove, f=func: f(n, r))
         
         menu.exec(cursor_pos)
     
     #TODO Change all these to direct commands instead of using the API so old versions can use it too
+    #TODO Detect players joining and leaving through logs
+    #TODO Check when title and stuff were added also
+    #TODO later, add commands for players that trigger when they type them in chat?
+    #TODO Fix title in supervisor to show for all players in early versions
+
+    """
+    Title:
+    1.8 - title player title|subtitle json_text
+    1.9 - actionbar
+    """
+
     def op_player(self, player, remove):
-        self.bus.op_player.emit(player, remove)
-        if remove:
-            self.notify_player(player, "Your operator status has been removed.")
-            self.msg_player(player, "Server: Your operator status has been removed.")
+        # Can always op and deop
+        running_version = self.running_version()
+        if self.is_api_compatible(running_version):
+            self.bus.op_player.emit(player, remove)
+            if remove:
+                self.notify_player(player, "Your operator status has been removed.")
+                self.msg_player(player, "Server: Your operator status has been removed.")
+            else:
+                self.notify_player(player, "You have been given operator status.")
+                self.msg_player(player, "Server: You have been given operator status.")
         else:
-            self.notify_player(player, "You have been given operator status.")
-            self.msg_player(player, "Server: You have been given operator status.")
+            if remove:
+                self.supervisor_send_cmd(f"deop {player}")
+                self.msg_player(player, "Your operator status has been removed.")
+                self.notify_player(player, "Your operator status has been removed")
+            else:
+                self.supervisor_send_cmd(f"op {player}")
+                self.msg_player(player, "You have been given operator status.")
+                self.notify_player(player, "You have been given operator status")
+
+            self.curr_players = self.query_players()
+            self.update_players_list()
     
     def whitelist_player(self, player, remove):
-        self.bus.whitelist_player.emit(player, remove)
+        # 1.3.1 introduced /whitelist <on|off|add|remove|list|reload>
+        if self.is_api_compatible(self.running_version()):
+            self.bus.whitelist_player.emit(player, remove)
+        else:
+            keyword = "remove" if remove else "add"
+            self.supervisor_send_cmd(f"whitelist {keyword} {player}")
+            self.supervisor_send_cmd(f"whitelist reload")
     
     def kick_player(self, player):
-        self.bus.kick_player.emit(player)
+        # Allows reason in 1.3.1
+        running_version = self.running_version()
+        if self.is_api_compatible(running_version):
+            self.bus.kick_player.emit(player)
+        else:
+            reason = " You got kicked? What where you doing?!" if queries.version_comparison(running_version, "1.3.1", after=True, equal=True) else ""
+            self.supervisor_send_cmd(f"kick {player}{reason}")
+            self.curr_players = self.query_players()
+            self.update_players_list()
     
     def ban_player(self, player):
-        self.bus.ban_player.emit(player)
+        #ban player reason in 1.3.1
+        running_version = self.running_version()
+        if self.is_api_compatible(running_version):
+            self.bus.ban_player.emit(player)
+        else:
+            reason = " You done messed up." if queries.version_comparison(running_version, "1.3.1", after=True, equal=True) else ""
+            self.supervisor_send_cmd(f"ban {player}{reason}")
+            self.curr_players = self.query_players()
+            self.update_players_list()
     
     def notify_player(self, player, msg):
-        self.bus.notify_player.emit(player, msg)
+        running_version = self.running_version()
+        if self.is_api_compatible(running_version):
+            self.bus.notify_player.emit(player, msg)
+        elif queries.version_comparison(running_version, "1.9", after=True, equal=True):
+            text = {"text": msg}
+            self.supervisor_send_cmd(f"title {player} actionbar {str(text)}")
     
     def msg_player(self, player, msg):
-        self.bus.msg_player.emit(player, msg)
+        if self.is_api_compatible(self.running_version()):
+            self.bus.msg_player.emit(player, msg)
+        else:
+            self.supervisor_send_cmd(f"tell {player} {msg}")
     
     def send_chat_msg(self, msg):
-        self.bus.chat_msg.emit(msg)
+        if self.is_api_compatible(self.running_version()):
+            self.bus.chat_msg.emit(msg)
+        else:
+            self.supervisor_send_cmd(f"say {msg}")
     
     def change_snapshot_state(self, state: Qt.CheckState):
         if self.update_existing_world_button.isHidden():
@@ -2982,13 +3107,12 @@ class ServerManagerApp(QMainWindow):
             self.server_chat.append(f'<font color="gray">Loading chats...</font>')
             self.chat_toggle.setText("Chat Mode")
             self.message_entry.setPlaceholderText("Send Message")
-            if self.supervisor_connector.connected():
-                self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
+            self.supervisor_send({"type": "get_logs"})
         elif self.supervisor_connector.connected():
             self.server_chat.append(f'<font color="gray">Loading logs...</font>')
             self.chat_toggle.setText("Log Mode")
             self.message_entry.setPlaceholderText("Send Command")
-            self.async_runner.submit(self.supervisor_connector.send({"type": "get_logs"}))
+            self.supervisor_send({"type": "get_logs"})
         else:
             self.server_chat.append(f'<font color="gray">Loading logs...</font>')
             self.chat_toggle.setText("Log Mode")
@@ -3007,7 +3131,7 @@ class ServerManagerApp(QMainWindow):
         )
     
     def start_supervisor_server(self, server_args):
-        self.async_runner.submit(self.supervisor_connector.send({"type": "start_server", "args": [self.server_path, server_args]}))
+        self.supervisor_send({"type": "start_server", "args": [self.server_path, server_args]})
 
     @pyqtSlot()
     def onWindowStateChanged(self):

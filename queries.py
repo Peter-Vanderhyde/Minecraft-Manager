@@ -13,7 +13,7 @@ def players(ip, port):
     try:
         query = JavaServer.lookup(f"{ip}:{port}", 1).query()
         return query.players.names
-    except TimeoutError:
+    except (TimeoutError, ConnectionResetError):
         return []
 
 def get_json(version, log_queue):
@@ -185,15 +185,16 @@ def get_mc_versions(include_snapshots=False):
     else:
         return None
 
-def version_comparison(version, test_version, before=False, after=False):
-    print(version)
+def version_comparison(version, test_version, before=False, after=False, equal=False):
     versions = get_mc_versions(include_snapshots=True)
     if versions[0] == test_version and after:
         return False
     
     v_index = versions.index(version)
     test_index = versions.index(test_version)
-    if v_index > test_index and before:
+    if v_index == test_index and equal:
+        return True
+    elif v_index > test_index and before:
         return True
     elif v_index < test_index and after:
         return True
