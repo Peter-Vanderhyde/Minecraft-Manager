@@ -130,7 +130,7 @@ class ServerManagerApp(QMainWindow):
         self.stop_server_signal.connect(self.client_stop_server)
         self.wait_for_server_shutdown_signal.connect(self.wait_for_server_shutdown)
 
-        self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue, self.wait_for_server_shutdown_signal)
+        self.supervisor_connector = supervisor.SupervisorConnector(self.log_queue, self.server_log_queue, self.wait_for_server_shutdown_signal)
         self.waiting_for_server_shutdown = threading.Event()
         self.async_runner = supervisor.AsyncRunner()
 
@@ -1854,7 +1854,8 @@ class ServerManagerApp(QMainWindow):
                     if "nogui" not in args:
                         args.append("nogui")
                     
-                    self.start_supervisor_server(args)
+                    print(f"VERSION {version}")
+                    self.start_supervisor_server(args, version)
                     while not self.supervisor_connector.spooling_up.is_set():
                         if self.stop_threads.is_set():
                             return
@@ -1868,7 +1869,6 @@ class ServerManagerApp(QMainWindow):
                         self.delay(0.1)
                     
                     self.log_queue.put("Server is spooling up...")
-                    
                     self.world = world
                     self.world_version = version
                     self.move_world_to_top(world)
@@ -1914,7 +1914,6 @@ class ServerManagerApp(QMainWindow):
                         
                         self.delay(1)
                     
-                    self.log_queue.put("Generating chunks...")
                     if self.is_api_compatible(version):
                         self.create_bus(self.get_api_version(version))
                     else:
@@ -1937,12 +1936,6 @@ class ServerManagerApp(QMainWindow):
         finally:
             self.get_status_signal.emit()
     
-    def get_command_version_index(self, version: str):
-        if version == "1.2.5":
-            return 0
-        
-        return 1
-    
     def close_supervisor_server(self, mode: str="auto"):
         if mode not in ["auto", "delayed", "immediate", "keep alive"]:
             raise Exception("Invalid closing mode: ", mode)
@@ -1956,7 +1949,7 @@ class ServerManagerApp(QMainWindow):
             else:
                 mode = "immediate"
         
-        self.supervisor_send({"type": "close", "mode": mode, "version_index": self.get_command_version_index(self.world_version)})
+        self.supervisor_send({"type": "close", "mode": mode})
     
     def stop_server(self):
         status, _, world = self.query_status()
@@ -1994,7 +1987,6 @@ class ServerManagerApp(QMainWindow):
                     self.delay(1)
             
             self.bus.close_server.emit()
-        # No supervisor or api, must close with keystrokes
         else:
             self.log_queue.put("<font color='red'>Unable to communicate with server.</font>")
     
@@ -2008,13 +2000,12 @@ class ServerManagerApp(QMainWindow):
             self.delay(1)
             self.get_status_signal.emit()
         
-        self.log_queue.put("Server has been stopped.")
+        self.log_queue.put(f"{self.timestamp()} Server has been stopped.")
         self.broadcast("Server has been stopped.")
         self.send_data("stop", "refresh")
         self.waiting_for_server_shutdown.clear()
 
-        # Not sure how to save from old files to new with extra data
-
+        # Saving ops, whitelist, etc. from old file format
         if queries.version_comparison(self.running_version(), "1.7.6", before=True):
             older_files = ["banned-ips", "banned-players", "ops", "white-list"]
             for file in older_files:
@@ -2056,7 +2047,7 @@ class ServerManagerApp(QMainWindow):
                 world = world.removeprefix("worlds/")
             
             self.world = world or self.world
-            return status, f"{brand} {version}", world
+            return status, version, world
     
     def query_players(self):
         players = queries.players(self.host_ip, self.server_port)
@@ -2127,15 +2118,12 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.addItem(item)
 
             self.refresh_status_button.setEnabled(True)
-            if self.supervisor_connector.connected():
-                self.start_button.setEnabled(True)
+            self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
     
     def set_status(self, info):
         # Used to update through refresh buttons
         status, version, world = info
-        if version and version.startswith("vanilla "):
-            version = version.removeprefix("vanilla ")
         if status == "online":
             self.status = "online"
             self.world = world
@@ -2168,8 +2156,7 @@ class ServerManagerApp(QMainWindow):
             self.players_info_box.addItem(item)
 
             self.refresh_status_button.setEnabled(True)
-            if self.supervisor_connector.connected():
-                self.start_button.setEnabled(True)
+            self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)
         elif status == "pinging":
             self.status = "pinging"
@@ -2642,11 +2629,14 @@ class ServerManagerApp(QMainWindow):
                     old_version = f.readline()
         
         new_version = self.mc_version_dropdown.currentText()
-        if old_version:
+        if new_version and old_version:
             if queries.version_comparison(new_version, old_version, before=True):
                 self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
             else:
                 self.add_world_error.setText("")
+        
+        if not new_version:
+            return
         
         if queries.version_comparison(new_version, "1.7", before=True):
             old_options = ["Normal", "Flat"]
@@ -3062,14 +3052,8 @@ class ServerManagerApp(QMainWindow):
         for line in logs:
             if line is None:
                 continue
-            
-            try:
-                timestamp, rest = line.split('] ')
-                timestamp += "]"
-                _, message = rest.split(']:')
-            except:
-                timestamp = ""
-                message = line
+                
+            message = line
             
             def html_escape(text: str):
                 return (
@@ -3078,15 +3062,33 @@ class ServerManagerApp(QMainWindow):
                         .replace(">", "&gt;")
                 )
 
-            if "[Server thread/INFO]: [Not Secure] [Server]" in message:
-                timestamp, message = message.split("[Server thread/INFO]: [Not Secure] ")
-                if message.startswith("[Server] <Admin>"):
+            # Compare against all the different Minecraft version formatting
+            if "[Server thread/INFO]: [Not Secure] [Server]" in message or "[Server thread/INFO]: [Server]" in message:
+                timestamp, message = message.split("[Server thread/INFO]: ")
+                message = message.replace("[Not Secure] ", "")
+                if "<Admin> " in message:
                     message = message.replace("[Server] ", "")
                 chats.append(timestamp + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
-            elif (message.find("<") != -1 and message.find(">") != -1):
-                chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+            elif "[INFO] [CONSOLE]" in message:
+                timestamp, message = message.split("[INFO] [CONSOLE] ")
+                if not message.startswith("<Admin>"):
+                    message = "[Server] " + message
+                chats.append(timestamp + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
+            elif "[INFO] <" in message:
+                close_idx = message.find(">")
+                timestamp = message.split("[")[0]
+                if close_idx == -1:
+                    chats.append(timestamp + message.strip('\n'))
+                else:
+                    message = message.split("[INFO] ")[-1]
+                    chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+            elif "[Server thread/INFO]: <" in message and message.find(">") != -1:
+                name = message[message.index("<") + 1:message.index(">")]
+                if queries.get_player_uuid(name):
+                    timestamp, message = message.split("[Server thread/INFO]: ")
+                    chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
             elif not chat_only:
-                chats.append(timestamp + message.strip('\n'))
+                chats.append(message.strip('\n'))
         
         return chats
     
@@ -3130,8 +3132,8 @@ class ServerManagerApp(QMainWindow):
             close_fds=True
         )
     
-    def start_supervisor_server(self, server_args):
-        self.supervisor_send({"type": "start_server", "args": [self.server_path, server_args]})
+    def start_supervisor_server(self, server_args, version):
+        self.supervisor_send({"type": "start_server", "args": [self.server_path, server_args], "version": version})
 
     @pyqtSlot()
     def onWindowStateChanged(self):

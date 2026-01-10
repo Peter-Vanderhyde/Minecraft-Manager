@@ -1,5 +1,6 @@
 import os
 import requests
+import uuid
 from mcstatus import JavaServer
 
 def status(ip, port):
@@ -209,7 +210,7 @@ def get_player_uuid(name):
         return False
     
     if response.status_code == 200:
-        return response.json()
+        return str(uuid.UUID(response.json()))
 
     return False
 

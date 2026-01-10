@@ -5,6 +5,7 @@ import subprocess
 import re
 import queue
 import threading
+from queries import version_comparison
 
 CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
 DONE_RE = re.compile(r"Done \(\d+(?:\.\d+)?s\)!")
@@ -16,6 +17,7 @@ class Supervisor:
         self.token = token
         self._client: websockets.ServerConnection | None = None
         self._mc_server: subprocess.Popen | None = None
+        self._mc_version: str = ""
         self._loading_complete = asyncio.Event()
         self._loading_started = asyncio.Event()
         self._send_lock = asyncio.Lock()
@@ -87,7 +89,12 @@ class Supervisor:
                         
                 if self._waiting_for_feedback.is_set():
                     if "Gamerule send_command_feedback is currently set to: " in line:
-                        self._feedback_value = line.split("Gamerule send_command_feedback is currently set to: ")[1] == "true"
+                        self._feedback_value = line.split("currently set to: ")[-1] == "true"
+                        self._set_feedback_value.set()
+                        self._waiting_for_feedback.clear()
+                        continue
+                    elif "SendCommandFeedback = " in line:
+                        self._feedback_value = line.split(" = ")[-1] == "true"
                         self._set_feedback_value.set()
                         self._waiting_for_feedback.clear()
                         continue
@@ -145,28 +152,33 @@ class Supervisor:
             self._ui_disconnection.clear()
             async with self._log_lock:
                 await self.send_to_client({"type": "logs_list", "logs": self._logs})
-            self.send_server_cmd('title @a subtitle {"text": "Host app reconnected", "color": "white"}')
-            self.send_server_cmd('title @a title {"text": ""}')
-            self.send_server_cmd("say Host app reconnected.")
-            self.send_server_cmd("say Players are able to close the server.")
+            if self._mc_is_alive():
+                self.send_server_cmd("say Host app reconnected.")
+                self.send_server_cmd("say Players are able to close the server.")
+                if version_comparison(self._mc_version, "1.8", after=True, equal=True):
+                    self.send_server_cmd('title @a subtitle {"text": "Host app reconnected", "color": "white"}')
+                    self.send_server_cmd('title @a title {"text": ""}')
 
         try:
             async for raw in wsocket:
                 msg = json.loads(raw)
                 print("Supervisor Received:", msg)
                 if msg.get("type") == "close":
-                    version_index = msg.get("version_index")
+                    title_compatible = version_comparison(self._mc_version, "14w26a", after=True, equal=True)
                     if msg.get("mode") == "immediate":
                         self.send_server_cmd("stop")
                         await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "delayed":
                         self._waiting_for_feedback.set()
-                        if version_index == 0:
+                        if not title_compatible:
                             self.send_server_cmd("say Server Closed")
                             self.send_server_cmd("say Closing in 10 seconds...")
                             await asyncio.sleep(10)
                         else:
-                            self.send_server_cmd("gamerule send_command_feedback")
+                            cmd = "gamerule send_command_feedback"
+                            if version_comparison(self._mc_version, "25w44a", before=True):
+                                cmd = "gamerule sendCommandFeedback"
+                            self.send_server_cmd(cmd)
                             try:
                                 await asyncio.wait_for(self._set_feedback_value.wait(), timeout=2.0)
                             except asyncio.TimeoutError:
@@ -177,26 +189,35 @@ class Supervisor:
                                 self._set_feedback_value.clear()
 
                             if feedback:
-                                self.send_server_cmd("gamerule send_command_feedback false")
+                                self.send_server_cmd(f"{cmd} false")
                         
                             self.send_server_cmd('title @a subtitle {"text": "Closing in 10 seconds...", "color": "yellow"}')
                             self.send_server_cmd('title @a title {"text": "Server Closed", "color": "red", "bold": true}')
+
+                            
                             for i in range(10):
                                 color = "red" if i > 6 else "white"
                                 command = {
                                     "text": str(10 - i),
                                     "color": color
                                 }
-                                self.send_server_cmd(f"title @a actionbar {json.dumps(command)}")
+                                sec_command = {
+                                    "text": f"Closing in {str(10 - i)} seconds...",
+                                    "color": "yellow"
+                                }
+                                self.send_server_cmd(f'title @a subtitle {json.dumps(sec_command)}')
+                                if version_comparison(self._mc_version, "16w32b", after=True, equal=True):
+                                    self.send_server_cmd(f"title @a actionbar {json.dumps(command)}")
                                 await asyncio.sleep(1)
+
                             if feedback:
-                                self.send_server_cmd(f"gamerule send_command_feedback true")
+                                self.send_server_cmd(f"{cmd} true")
                                 await asyncio.sleep(1)
                         
                         self.send_server_cmd("stop")
                         await self.wait_for_server_shutdown(self._mc_server)
                     elif msg.get("mode") == "keep alive":
-                        if version_index == 0:
+                        if not title_compatible:
                             self.send_server_cmd("say Host app closed.")
                             self.send_server_cmd("say Players cannot close the server.")
                         else:
@@ -211,6 +232,7 @@ class Supervisor:
                     await self.send_to_client({"type": "loaded_status", "loaded": self._loading_complete.is_set()})
                 elif msg.get("type") == "start_server":
                     path, args = msg.get("args")
+                    self._mc_version = msg.get("version")
                     self.create_mc_server_process(path, args)
                 elif msg.get("type") == "get_logs":
                     async with self._log_lock:
@@ -253,7 +275,8 @@ class Supervisor:
 
 
 class SupervisorConnector:
-    def __init__(self, log_output_queue: queue.Queue, server_stopped_signal):
+    def __init__(self, msg_queue: queue.Queue, log_output_queue: queue.Queue, server_stopped_signal):
+        self.msg_queue = msg_queue
         self.log_output_queue = log_output_queue
         self.server_stopped_signal = server_stopped_signal
         self._client: websockets.ClientConnection | None = None
@@ -262,6 +285,7 @@ class SupervisorConnector:
         self.loading_chunks = threading.Event()
         self.loading_complete = threading.Event()
         self.failed_to_load = threading.Event()
+        self.closing_server = threading.Event()
 
     def connected(self):
         return self._client is not None
@@ -319,8 +343,9 @@ class SupervisorConnector:
                 print("UI Received:", msg)
                 if msg.get("type") == "loading":
                     state = msg.get("state")
-                    if state == "chunks":
+                    if state == "chunks" and not self.loading_chunks.is_set():
                         self.loading_chunks.set()
+                        self.msg_queue.put("Generating chunks...")
                     elif state == "done":
                         self.loading_complete.set()
                     elif state == "failed":
@@ -336,8 +361,9 @@ class SupervisorConnector:
                     self.log_output_queue.put([msg.get("msg")])
                 elif msg.get("type") == "logs_list":
                     self.log_output_queue.put(msg.get("logs"))
-                elif msg.get("type") == "closing_server":
+                elif msg.get("type") == "closing_server" and self.closing_server.is_set():
                     self.server_stopped_signal.emit()
+                    self.closing_server.clear()
         except:
             pass
         finally:
@@ -357,10 +383,12 @@ class SupervisorConnector:
             return
         
         try:
-            if obj.get("type") == "close":
+            if obj.get("type") in ["close", "start_server"]:
                 self.loading_complete.clear()
                 self.loading_chunks.clear()
                 self.spooling_up.clear()
+                if obj.get("type") == "close":
+                    self.closing_server.set()
             await self._client.send(json.dumps(obj))
         except:
             await self.close()
