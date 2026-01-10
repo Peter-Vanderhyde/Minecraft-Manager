@@ -210,7 +210,9 @@ def get_player_uuid(name):
         return False
     
     if response.status_code == 200:
-        return str(uuid.UUID(response.json()))
+        obj: dict = response.json()
+        obj["id"] = str(uuid.UUID(obj.get("id")))
+        return obj
 
     return False
 

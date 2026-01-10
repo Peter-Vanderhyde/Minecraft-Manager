@@ -3053,7 +3053,7 @@ class ServerManagerApp(QMainWindow):
             if line is None:
                 continue
                 
-            message = line
+            message = line.replace("[Server thread/INFO]", "[INFO]")
             
             def html_escape(text: str):
                 return (
@@ -3063,30 +3063,30 @@ class ServerManagerApp(QMainWindow):
                 )
 
             # Compare against all the different Minecraft version formatting
-            if "[Server thread/INFO]: [Not Secure] [Server]" in message or "[Server thread/INFO]: [Server]" in message:
-                timestamp, message = message.split("[Server thread/INFO]: ")
+            if "[INFO]: [Not Secure] [Server]" in message or "[INFO]: [Server]" in message:
+                timestamp, message = message.split("[INFO]: ")
                 message = message.replace("[Not Secure] ", "")
                 if "<Admin> " in message:
                     message = message.replace("[Server] ", "")
-                chats.append(timestamp + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
+                chats.append(timestamp + "[INFO]: " + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
             elif "[INFO] [CONSOLE]" in message:
                 timestamp, message = message.split("[INFO] [CONSOLE] ")
                 if not message.startswith("<Admin>"):
                     message = "[Server] " + message
-                chats.append(timestamp + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
+                chats.append(timestamp + "[INFO]" + f" <font color='green'>{html_escape(message.strip("\n'"))}</font>")
             elif "[INFO] <" in message:
                 close_idx = message.find(">")
-                timestamp = message.split("[")[0]
+                timestamp = message.split("[INFO]")[0] + "[INFO] "
                 if close_idx == -1:
                     chats.append(timestamp + message.strip('\n'))
                 else:
                     message = message.split("[INFO] ")[-1]
                     chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
-            elif "[Server thread/INFO]: <" in message and message.find(">") != -1:
+            elif "[INFO]: <" in message and message.find(">") != -1:
                 name = message[message.index("<") + 1:message.index(">")]
                 if queries.get_player_uuid(name):
-                    timestamp, message = message.split("[Server thread/INFO]: ")
-                    chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+                    timestamp, message = message.split("[INFO]: ")
+                    chats.append(timestamp + "[INFO]: " + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
             elif not chat_only:
                 chats.append(message.strip('\n'))
         
