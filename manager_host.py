@@ -1872,88 +1872,90 @@ class ServerManagerApp(QMainWindow):
                     if "nogui" not in args and not self.universal_settings.get("gui enabled"):
                         args.append("nogui")
                     
-                    print(f"VERSION {version}")
-                    self.start_supervisor_server(args, version)
-                    while not self.supervisor_connector.spooling_up.is_set():
-                        if self.stop_threads.is_set():
-                            return
-                        
-                        if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
-                            print("first fail")
-                            print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
-                            self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                            return "<font color='red'>Failed to start server.</font>"
-                        
-                        self.delay(0.1)
-                    
-                    self.log_queue.put("Server is spooling up...")
-                    self.world = world
-                    self.world_version = version
-                    self.move_world_to_top(world)
+                    self._failed_msg = ""
 
-                    if not os.path.isfile(self.path(path, "saved_properties.properties")):
-                        lines = []
-                        with open(self.path(self.server_path, "server.properties"), 'r') as props:
-                            lines = props.readlines()
-                        with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
-                            world_props.writelines(lines)
-                    else:
-                        with open(self.path(self.server_path, "server.properties"), 'r') as serv:
-                            serv_lines = serv.readlines()
-                        
-                        with open(self.path(path, "saved_properties.properties"), 'r') as saved:
-                            saved_lines = saved.readlines()
-                        
-                        if len(serv_lines) > len(saved_lines):
-                            with open(self.path(path, "saved_properties.properties"), 'w') as saved:
-                                saved.writelines(serv_lines)
-                        
-                        if world == self.dropdown.currentText():
-                            self.world_properties_button.setEnabled(True)
-                            if fabric:
-                                self.world_mods_button.setEnabled(True)
-                                self.modrinth_button.show()
-                    
-                    if fabric and not os.path.exists(world_mods_folder):
-                        try:
-                            os.mkdir(world_mods_folder)
-                        except:
-                            pass
-                    
-                    while not self.supervisor_connector.loading_chunks.is_set():
+                    def failed_startup():
+                        if self._failed_msg:
+                            self.broadcast(self._failed_msg)
+
+                    def poll_startup(version, world):
                         if self.stop_threads.is_set():
+                            self._poll_timer.stop()
                             return
                         
                         if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
-                            print("second fail")
-                            print(self.supervisor_connector.failed_to_load.is_set(), not self.supervisor_connector.connected())
-                            self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                            return "<font color='red'>Failed to start server.</font>"
+                            self._failed_msg = "<font color='red'>Failed to start server.</font>"
+                            self._poll_timer.stop()
+                            return
                         
-                        self.delay(1)
-                    
-                    self.log_queue.put("Generating chunks...")
-                    if self.is_api_compatible(version):
-                        self.create_bus(self.get_api_version(version))
-                    else:
-                        while not self.supervisor_connector.loading_complete.is_set():
-                            if self.stop_threads.is_set():
-                                return
-                            
-                            if not self.supervisor_connector.connected() or self.supervisor_connector.failed_to_load.is_set():
-                                print("third fail")
-                                self.log_queue.put("<font color='red'>Failed to start server.</font>")
-                                return "<font color='red'>Failed to start server.</font>"
+                        if self._state == "spooling":
+                            if self.supervisor_connector.spooling_up.is_set():
+                                self.log_queue.put("Server is spooling up...")
+                                self.world = world
+                                self.world_version = version
+                                self.move_world_to_top(world)
+                                if not os.path.isfile(self.path(path, "saved_properties.properties")):
+                                    lines = []
+                                    with open(self.path(self.server_path, "server.properties"), 'r') as props:
+                                        lines = props.readlines()
+                                    with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
+                                        world_props.writelines(lines)
+                                else:
+                                    with open(self.path(self.server_path, "server.properties"), 'r') as serv:
+                                        serv_lines = serv.readlines()
+                                    
+                                    with open(self.path(path, "saved_properties.properties"), 'r') as saved:
+                                        saved_lines = saved.readlines()
+                                    
+                                    if len(serv_lines) > len(saved_lines):
+                                        with open(self.path(path, "saved_properties.properties"), 'w') as saved:
+                                            saved.writelines(serv_lines)
+                                    
+                                    if world == self.dropdown.currentText():
+                                        self.world_properties_button.setEnabled(True)
+                                        if fabric:
+                                            self.world_mods_button.setEnabled(True)
+                                            self.modrinth_button.show()
+                                
+                                if fabric and not os.path.exists(world_mods_folder):
+                                    try:
+                                        os.mkdir(world_mods_folder)
+                                    except:
+                                        pass
+                                self._state = "chunks"
+                            return
                         
-                        self.log_queue.put(f"Server world '{world}' has been started.")
-                        self.broadcast(f"Server world '{world}' has been started.")
-                        self.send_data("start", "refresh")
+                        if self._state == "chunks":
+                            if self.supervisor_connector.loading_chunks.is_set():
+                                self.log_queue.put("Generating chunks...")
+                                if self.is_api_compatible(version):
+                                    self.create_bus(self.get_api_version(version))
+                                    self._poll_timer.stop()
+                                self._state = "complete"
+                            return
+                        
+                        if self._state == "complete":
+                            if self.supervisor_connector.loading_complete.is_set():
+                                self._poll_timer.stop()
+                                self.log_queue.put(f"Server world '{world}' has been started.")
+                                self.broadcast(f"Server world '{world}' has been started.")
+                                self.send_data("start", "refresh")
+                                self.get_status_signal.emit()
+                            return
+
+                    self.start_supervisor_server(args, version)
+                    self._state = "spooling"
+                    self._poll_timer = QTimer()
+                    self._poll_timer.timeout.connect(lambda: poll_startup(version, world))
+                    self._poll_timer.destroyed.connect(failed_startup)
+                    self._poll_timer.start(100)
                 except Exception as e:
                     error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
                     self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
                     return error
         finally:
-            self.get_status_signal.emit()
+            if self.supervisor_connector.loading_complete.is_set() or self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
+                self.get_status_signal.emit()
     
     def close_supervisor_server(self, mode: str="auto"):
         if mode not in ["auto", "delayed", "immediate", "keep alive"]:
