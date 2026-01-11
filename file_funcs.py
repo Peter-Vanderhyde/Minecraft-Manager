@@ -480,6 +480,7 @@ def load_world_properties(folder_path):
         lines = props.readlines()
 
     hardcore = False
+    saved_line = ""
     for line in lines:
         if line.startswith("version="):
             properties["version"] = line.strip().split("=")[1]
@@ -493,7 +494,17 @@ def load_world_properties(folder_path):
         elif line.startswith("fabric="):
             properties["fabric"] = (line.strip().split("=")[1] == "true")
         elif line.startswith("level-type="):
+            saved_line = line
+    
+    if saved_line and properties.get("version"):
+        if "\:" in line:
             properties["level-type"] = line.strip().split(":")[1].capitalize().replace('_', ' ')
+        else:
+            level_type = line.strip().split("=")[1]
+            if level_type == "LARGEBIOMES":
+                properties["level-type"] = "Large Biomes"
+            else:
+                properties["level-type"] = level_type.capitalize()
     
     if hardcore:
         properties["gamemode"] = "Hardcore"

@@ -650,7 +650,7 @@ class ServerManagerApp(QMainWindow):
         self.new_world_seed_edit.setObjectName("lineEdit")
         self.new_world_seed_edit.setPlaceholderText("(Optional) World Seed")
         self.new_world_seed_edit.hide()
-        self.mc_version_label = QLabel("Version: ")
+        self.mc_version_label = QLabel("Version ")
         self.mc_version_label.setObjectName("details")
         self.mc_version_dropdown = QComboBox()
         versions = queries.get_mc_versions(include_snapshots=False)
@@ -661,14 +661,14 @@ class ServerManagerApp(QMainWindow):
         self.include_snapshots_check.setObjectName("checkbox")
         self.include_snapshots_check.checkStateChanged.connect(self.change_snapshot_state)
 
-        self.gamemode_label = QLabel("Gamemode: ")
+        self.gamemode_label = QLabel("Gamemode ")
         self.gamemode_label.setObjectName("details")
         self.gamemode_dropdown = QComboBox()
         modes = ["Survival", "Creative", "Hardcore"]
         self.gamemode_dropdown.addItems(modes)
         self.gamemode_dropdown.currentTextChanged.connect(self.check_for_hardcore)
 
-        self.diff_label = QLabel("Difficulty: ")
+        self.diff_label = QLabel("Difficulty ")
         self.diff_label.setObjectName("details")
         self.difficulty_dropdown = QComboBox()
         diffs = ["Peaceful", "Easy", "Normal", "Hard"]
@@ -2598,13 +2598,13 @@ class ServerManagerApp(QMainWindow):
             return
         
         result = self.verify_version(self.mc_version_dropdown.currentText(), self.is_fabric_check.isChecked())
-        if result:
+        if result or self.fabric_dropdown.isHidden():
             self.worlds[self.new_world_name_edit.text()] = {
                 "seed": self.new_world_seed_edit.text(),
                 "version": self.mc_version_dropdown.currentText(),
                 "gamemode": self.gamemode_dropdown.currentText(),
                 "difficulty": self.difficulty_dropdown.currentText(),
-                "fabric": self.is_fabric_check.isChecked(),
+                "fabric": self.is_fabric_check.isChecked() and not self.fabric_dropdown.isHidden(),
                 "level-type": self.level_type_dropdown.currentText()
             }
             self.world_order.insert(0, self.new_world_name_edit.text())
@@ -2650,6 +2650,13 @@ class ServerManagerApp(QMainWindow):
             self.level_type_dropdown.clear()
             self.level_type_dropdown.addItems(new_options)
             self.level_type_dropdown.setCurrentText(current)
+        
+        if self.verify_version(new_version, True):
+            self.fabric_dropdown.show()
+            self.fabric_label.show()
+        else:
+            self.fabric_dropdown.hide()
+            self.fabric_label.hide()
     
     def remove_world(self, updating=""):
         if not updating:
