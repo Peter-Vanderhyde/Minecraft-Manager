@@ -945,6 +945,13 @@ class ServerManagerApp(QMainWindow):
         self.commands_warning_label = QLabel("Any changes will require a<br>server restart to take effect.")
         self.commands_warning_label.setObjectName("details")
         self.commands_warning_label.hide()
+        self.gui_label = QLabel("Server GUI: ")
+        self.gui_label.setObjectName("optionText")
+        self.gui_toggle_button = QPushButton("Disabled")
+        self.gui_toggle_button.setProperty("variant", "red")
+        self.gui_toggle_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.gui_toggle_button.adjustSize()
+        self.gui_toggle_button.clicked.connect(self.toggle_gui_option)
         self.whitelist_toggle_label = QLabel("Whitelist: ")
         self.whitelist_toggle_label.setObjectName("optionText")
         self.whitelist_toggle_button = QPushButton("Disabled")
@@ -992,6 +999,10 @@ class ServerManagerApp(QMainWindow):
         self.commands_back_button.clicked.connect(self.leave_commands_page)
 
         center_layout.addWidget(self.commands_label, 1, alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        hor_box = QHBoxLayout()
+        hor_box.addWidget(self.gui_label)
+        hor_box.addWidget(self.gui_toggle_button)
+        center_layout.addLayout(hor_box)
         hor_box = QHBoxLayout()
         hor_box.addWidget(self.whitelist_toggle_label)
         hor_box.addWidget(self.whitelist_toggle_button)
@@ -1290,10 +1301,19 @@ class ServerManagerApp(QMainWindow):
         else:
             self.whitelist_toggle_button.setProperty("variant", "red")
             self.whitelist_toggle_button.setText("Disabled")
+        if self.universal_settings.get("gui enabled"):
+            self.gui_toggle_button.setProperty("variant", "")
+            self.gui_toggle_button.setText("Enabled")
+        else:
+            self.gui_toggle_button.setProperty("variant", "red")
+            self.gui_toggle_button.setText("Disabled")
         
         st = self.whitelist_toggle_button.style()
         st.unpolish(self.whitelist_toggle_button)
         st.polish(self.whitelist_toggle_button)
+        st = self.gui_toggle_button.style()
+        st.unpolish(self.gui_toggle_button)
+        st.polish(self.gui_toggle_button)
 
         self.whitelist_add_textbox.clear()
 
@@ -1617,6 +1637,7 @@ class ServerManagerApp(QMainWindow):
         
         if self.universal_settings in [{}, None]:
             self.universal_settings = {
+                "gui enabled": False,
                 "whitelist enabled": False,
                 "view distance": 10,
                 "simulation distance": 10
@@ -1848,7 +1869,7 @@ class ServerManagerApp(QMainWindow):
                         args = f.read()
                     
                     args = args.strip().split(" ")
-                    if "nogui" not in args:
+                    if "nogui" not in args and not self.universal_settings.get("gui enabled"):
                         args.append("nogui")
                     
                     print(f"VERSION {version}")
@@ -2746,6 +2767,19 @@ class ServerManagerApp(QMainWindow):
             on_off = "on" if enabled else "off"
             self.supervisor_send_cmd(f"whitelist {on_off}")
             self.supervisor_send_cmd("whitelist reload")
+    
+    def toggle_gui_option(self):
+        enabled = not self.gui_toggle_button.text() == "Enabled"
+        self.gui_toggle_button.setProperty("variant", "red" * (not enabled))
+        self.gui_toggle_button.setText("Enabled" if enabled else "Disabled")
+
+        st = self.gui_toggle_button.style()
+        st.unpolish(self.gui_toggle_button)
+        st.polish(self.gui_toggle_button)
+    
+    def set_gui_option(self):
+        enabled = self.gui_toggle_button.text() == "Enabled"
+        self.universal_settings["gui enabled"] = enabled
 
     def add_player_to_whitelist(self):
         player = self.whitelist_add_textbox.text()
@@ -2795,6 +2829,7 @@ class ServerManagerApp(QMainWindow):
             self.universal_settings["simulation distance"] = int(distance)
     
     def leave_commands_page(self):
+        self.set_gui_option()
         self.set_whitelist()
         self.update_view_distance()
         self.update_simulation_distance()

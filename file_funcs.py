@@ -20,6 +20,7 @@ def load_settings(log_queue, file_lock):
             "world order": []
         },
         "universal settings": {
+            "gui enabled": False,
             "whitelist enabled": False,
             "view distance": 10,
             "simulation distance": 10
@@ -108,6 +109,7 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
             settings = json.loads(manager_settings.read())
         
         universal_settings = settings.get("universal settings", {
+            "gui enabled": False,
             "whitelist enabled": False,
             "view distance": 10,
             "simulation distance": 10
@@ -497,7 +499,7 @@ def load_world_properties(folder_path):
             saved_line = line
     
     if saved_line and properties.get("version"):
-        if "\:" in line:
+        if "\\:" in line:
             properties["level-type"] = line.strip().split(":")[1].capitalize().replace('_', ' ')
         else:
             level_type = line.strip().split("=")[1]
