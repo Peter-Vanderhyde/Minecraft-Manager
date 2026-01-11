@@ -26,6 +26,7 @@ class Supervisor:
         self._ui_disconnection = asyncio.Event()
         self._waiting_for_feedback = asyncio.Event()
         self._set_feedback_value = asyncio.Event()
+        self._expecting_close = asyncio.Event()
         self._feedback_value = False
         self._clients_num = 0
         self._logs = []
@@ -117,6 +118,10 @@ class Supervisor:
             await self.send_to_client({"type": "loading", "state": "failed"})
             self._loading_complete.clear()
             self._loading_started.clear()
+        elif self._expecting_close.is_set():
+            self._expecting_close.clear()
+        elif not self._expecting_close.is_set():
+            await self.send_to_client({"type": "server_closed_unexpectedly"})
     
     def send_server_cmd(self, cmd):
         if self._mc_is_alive():
@@ -386,6 +391,8 @@ class SupervisorConnector:
                 elif msg.get("type") == "closing_server" and self.closing_server.is_set():
                     self.server_stopped_signal.emit()
                     self.closing_server.clear()
+                elif msg.get("type") == "server_closed_unexpectedly":
+                    self.server_stopped_signal.emit()
                 elif msg.get("type") == "player_joined":
                     obj = {"name": msg.get("name")}
                     self.add_player(obj)
