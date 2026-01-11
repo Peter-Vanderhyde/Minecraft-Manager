@@ -119,6 +119,7 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
         found_world = False
         found_seed = False
         found_gamemode = False
+        found_force_gamemode = False
         found_hardcore = False
         found_difficulty = False
         found_level_type = False
@@ -145,6 +146,9 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
                 else:
                     lines[i] = f"gamemode={gamemode.lower()}\n"
                 found_gamemode = True
+            elif gamemode == "Creative" and line.startswith("force-gamemode="):
+                lines[i] = "force-gamemode=true\n"
+                found_force_gamemode = True
             elif line.startswith("hardcore="):
                 if gamemode == "Hardcore":
                     lines[i] = "hardcore=true\n"
@@ -191,6 +195,8 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
                 lines.append("gamemode=survival\n")
             else:
                 lines.append(f"gamemode={gamemode.lower()}\n")
+        elif not found_force_gamemode and gamemode == "Creative":
+            lines.append("force-gamemode=true\n")
         if not found_hardcore:
             if gamemode == "Hardcore":
                 lines.append("hardcore=true\n")
@@ -385,6 +391,7 @@ def save_world_properties(folder_path, properties: dict):
     
     found_version = False
     found_gamemode = False
+    found_force_gamemode = False
     found_hardcore = False
     found_difficulty = False
     found_fabric = False
@@ -399,6 +406,9 @@ def save_world_properties(folder_path, properties: dict):
             else:
                 lines[i] = f"gamemode={properties.get("gamemode", "Survival").lower()}\n"
             found_gamemode = True
+        elif properties.get("gamemode", "Survival") == "Creative" and line.startswith("force-gamemode="):
+            lines[i] = "force-gamemode=true\n"
+            found_force_gamemode = True
         elif line.startswith("hardcore="):
             if properties.get("gamemode", "Survival") == "Hardcore":
                 lines[i] = "hardcore=true\n"
@@ -427,6 +437,8 @@ def save_world_properties(folder_path, properties: dict):
             lines.append("gamemode=survival\n")
         else:
             lines.append(f"gamemode={gamemode.lower()}\n")
+    if not found_force_gamemode and properties.get("gamemode", "Survival") == "Creative":
+        lines.append("force-gamemode=true\n")
     if not found_hardcore:
         if properties.get("gamemode") == "Hardcore":
             lines.append("hardcore=true\n")
