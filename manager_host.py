@@ -1528,14 +1528,11 @@ class ServerManagerApp(QMainWindow):
         while not self.server_log_queue.empty():
             messages = self.server_log_queue.get()
             messages = self.format_logs(messages, self.chat_toggle.isChecked())
-            side_scroll = self.server_chat.horizontalScrollBar()
-            last_horiz = side_scroll.value()
 
             for msg in messages:
                 self.server_chat.append(msg)
             scrollbar = self.server_chat.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
-            side_scroll.setValue(last_horiz)
     
     def connect_supervisor(self):
         self.log_queue.put("Looking for running servers...")
