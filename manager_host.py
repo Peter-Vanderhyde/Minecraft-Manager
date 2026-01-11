@@ -130,7 +130,7 @@ class ServerManagerApp(QMainWindow):
         self.stop_server_signal.connect(self.client_stop_server)
         self.wait_for_server_shutdown_signal.connect(self.wait_for_server_shutdown)
 
-        self.supervisor_connector = supervisor.SupervisorConnector(self.log_queue, self.server_log_queue, self.wait_for_server_shutdown_signal)
+        self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue, self.wait_for_server_shutdown_signal, self.add_player, self.remove_player)
         self.waiting_for_server_shutdown = threading.Event()
         self.async_runner = supervisor.AsyncRunner()
 
@@ -1911,6 +1911,7 @@ class ServerManagerApp(QMainWindow):
                         
                         self.delay(1)
                     
+                    self.log_queue.put("Generating chunks...")
                     if self.is_api_compatible(version):
                         self.create_bus(self.get_api_version(version))
                     else:
@@ -2215,14 +2216,20 @@ class ServerManagerApp(QMainWindow):
                 msg += safe
         return msg
     
-    def remove_player(self, player_obj):
+    def remove_player(self, player_obj: dict):
+        if player_obj.get("name") not in self.curr_players:
+            return
+        
         self.curr_players.remove(player_obj["name"])
         self.update_players_list()
         formatted_text = self.color_segments([player_obj['name'], " disconnected ", "from the server."], ["purple", "red", None])
         self.log_queue.put(f"{self.timestamp()} {formatted_text}")
         self.broadcast(formatted_text)
     
-    def add_player(self, player_obj):
+    def add_player(self, player_obj: dict):
+        if player_obj.get("name") in self.curr_players:
+            return
+        
         self.curr_players.append(player_obj["name"])
         self.update_players_list()
         formatted_text = self.color_segments([player_obj['name'], " joined ", "the server."], ["purple", "green", None])

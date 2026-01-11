@@ -101,6 +101,15 @@ class Supervisor:
                 
                 if "Stopping server" in line:
                     await self.send_to_client({"type": "closing_server"})
+                elif "logged in with entity id" in line:
+                    msg = line.split("INFO]")[-1].removeprefix(":")
+                    name = msg.split("[/")[0].strip()
+                    await self.send_to_client({"type": "player_joined", "name": name})
+                elif "lost connection" in line:
+                    msg = line.split("INFO]")[-1].removeprefix(":")
+                    name = msg.split("lost connection")[0].strip()
+                    await self.send_to_client({"type": "player_left", "name": name})
+
                 
                 await self.send_to_client({"type": "log", "msg": line})
         
@@ -288,9 +297,10 @@ class Supervisor:
 
 
 class SupervisorConnector:
-    def __init__(self, msg_queue: queue.Queue, log_output_queue: queue.Queue, server_stopped_signal):
-        self.msg_queue = msg_queue
+    def __init__(self, log_output_queue: queue.Queue, server_stopped_signal, add_player, remove_player):
         self.log_output_queue = log_output_queue
+        self.add_player = add_player
+        self.remove_player = remove_player
         self.server_stopped_signal = server_stopped_signal
         self._client: websockets.ClientConnection | None = None
         self.found_connection = threading.Event()
@@ -358,7 +368,6 @@ class SupervisorConnector:
                     state = msg.get("state")
                     if state == "chunks" and not self.loading_chunks.is_set():
                         self.loading_chunks.set()
-                        self.msg_queue.put("Generating chunks...")
                     elif state == "done":
                         self.loading_complete.set()
                     elif state == "failed":
@@ -377,6 +386,12 @@ class SupervisorConnector:
                 elif msg.get("type") == "closing_server" and self.closing_server.is_set():
                     self.server_stopped_signal.emit()
                     self.closing_server.clear()
+                elif msg.get("type") == "player_joined":
+                    obj = {"name": msg.get("name")}
+                    self.add_player(obj)
+                elif msg.get("type") == "player_left":
+                    obj = {"name": msg.get("name")}
+                    self.remove_player(obj)
         except:
             pass
         finally:
