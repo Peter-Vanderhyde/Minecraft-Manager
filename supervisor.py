@@ -57,7 +57,8 @@ class Supervisor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
         else:
             self._mc_server = subprocess.Popen(
@@ -67,7 +68,8 @@ class Supervisor:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW
             )
     
     def _mc_is_alive(self):
