@@ -1,9 +1,6 @@
 import socket
 import threading
 import os
-import pyautogui as pag
-import pygetwindow as pgw
-import ctypes
 import time
 import json
 import sys
@@ -23,7 +20,7 @@ import websock_mgmt
 import html
 import supervisor
 
-TESTING = True
+TESTING = False
 VERSION = "v2.10.0"
 
 if TESTING:
@@ -1151,7 +1148,6 @@ QWidget {
     
     def create_bus(self, api_version):
         self.bus_shutdown_complete.clear()
-        print("API VERSION: " + str(api_version))
         self.bus = websock_mgmt.MgmtBus(api_version)
         self.bus.log.connect(self.log_queue.put)
         self.bus.connected.connect(self.api_connection)
@@ -1711,7 +1707,7 @@ QWidget {
                 waited += 1
             self.get_status_signal.emit()
             self.log_queue.put(f"{self.timestamp()} Server world '{self.world}' has been started.")
-            self.broadcast(f"Server world '{self.world}' has been started.")
+            self.broadcast(f"{self.timestamp()} Server world '{self.world}' has been started.")
             self.send_data("start", "refresh")
         else:
             self.shutdown_bus()
@@ -1723,7 +1719,7 @@ QWidget {
         self.shutdown_bus()
         self.get_status_signal.emit()
         self.log_queue.put(f"{self.timestamp()} Server has been stopped.")
-        self.broadcast("Server has been stopped.")
+        self.broadcast(f"{self.timestamp()} Server has been stopped.")
         self.send_data("stop", "refresh")
         if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
             try:
@@ -1857,10 +1853,7 @@ QWidget {
                             try:
                                 with open(self.path(self.server_path, file + ".json"), 'r') as f:
                                     data = json.loads(f.read())
-                                print(file)
-                                print(data)
                                 names = [player["name"] for player in data]
-                                print(names)
                                 if file == "whitelist":
                                     file = "white-list"
                                 with open(self.path(self.server_path, file + ".txt"), 'w') as f:
@@ -1964,8 +1957,8 @@ QWidget {
                         if self._state == "complete":
                             if self.supervisor_connector.loading_complete.is_set():
                                 self._poll_timer.stop()
-                                self.log_queue.put(f"Server world '{world}' has been started.")
-                                self.broadcast(f"Server world '{world}' has been started.")
+                                self.log_queue.put(f"{self.timestamp()} Server world '{world}' has been started.")
+                                self.broadcast(f"{self.timestamp()} Server world '{world}' has been started.")
                                 self.send_data("start", "refresh")
                                 self.get_status_signal.emit()
                             return
@@ -2049,7 +2042,7 @@ QWidget {
             self.get_status_signal.emit()
         
         self.log_queue.put(f"{self.timestamp()} Server has been stopped.")
-        self.broadcast("Server has been stopped.")
+        self.broadcast(f"{self.timestamp()} Server has been stopped.")
         self.send_data("stop", "refresh")
         self.waiting_for_server_shutdown.clear()
 
@@ -2058,10 +2051,8 @@ QWidget {
             older_files = ["banned-ips", "banned-players", "ops", "white-list"]
             for file in older_files:
                 try:
-                    print(file + ".txt")
                     with open(self.path(self.server_path, file + ".txt"), 'r') as f:
                         names = f.readlines()
-                    print(names)
                     data = []
                     for name in names:
                         if not name:
@@ -2080,9 +2071,7 @@ QWidget {
                     if file == "white-list":
                         file = "whitelist"
                     with open(self.path(self.server_path, file + ".json"), 'w') as f:
-                        print(data)
                         json.dump(data, f, indent=2)
-                        print("Wrote data")
                 except:
                     pass
 
@@ -3200,17 +3189,26 @@ QWidget {
             self.chat_toggle.setText("Log Mode")
     
     def create_supervisor_process(self):
-        print("Creating it")
         curr_script = os.path.abspath(sys.argv[0])
-        log = open("supervisor_debug.log", "a", buffering=1, encoding="utf-8")
-        subprocess.Popen(
-            [sys.executable, curr_script, "--supervisor"],
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=log,
-            close_fds=True
-        )
+        if TESTING:
+            log = open("supervisor_debug.log", "a", buffering=1, encoding="utf-8")
+            subprocess.Popen(
+                [sys.executable, curr_script, "--supervisor"],
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=log,
+                close_fds=True
+            )
+        else:
+            subprocess.Popen(
+                [sys.executable, curr_script, "--supervisor"],
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True
+            )
     
     def start_supervisor_server(self, server_args, version):
         self.supervisor_send({"type": "start_server", "args": [self.server_path, server_args], "version": version})
@@ -3272,7 +3270,7 @@ QWidget {
 
 if __name__ == "__main__":
     if "--supervisor" in sys.argv:
-        supervisor.create_supervisor()
+        supervisor.create_supervisor(debug_logs=TESTING)
     else:
         app = QApplication(sys.argv)
         server_manager_app = ServerManagerApp()

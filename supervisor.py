@@ -12,10 +12,11 @@ CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
 DONE_RE = re.compile(r"Done \(\d+(?:\.\d+)?s\)!")
 
 class Supervisor:
-    def __init__(self, host: str, port: int, token: str):
+    def __init__(self, host: str, port: int, token: str, debug_logs=False):
         self.host = host
         self.port = port
         self.token = token
+        self._debug_logs = debug_logs
         self._client: websockets.ServerConnection | None = None
         self._mc_server: subprocess.Popen | None = None
         self._mc_version: str = ""
@@ -23,6 +24,7 @@ class Supervisor:
         self._loading_started = asyncio.Event()
         self._send_lock = asyncio.Lock()
         self._listener_task: asyncio.Task | None = None
+        self._error_task: asyncio.Task | None = None
         self._shutdown_event = asyncio.Event()
         self._ui_disconnection = asyncio.Event()
         self._waiting_for_feedback = asyncio.Event()
@@ -39,21 +41,34 @@ class Supervisor:
         self._loading_started.set()
         self._start_mc_server(server_args, server_path)
         self._listener_task = asyncio.create_task(self.server_listener())
+        if self._debug_logs:
+            self._error_task = asyncio.create_task(self.error_listener())
     
     def _start_mc_server(self, process_args, server_path):
         if self._mc_is_alive():
             return
         
         self._logs.clear()
-        self._mc_server = subprocess.Popen(
-            process_args,
-            cwd=server_path,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1
-        )
+        if self._debug_logs:
+            self._mc_server = subprocess.Popen(
+                process_args,
+                cwd=server_path,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+        else:
+            self._mc_server = subprocess.Popen(
+                process_args,
+                cwd=server_path,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
     
     def _mc_is_alive(self):
         return self._mc_server and self._mc_server.poll() is None
@@ -93,6 +108,16 @@ class Supervisor:
             process.kill()
             await asyncio.to_thread(process.wait)
     
+    async def error_listener(self):
+        while self._mc_is_alive():
+            line: str = await asyncio.to_thread(self._mc_server.stderr.readline)
+            if not line:
+                await asyncio.sleep(0.01)
+                continue
+
+            line = line.rstrip('\n')
+            await self.send_to_client({"type": "server_error", "error": line})
+
     async def server_listener(self):
         try:
             server_loaded = False
@@ -243,7 +268,6 @@ class Supervisor:
         try:
             async for raw in wsocket:
                 msg = json.loads(raw)
-                print("Supervisor Received:", msg)
                 if msg.get("type") == "close":
                     title_compatible = version_comparison(self._mc_version, "14w26a", after=True, equal=True)
                     if msg.get("mode") == "immediate":
@@ -306,7 +330,6 @@ class Supervisor:
             return
 
         except Exception as e:
-            print(f"Handler error: {type(e).__name__}: {e!r}")
             raise
         finally:
             if not self._ui_disconnection.is_set():
@@ -317,7 +340,7 @@ class Supervisor:
     
     async def startup(self):
         async with websockets.serve(self.handler, self.host, self.port):
-            print(f"Supervisor listening on ws://{self.host}:{self.port}")
+            # print(f"Supervisor listening on ws://{self.host}:{self.port}")
             await self._shutdown_event.wait()
         
         if self._mc_is_alive():
@@ -328,15 +351,18 @@ class Supervisor:
             self._mc_server.stdin.close()
         if self._listener_task and not self._listener_task.done():
             self._listener_task.cancel()
-
             try:
                 await self._listener_task
             except asyncio.CancelledError:
                 pass
+        if self._error_task and not self._error_task.done():
+            self._error_task.cancel()
+            try:
+                await self._error_task
+            except asyncio.CancelledError:
+                pass
         if self._client is not None:
             await self._client.close()
-        
-        print("Total shutdown complete")
 
 
 class SupervisorConnector:
@@ -362,7 +388,6 @@ class SupervisorConnector:
         if self._client is None:
             return
         
-        print("Closing now")
         ws = self._client
         self._client = None
         try:
@@ -373,22 +398,17 @@ class SupervisorConnector:
     async def connect(self):
         self.failed_to_load.clear()
         self.found_connection.clear()
-        print("Attempting connection")
         if self._client:
-            print("Already connected")
             return True
 
         uri = "ws://127.0.0.1:5675"
 
         try:
             wsocket = await websockets.connect(uri)
-            print("Connected")
             await wsocket.send(json.dumps({"type": "handshake", "token": "dominion"}))
-            print("Sent handshake")
 
             response: dict = json.loads(await wsocket.recv())
             if response.get("type") != "handshake_ok":
-                print("Incorrect handshake message")
                 self.failed_to_load.set()
                 return False
 
@@ -396,11 +416,8 @@ class SupervisorConnector:
             self.found_connection.set()
             asyncio.create_task(self.handler())
             await wsocket.send(json.dumps({"type": "loaded_status"}))
-            print("Sent loaded status request")
             return True
         except Exception as e:
-            print("Failed to connect")
-            print(e)
             self.failed_to_load.set()
             return False
     
@@ -408,7 +425,6 @@ class SupervisorConnector:
         try:
             async for raw in self._client:
                 msg: dict = json.loads(raw)
-                print("UI Received:", msg)
                 if msg.get("type") == "loading":
                     state = msg.get("state")
                     if state == "chunks" and not self.loading_chunks.is_set():
@@ -448,6 +464,8 @@ class SupervisorConnector:
                         "used_percent": mem_perc,
                         "server_percent": serv_perc
                     })
+                elif msg.get("type") == "server_error":
+                    self.msg_queue.put(f"<font color='red'>Server Error: {msg.get("error")}</font>")
         except:
             pass
         finally:
@@ -492,6 +510,6 @@ class AsyncRunner:
         return asyncio.run_coroutine_threadsafe(coroutine, self.loop)
 
 
-def create_supervisor():
-    supervisor = Supervisor("127.0.0.1", 5675, "dominion")
+def create_supervisor(debug_logs=False):
+    supervisor = Supervisor("127.0.0.1", 5675, "dominion", debug_logs=debug_logs)
     asyncio.run(supervisor.startup())
