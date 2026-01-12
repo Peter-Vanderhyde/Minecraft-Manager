@@ -1623,7 +1623,7 @@ QWidget {
                     download_link = file["browser_download_url"]
             
             self.log_queue.put(f"<br>{latest_version} is available!")
-            self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
+            self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</a></i>')
             self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
         
         self.get_status()
