@@ -5,6 +5,7 @@ import subprocess
 import re
 import queue
 import threading
+import psutil
 from queries import version_comparison
 
 CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
@@ -27,6 +28,7 @@ class Supervisor:
         self._waiting_for_feedback = asyncio.Event()
         self._set_feedback_value = asyncio.Event()
         self._expecting_close = asyncio.Event()
+        self._stats_task = None
         self._feedback_value = False
         self._clients_num = 0
         self._logs = []
@@ -55,6 +57,31 @@ class Supervisor:
     
     def _mc_is_alive(self):
         return self._mc_server and self._mc_server.poll() is None
+    
+    def get_mem_stats(self):
+        vm = psutil.virtual_memory()
+        ram_stats = {
+            "total": vm.total / (1024 * 1024),
+            "used": vm.used / (1024 * 1024),
+            "available": vm.available / (1024 * 1024),
+            "percent_used": vm.percent,
+        }
+
+        proc = psutil.Process(self._mc_server.pid)
+        mem_percent = proc.memory_percent()
+        return ram_stats.get("percent_used"), mem_percent
+
+    async def stats_worker(self):
+        try:
+            while True:
+                await asyncio.sleep(1)
+                if not self._mc_is_alive():
+                    break
+                if self._client:
+                    ram_used, mem_percent = self.get_mem_stats()
+                    await self.send_to_client({"type": "stats", "percent_used": ram_used, "server_percent": mem_percent})
+        except asyncio.CancelledError:
+            raise
 
     async def wait_for_server_shutdown(self, process: subprocess.Popen):
         if not process or process.poll() is not None:
@@ -67,61 +94,72 @@ class Supervisor:
             await asyncio.to_thread(process.wait)
     
     async def server_listener(self):
-        server_loaded = False
-        while self._mc_is_alive():
-            line: str = await asyncio.to_thread(self._mc_server.stdout.readline)
-            if not line:
-                await asyncio.sleep(0.01)
-                continue
+        try:
+            server_loaded = False
+            while self._mc_is_alive():
+                line: str = await asyncio.to_thread(self._mc_server.stdout.readline)
+                if not line:
+                    await asyncio.sleep(0.01)
+                    continue
 
-            line = line.rstrip('\n')
-            async with self._log_lock:
-                self._logs.append(line)
+                line = line.rstrip('\n')
+                async with self._log_lock:
+                    self._logs.append(line)
+                
+                if self._client is not None:
+                    if not server_loaded:
+                        if CHUNK_RE.search(line) is not None or "Preparing level" in line:
+                            await self.send_to_client({"type": "loading", "state": "chunks"})
+                        elif DONE_RE.search(line) is not None:
+                            await self.send_to_client({"type": "loading", "state": "done"})
+                            server_loaded = True
+                            self._loading_complete.set()
+                            self._loading_started.clear()
+                            self._stats_task = asyncio.create_task(self.stats_worker())
+                            
+                    if self._waiting_for_feedback.is_set():
+                        if "Gamerule send_command_feedback is currently set to: " in line:
+                            self._feedback_value = line.split("currently set to: ")[-1] == "true"
+                            self._set_feedback_value.set()
+                            self._waiting_for_feedback.clear()
+                            continue
+                        elif "SendCommandFeedback = " in line:
+                            self._feedback_value = line.split(" = ")[-1] == "true"
+                            self._set_feedback_value.set()
+                            self._waiting_for_feedback.clear()
+                            continue
+                    
+                    if "Stopping server" in line:
+                        await self.send_to_client({"type": "closing_server"})
+                    elif "logged in with entity id" in line:
+                        msg = line.split("INFO]")[-1].removeprefix(":")
+                        name = msg.split("[/")[0].strip()
+                        await self.send_to_client({"type": "player_joined", "name": name})
+                    elif "lost connection" in line:
+                        msg = line.split("INFO]")[-1].removeprefix(":")
+                        name = msg.split("lost connection")[0].strip()
+                        await self.send_to_client({"type": "player_left", "name": name})
+                    elif "OutOfMemoryError" in line:
+                        await self.send_to_client({"type": "out_of_memory"})
+
+                    
+                    await self.send_to_client({"type": "log", "msg": line})
             
-            if self._client is not None:
-                if not server_loaded:
-                    if CHUNK_RE.search(line) is not None or "Preparing level" in line:
-                        await self.send_to_client({"type": "loading", "state": "chunks"})
-                    elif DONE_RE.search(line) is not None:
-                        await self.send_to_client({"type": "loading", "state": "done"})
-                        server_loaded = True
-                        self._loading_complete.set()
-                        self._loading_started.clear()
-                        
-                if self._waiting_for_feedback.is_set():
-                    if "Gamerule send_command_feedback is currently set to: " in line:
-                        self._feedback_value = line.split("currently set to: ")[-1] == "true"
-                        self._set_feedback_value.set()
-                        self._waiting_for_feedback.clear()
-                        continue
-                    elif "SendCommandFeedback = " in line:
-                        self._feedback_value = line.split(" = ")[-1] == "true"
-                        self._set_feedback_value.set()
-                        self._waiting_for_feedback.clear()
-                        continue
-                
-                if "Stopping server" in line:
-                    await self.send_to_client({"type": "closing_server"})
-                elif "logged in with entity id" in line:
-                    msg = line.split("INFO]")[-1].removeprefix(":")
-                    name = msg.split("[/")[0].strip()
-                    await self.send_to_client({"type": "player_joined", "name": name})
-                elif "lost connection" in line:
-                    msg = line.split("INFO]")[-1].removeprefix(":")
-                    name = msg.split("lost connection")[0].strip()
-                    await self.send_to_client({"type": "player_left", "name": name})
-
-                
-                await self.send_to_client({"type": "log", "msg": line})
-        
-        if not server_loaded:
-            await self.send_to_client({"type": "loading", "state": "failed"})
-            self._loading_complete.clear()
-            self._loading_started.clear()
-        elif self._expecting_close.is_set():
-            self._expecting_close.clear()
-        elif not self._expecting_close.is_set():
-            await self.send_to_client({"type": "server_closed_unexpectedly"})
+            if not server_loaded:
+                await self.send_to_client({"type": "loading", "state": "failed"})
+                self._loading_complete.clear()
+                self._loading_started.clear()
+            elif self._expecting_close.is_set():
+                self._expecting_close.clear()
+            elif not self._expecting_close.is_set():
+                await self.send_to_client({"type": "server_closed_unexpectedly"})
+        finally:
+            if self._stats_task and not self._stats_task.cancelled() and not self._stats_task.done():
+                self._stats_task.cancel()
+                try:
+                    await self._stats_task
+                except asyncio.CancelledError:
+                    pass
     
     def send_server_cmd(self, cmd):
         if self._mc_is_alive():
@@ -302,11 +340,13 @@ class Supervisor:
 
 
 class SupervisorConnector:
-    def __init__(self, log_output_queue: queue.Queue, server_stopped_signal, add_player, remove_player):
+    def __init__(self, msg_queue: queue.Queue, log_output_queue: queue.Queue, server_stopped_signal, add_player, remove_player, stats_signal):
+        self.msg_queue = msg_queue
         self.log_output_queue = log_output_queue
         self.add_player = add_player
         self.remove_player = remove_player
         self.server_stopped_signal = server_stopped_signal
+        self.stats_signal = stats_signal
         self._client: websockets.ClientConnection | None = None
         self.found_connection = threading.Event()
         self.spooling_up = threading.Event()
@@ -399,6 +439,15 @@ class SupervisorConnector:
                 elif msg.get("type") == "player_left":
                     obj = {"name": msg.get("name")}
                     self.remove_player(obj)
+                elif msg.get("type") == "out_of_memory":
+                    self.msg_queue.put("<font color='red'>WARNING: Detecting low memory errors! Check logs.</font>")
+                elif msg.get("type") == "stats":
+                    mem_perc = msg.get("percent_used")
+                    serv_perc = msg.get("server_percent")
+                    self.stats_signal.emit({
+                        "used_percent": mem_perc,
+                        "server_percent": serv_perc
+                    })
         except:
             pass
         finally:

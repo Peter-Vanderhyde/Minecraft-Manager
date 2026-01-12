@@ -88,6 +88,7 @@ class ServerManagerApp(QMainWindow):
     start_server_signal = pyqtSignal(list) # [client, world_name]
     stop_server_signal = pyqtSignal(object)
     wait_for_server_shutdown_signal = pyqtSignal()
+    stats_signal = pyqtSignal(object) # For memory stats
 
     def __init__(self):
         super().__init__()
@@ -129,8 +130,13 @@ class ServerManagerApp(QMainWindow):
         self.start_server_signal.connect(self.client_start_server)
         self.stop_server_signal.connect(self.client_stop_server)
         self.wait_for_server_shutdown_signal.connect(self.wait_for_server_shutdown)
+        self.stats_signal.connect(self.update_stats)
 
-        self.supervisor_connector = supervisor.SupervisorConnector(self.server_log_queue, self.wait_for_server_shutdown_signal, self.add_player, self.remove_player)
+        self.supervisor_connector = supervisor.SupervisorConnector(self.log_queue,
+                                                                   self.server_log_queue,
+                                                                   self.wait_for_server_shutdown_signal,
+                                                                   self.add_player, self.remove_player,
+                                                                   self.stats_signal)
         self.waiting_for_server_shutdown = threading.Event()
         self.async_runner = supervisor.AsyncRunner()
 
@@ -286,6 +292,27 @@ class ServerManagerApp(QMainWindow):
         self.chat_toggle.setChecked(True)
         self.chat_toggle.hide()
         self.chat_toggle.stateChanged.connect(self.toggled_chat_mode)
+
+        tab = QWidget()
+        tab.setStyleSheet("""
+QWidget {
+    color: black;
+    background: transparent;
+}
+""")
+
+        box = QVBoxLayout(tab)
+        box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        box.setSpacing(6)
+        self.total_mem_label = QLabel("Total Memory Used:")
+        self.total_mem_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.total_mem_label.setStyleSheet("font-size: 14px;")
+        self.server_mem_label = QLabel("Server Memory Used:")
+        self.server_mem_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.server_mem_label.setStyleSheet("font-size: 14px;")
+        box.addWidget(self.total_mem_label)
+        box.addWidget(self.server_mem_label)
+        self.chat_tabs.addTab(tab, "Stats")
 
         self.chat_tabs.tabBar().currentChanged.connect(self.switched_tabs)
 
@@ -3143,13 +3170,18 @@ class ServerManagerApp(QMainWindow):
     def switched_tabs(self):
         if self.chat_tabs.currentIndex() == 1:
             self.chat_toggle.show()
+            self.message_entry.show()
             if self.supervisor_connector.connected() and not self.chat_toggle.isChecked():
                 self.message_entry.setPlaceholderText("Send Command")
             
             self.server_chat.verticalScrollBar().setValue(self.server_chat.verticalScrollBar().maximumHeight())
+        elif self.chat_tabs.currentIndex() == 0:
+            self.chat_toggle.hide()
+            self.message_entry.show()
+            self.message_entry.setPlaceholderText("Send Message")
         else:
             self.chat_toggle.hide()
-            self.message_entry.setPlaceholderText("Send Message")
+            self.message_entry.hide()
     
     def toggled_chat_mode(self):
         self.server_chat.clear()
@@ -3182,6 +3214,10 @@ class ServerManagerApp(QMainWindow):
     
     def start_supervisor_server(self, server_args, version):
         self.supervisor_send({"type": "start_server", "args": [self.server_path, server_args], "version": version})
+    
+    def update_stats(self, stats: dict):
+        self.total_mem_label.setText("Total RAM being used: " + str(round(stats.get("used_percent"), 1)) + "%")
+        self.server_mem_label.setText("Server memory usage: " + str(round(stats.get("server_percent"), 1)) + "%")
 
     @pyqtSlot()
     def onWindowStateChanged(self):
