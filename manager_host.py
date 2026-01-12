@@ -20,7 +20,7 @@ import websock_mgmt
 import html
 import supervisor
 
-TESTING = False
+TESTING = True
 VERSION = "v2.10.0"
 
 if TESTING:
@@ -105,6 +105,7 @@ class ServerManagerApp(QMainWindow):
         self.clients = {}
         self.status = ""
         self.server_path = ""
+        self._state = ""
         self.world = ""
         self.world_version = ""
         self.worlds = {}
@@ -272,7 +273,6 @@ class ServerManagerApp(QMainWindow):
         status_layout.setColumnStretch(2, 1)
 
         self.chat_tabs = QTabWidget()
-        self.chat_tabs.tabBar().hide()
 
         self.log_box = QTextBrowser()
         self.log_box.setOpenExternalLinks(True)
@@ -280,7 +280,7 @@ class ServerManagerApp(QMainWindow):
 
         self.server_chat = QTextBrowser()
         # self.server_chat.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.server_chat.append(f'<font color="gray">Loading logs...</font>')
+        self.server_chat.append(f'<font color="gray">Loading chats...</font>')
         self.chat_tabs.addTab(self.server_chat, "Server")
 
         self.chat_toggle = QCheckBox("Chat Mode")
@@ -312,6 +312,7 @@ QWidget {
         self.chat_tabs.addTab(tab, "Stats")
 
         self.chat_tabs.tabBar().currentChanged.connect(self.switched_tabs)
+        self.chat_tabs.tabBar().setTabEnabled(2, False)
 
         self.message_entry = QLineEdit()
         self.message_entry.setPlaceholderText("Send Message")
@@ -1564,7 +1565,7 @@ QWidget {
     def check_messages(self):
         while not self.log_queue.empty():
             message = self.log_queue.get()
-            self.log_box.append(message)
+            self.log_box.append(f'<p style="margin: 0;">{message}</p>')
             scrollbar = self.log_box.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
         
@@ -1573,7 +1574,7 @@ QWidget {
             messages = self.format_logs(messages, self.chat_toggle.isChecked())
 
             for msg in messages:
-                self.server_chat.append(msg)
+                self.server_chat.append(f'<p style="margin: 0;">{msg}</p>')
             scrollbar = self.server_chat.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
     
@@ -1601,6 +1602,7 @@ QWidget {
         
         if existing:
             self.log_queue.put("<font color='green'>Found server.</font>")
+            self.chat_tabs.tabBar().setTabEnabled(2, True)
         
         if self.supervisor_connector.connected() and self.status == "offline":
             self.start_button.setEnabled(True)
@@ -1793,6 +1795,7 @@ QWidget {
             self.refresh_status_button.setEnabled(False)
             self.broadcast("Starting server...")
             self.log_queue.put("Starting server...")
+            self.server_chat.clear()
             QApplication.processEvents()
             old_jars = glob.glob(self.path(self.server_path, "*.jar"))
             for path in old_jars:
@@ -1904,8 +1907,10 @@ QWidget {
                             return
                         
                         if self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
+                            self._state = "failed"
                             self._failed_msg = "<font color='red'>Failed to start server.</font>"
                             self._poll_timer.stop()
+                            self.get_status_signal.emit()
                             return
                         
                         if self._state == "spooling":
@@ -1961,6 +1966,7 @@ QWidget {
                                 self.broadcast(f"{self.timestamp()} Server world '{world}' has been started.")
                                 self.send_data("start", "refresh")
                                 self.get_status_signal.emit()
+                                self._state = ""
                             return
 
                     self.start_supervisor_server(args, version)
@@ -1969,6 +1975,7 @@ QWidget {
                     self._poll_timer.timeout.connect(lambda: poll_startup(version, world))
                     self._poll_timer.destroyed.connect(failed_startup)
                     self._poll_timer.start(100)
+                    self.chat_tabs.tabBar().setTabEnabled(2, True)
                 except Exception as e:
                     error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
                     self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
@@ -2102,18 +2109,10 @@ QWidget {
             if self.is_api_compatible(self.running_version()):
                 if not self.bus and self.bus_shutdown_complete.is_set():
                     self.create_bus(self.get_api_version(self.running_version()))
-
-            self.chat_tabs.tabBar().show()
-            
-            self.server_chat.clear()
-            loading_msg = "chats" if self.chat_toggle.isChecked() else "logs"
-            self.server_chat.append(f'<font color="gray">Loading {loading_msg}...</font>')
-
+            self.chat_tabs.tabBar().setTabEnabled(2, True)
         else:
             self.message_entry.show()
-            self.chat_tabs.tabBar().hide()
-            self.chat_tabs.setCurrentIndex(0)
-            self.server_chat.clear()
+            self.chat_tabs.tabBar().setTabEnabled(2, False)
 
 
     def get_players(self):
