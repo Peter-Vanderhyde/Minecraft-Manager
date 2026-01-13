@@ -10,6 +10,7 @@ import glob
 import shutil
 from datetime import datetime
 from pyperclip import copy
+from PIL import Image
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint
@@ -20,7 +21,7 @@ import websock_mgmt
 import html
 import supervisor
 
-TESTING = True
+TESTING = False
 VERSION = "v2.10.0"
 
 if TESTING:
@@ -86,6 +87,7 @@ class ServerManagerApp(QMainWindow):
     stop_server_signal = pyqtSignal(object)
     wait_for_server_shutdown_signal = pyqtSignal()
     stats_signal = pyqtSignal(object) # For memory stats
+    close_manager_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -129,12 +131,14 @@ class ServerManagerApp(QMainWindow):
         self.stop_server_signal.connect(self.client_stop_server)
         self.wait_for_server_shutdown_signal.connect(self.wait_for_server_shutdown)
         self.stats_signal.connect(self.update_stats)
+        self.close_manager_signal.connect(self.close_manager)
 
         self.supervisor_connector = supervisor.SupervisorConnector(self.log_queue,
                                                                    self.server_log_queue,
                                                                    self.wait_for_server_shutdown_signal,
                                                                    self.add_player, self.remove_player,
-                                                                   self.stats_signal)
+                                                                   self.stats_signal,
+                                                                   self.close_manager_signal)
         self.waiting_for_server_shutdown = threading.Event()
         self.async_runner = supervisor.AsyncRunner()
 
@@ -178,6 +182,7 @@ class ServerManagerApp(QMainWindow):
         self.saved_ip = self.host_ip
         self.ip_button.setText(f"IP: {self.host_ip}")
         self.clear_log_queue()
+        self.supervisor_connector.set_info(self.host_ip, self.server_port)
         
         if self.server_path == "" or not os.path.isdir(self.server_path):
             self.message_timer.stop()
@@ -3216,6 +3221,13 @@ QWidget {
         self.total_mem_label.setText("Total RAM being used: " + str(round(stats.get("used_percent"), 1)) + "%")
         self.server_mem_label.setText("Server memory usage: " + str(round(stats.get("server_percent"), 1)) + "%")
 
+    def close_manager(self):
+        if self.query_status()[0] == "online":
+            self.status = "bypass"
+        else:
+            self.status = "offline"
+        self.close()
+
     @pyqtSlot()
     def onWindowStateChanged(self):
         if self.windowState() == Qt.WindowMinimized:
@@ -3264,12 +3276,12 @@ QWidget {
                 self.broadcast("CLOSING")
             except:
                 pass
-            self.stop_server_threads()
+            self.stop_server_threads(close_server=(self.status!="bypass"))
             event.accept()
 
 if __name__ == "__main__":
     if "--supervisor" in sys.argv:
-        supervisor.create_supervisor(debug_logs=TESTING)
+        supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0])], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=TESTING)
     else:
         app = QApplication(sys.argv)
         server_manager_app = ServerManagerApp()
