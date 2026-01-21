@@ -8,6 +8,7 @@ import queue
 import subprocess
 import glob
 import shutil
+from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
 from PIL import Image
@@ -24,12 +25,13 @@ import supervisor
 TESTING = False
 VERSION = "v2.10.0"
 
-if TESTING:
-    STYLE_PATH = "Styles"
-    IMAGE_PATH = "Images"
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).parent
 else:
-    STYLE_PATH = sys._MEIPASS
-    IMAGE_PATH = sys._MEIPASS
+    BASE_DIR = Path(__file__).resolve().parent
+
+STYLE_PATH = BASE_DIR / "Styles" / "manager_host_style.css"
+IMAGE_PATH = BASE_DIR / "Images"
 
 def check_java_installed():
     """Checks if Java is installed and returns the version."""
@@ -288,10 +290,10 @@ class ServerManagerApp(QMainWindow):
         self.server_chat.append(f'<font color="gray">Loading chats...</font>')
         self.chat_tabs.addTab(self.server_chat, "Server")
 
-        self.chat_toggle = QCheckBox("Chat Mode")
+        self.chat_toggle = QCheckBox("Log Mode")
         self.chat_toggle.setObjectName("chatCheckBox")
         self.chat_toggle.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.chat_toggle.setChecked(True)
+        self.chat_toggle.setChecked(False)
         self.chat_toggle.hide()
         self.chat_toggle.stateChanged.connect(self.toggled_chat_mode)
 
@@ -1144,7 +1146,7 @@ QWidget {
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        with open(self.path(STYLE_PATH, "manager_host_style.css"), 'r') as stylesheet:
+        with open(STYLE_PATH, 'r') as stylesheet:
             style_str = stylesheet.read()
         
         self.setStyleSheet(style_str)

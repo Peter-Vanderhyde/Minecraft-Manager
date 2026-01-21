@@ -323,12 +323,12 @@ class Supervisor:
         elif mode == "keep alive":
             if not title_compatible:
                 self.send_server_cmd("say Host app closed.")
-                self.send_server_cmd("say Players cannot close the server.")
+                self.send_server_cmd("say Server manager offline.")
             else:
                 feedback_was_true = await self.turn_off_feedback()
                 self.send_server_cmd('title @a subtitle {"text": "Host app closed", "color": "white"}')
                 self.send_server_cmd('title @a title {"text": ""}')
-                self.send_server_cmd("say Players cannot close the server.")
+                self.send_server_cmd("say Server manager offline.")
                 await self.turn_off_feedback(turn_back_on=feedback_was_true)
             self._ui_disconnection.set()
             self.icon.menu = self.menu()
@@ -359,7 +359,7 @@ class Supervisor:
                 await self.send_to_client({"type": "logs_list", "logs": self._logs})
             if self._mc_is_alive():
                 self.send_server_cmd("say Host app reconnected.")
-                self.send_server_cmd("say Players are able to close the server.")
+                self.send_server_cmd("say Server manager online.")
                 if version_comparison(self._mc_version, "1.8", after=True, equal=True):
                     feedback_was_true = await self.turn_off_feedback()
                     self.send_server_cmd('title @a subtitle {"text": "Host app reconnected", "color": "white"}')
