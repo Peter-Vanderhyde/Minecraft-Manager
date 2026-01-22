@@ -5,10 +5,12 @@ import time
 import threading
 import json
 import os
-import requests
 import winreg
+import subprocess
+import manager_host
+from queries import check_for_newer_app_version
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QFrame
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
@@ -22,7 +24,7 @@ if getattr(sys, "frozen", False):
 else:
     BASE_DIR = Path(__file__).resolve().parent
 
-STYLE_PATH = BASE_DIR / "Styles" / "manager_host_style.css"
+STYLE_PATH = BASE_DIR / "Styles" / "manager_style.css"
 IMAGE_PATH = BASE_DIR / "Images"
 
 class BackgroundWidget(QWidget):
@@ -109,6 +111,7 @@ class ServerManagerApp(QMainWindow):
         self.init_ui()
         self.connect_button.clicked.connect(self.start_connection_thread)
         self.host_ip_entry.returnPressed.connect(self.start_connection_thread)
+        self.switch_to_mode_page()
 
     def init_ui(self):
 
@@ -392,6 +395,43 @@ class ServerManagerApp(QMainWindow):
         download_page = QWidget()
         download_page.setLayout(page_layout)
 
+    # Page 5: Select Manager Mode
+        mode_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+
+        mode_label = QLabel("Select Manager Mode")
+        mode_label.setObjectName("mediumText")
+        mode_label.setFont(QFont(mode_label.font().family(), int(mode_label.font().pointSize() * 1.5)))
+        mode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        client_button = QPushButton("Client")
+        client_button.clicked.connect(self.show_connect_page)
+        host_button = QPushButton("Host")
+        host_button.clicked.connect(self.open_host_app)
+
+        buttons_layout.addWidget(mode_label)
+        buttons_layout.addWidget(client_button)
+        buttons_layout.addWidget(host_button)
+        center_column_layout.addLayout(buttons_layout)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        mode_layout.setColumnStretch(0, 1)
+        mode_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        mode_layout.addLayout(right_column_layout, 0, 9)
+        mode_layout.setColumnStretch(9, 1)
+
+        mode_page = QWidget()
+        mode_page.setLayout(mode_layout)
+
         #----------------------------------------------------
 
         # Add pages to the stacked layout
@@ -399,6 +439,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(name_prompt_page)
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(download_page)
+        self.stacked_layout.addWidget(mode_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -411,7 +452,7 @@ class ServerManagerApp(QMainWindow):
         self.setWindowIcon(icon)
 
         # Apply styles for a colorful appearance
-        with open(os.path.join(STYLE_PATH, "manager_style.css"), 'r') as stylesheet:
+        with open(STYLE_PATH, 'r') as stylesheet:
             style_str = stylesheet.read()
         
         self.setStyleSheet(style_str)
@@ -640,6 +681,9 @@ class ServerManagerApp(QMainWindow):
     def switch_to_server_manager(self):
         self.stacked_layout.setCurrentIndex(2)  # Show the third page (Server Manager)
     
+    def show_connect_page(self):
+        self.stacked_layout.setCurrentIndex(0)
+    
     def switch_to_connect_page(self):
         self.close_threads.set()
         self.close_connection_thread()
@@ -663,6 +707,9 @@ class ServerManagerApp(QMainWindow):
         self.finish_button.hide()
         self.open_downloads_button.hide()
         self.stacked_layout.setCurrentIndex(3)
+    
+    def switch_to_mode_page(self):
+        self.stacked_layout.setCurrentIndex(4)
 
     def check_messages(self):
         while not self.close_threads.is_set():
@@ -677,28 +724,17 @@ class ServerManagerApp(QMainWindow):
         self.get_worlds_list()
         self.get_status()
 
-        try:
-            response = requests.get("https://api.github.com/repos/Peter-Vanderhyde/Minecraft-Manager/releases/latest")
-        except:
-            return
-        
-        if response.status_code == 200:
-            content = response.json()
-            latest_ver = content["tag_name"]
-            if VERSION != latest_ver:
-                latest_version = content["name"]
-            else:
-                return
-        
-        files = content["assets"]
-        download_link = ""
-        for file in files:
-            if file["name"] == "Manager.exe":
-                download_link = file["browser_download_url"]
-        
-        self.log_queue.put(f"{latest_version} is available!")
-        self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</i>')
-        self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
+        latest_version, content = check_for_newer_app_version(VERSION)
+        if latest_version:
+            self.log_queue.put(f"<br>{latest_version} is available!")
+            files = content["assets"]
+            download_link = ""
+            for file in files:
+                if file["name"] == "Manager_Installer.exe":
+                    download_link = file["browser_download_url"]
+            
+                    self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</a></i>')
+                    self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
 
     def get_status(self):
         self.set_status(["pinging",None,None])
@@ -825,6 +861,28 @@ class ServerManagerApp(QMainWindow):
     def open_folder_explorer(self, folder_path):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder_path)))
     
+    def open_host_app(self):
+        curr_script = os.path.abspath(sys.argv[0])
+        if TESTING:
+            parsed = curr_script.split("\\")
+            parsed.pop()
+            parsed.append("manager_host.py")
+            curr_script = "\\".join(parsed)
+        if not os.path.isfile(curr_script):
+            self.connecting_label.setText("Unable to find the host program.")
+            self.display_delay_messages()
+            self.show_connect_page()
+        else:
+            subprocess.Popen(
+                [sys.executable, curr_script, "--host"],
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                close_fds=True
+            )
+            self.close()
+    
     def closeEvent(self, event):
         try:
             self.send("CLOSING")
@@ -841,8 +899,13 @@ class ServerManagerApp(QMainWindow):
         event.accept()
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    server_manager_app = ServerManagerApp()
+    if "--host" in sys.argv:
+        manager_host.main()
+    elif "--supervisor" in sys.argv:
+        manager_host.main(create_supervisor=True)
+    else:
+        app = QApplication(sys.argv)
+        server_manager_app = ServerManagerApp()
 
-    server_manager_app.show()
-    sys.exit(app.exec())
+        server_manager_app.show()
+        sys.exit(app.exec())

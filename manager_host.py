@@ -1621,15 +1621,15 @@ QWidget {
         
         latest_version, content = queries.check_for_newer_app_version(VERSION)
         if latest_version:
+            self.log_queue.put(f"<br>{latest_version} is available!")
             files = content["assets"]
             download_link = ""
             for file in files:
-                if file["name"] == "Manager_host.exe":
+                if file["name"] == "Manager_Installer.exe":
                     download_link = file["browser_download_url"]
             
-            self.log_queue.put(f"<br>{latest_version} is available!")
-            self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</a></i>')
-            self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
+                    self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</a></i>')
+                    self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
         
         self.get_status()
     
@@ -3281,8 +3281,8 @@ QWidget {
             self.stop_server_threads(close_server=(self.status!="bypass"))
             event.accept()
 
-if __name__ == "__main__":
-    if "--supervisor" in sys.argv:
+def main(create_supervisor=False):
+    if create_supervisor:
         supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0])], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=TESTING)
     else:
         app = QApplication(sys.argv)
