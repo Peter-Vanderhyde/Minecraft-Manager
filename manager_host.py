@@ -287,7 +287,7 @@ class ServerManagerApp(QMainWindow):
 
         self.server_chat = QTextBrowser()
         # self.server_chat.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.server_chat.append(f'<font color="gray">Loading chats...</font>')
+        self.server_chat.append(f'<font color="gray">Loading logs...</font>')
         self.chat_tabs.addTab(self.server_chat, "Server")
 
         self.chat_toggle = QCheckBox("Log Mode")

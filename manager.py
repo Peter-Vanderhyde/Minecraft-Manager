@@ -17,12 +17,13 @@ VERSION = "v2.10.0"
 
 KEY_PATH = "Software\\MinecraftManager"
 
-if TESTING:
-    STYLE_PATH = "Styles"
-    IMAGE_PATH = "Images"
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).parent
 else:
-    STYLE_PATH = sys._MEIPASS
-    IMAGE_PATH = sys._MEIPASS
+    BASE_DIR = Path(__file__).resolve().parent
+
+STYLE_PATH = BASE_DIR / "Styles" / "manager_host_style.css"
+IMAGE_PATH = BASE_DIR / "Images"
 
 class BackgroundWidget(QWidget):
     def __init__(self, parent=None):

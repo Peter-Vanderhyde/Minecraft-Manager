@@ -44,19 +44,36 @@ class Supervisor:
             menu=self.menu()
         )
 
+        self.loop = asyncio.new_event_loop()
+        self.loop_thread = threading.Thread(target=self._run_loop, daemon=False)
+        self.loop_thread.start()
+
         threading.Thread(target=self.icon.run, daemon=True).start()
+    
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
     
     def close_icon(self, icon, item):
         icon.stop()
     
     def stop_server(self, icon, item):
         if self._client:
-            AsyncRunner().submit(self.send_to_client({"type": "tray_close_server"}))
+            asyncio.run_coroutine_threadsafe(
+                self.send_to_client({"type": "tray_close_server"}),
+                self.loop
+            )
         else:
-            AsyncRunner().submit(self.perform_server_shutdown("immediate"))
+            asyncio.run_coroutine_threadsafe(
+                self.perform_server_shutdown("immediate"),
+                self.loop
+            )
     
     def hide_manager(self, icon, item):
-        AsyncRunner().submit(self.send_to_client({"type": "close_manager"}))
+        asyncio.run_coroutine_threadsafe(
+            self.send_to_client({"type": "close_manager"}),
+            self.loop
+        )
     
     def open_manager(self, icon, item):
         if not self._client:
@@ -423,8 +440,19 @@ class Supervisor:
                     pass
             if self._client is not None:
                 await self._client.close()
+            if self._stats_task and not self._stats_task.done():
+                self._stats_task.cancel()
+                try:
+                    await self._stats_task
+                except asyncio.CancelledError:
+                    pass
+
         finally:
             self.icon.stop()
+            if self.loop and self.loop.is_running():
+                self.loop.call_soon_threadsafe(self.loop.stop)
+                self.loop_thread.join()
+                self.loop.close()
 
 
 class SupervisorConnector:
@@ -445,6 +473,14 @@ class SupervisorConnector:
         self.closing_server = threading.Event()
         self.ip = ""
         self.port = None
+
+        self.loop = asyncio.new_event_loop()
+        self.loop_thread = threading.Thread(target=self._run_loop, daemon=False)
+        self.loop_thread.start()
+    
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
     
     def set_info(self, ip, port):
         self.ip = ip
@@ -463,6 +499,11 @@ class SupervisorConnector:
             await ws.close()
         except Exception:
             pass
+
+        if self.loop and self.loop.is_running():
+            self.loop.call_soon_threadsafe(self.loop.stop)
+            self.loop_thread.join()
+            self.loop.close()
 
     async def connect(self):
         self.failed_to_load.clear()
@@ -590,6 +631,9 @@ class AsyncRunner:
     def _run(self):
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
+    
+    def stop(self):
+        self.loop.call_soon_threadsafe(self.loop.stop)
     
     def submit(self, coroutine):
         return asyncio.run_coroutine_threadsafe(coroutine, self.loop)

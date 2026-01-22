@@ -10,6 +10,18 @@ from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 from queries import version_comparison
 
+def get_appdata_path():
+    base = (os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA"))
+    if not base:
+        raise RuntimeError("No APPDATA or LOCALAPPDATA available.")
+
+    path = os.path.join(base, "Minecraft Manager")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+APPDATA_PATH = get_appdata_path()
+MANAGER_SETTINGS = os.path.join(APPDATA_PATH, "manager_settings.json")
+
 def load_settings(log_queue, file_lock):
     data = {
         "ip": f"",
@@ -27,10 +39,10 @@ def load_settings(log_queue, file_lock):
         }
     }
     try:
-        with open("manager_settings.json", 'r') as f:
+        with open(MANAGER_SETTINGS, 'r') as f:
             data = json.load(f)
     except:
-        with open("manager_settings.json", 'w') as f:
+        with open(MANAGER_SETTINGS, 'w') as f:
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
@@ -92,7 +104,7 @@ def load_worlds(server_path, worlds, log_queue):
 
 def update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=""):
     with file_lock:
-        with open("manager_settings.json", 'w') as f:
+        with open(MANAGER_SETTINGS, 'w') as f:
             json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds, "world order": world_order}, "universal settings": universal_settings}, f, indent=4)
     save_all_world_properties(server_path, worlds)
 
@@ -105,7 +117,7 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
             log_queue.put("<font color='orange'>WARNING: The EULA has not been accepted yet! Please open eula.txt.</font>")
             return False
         
-        with open("manager_settings.json", 'r') as manager_settings:
+        with open(MANAGER_SETTINGS, 'r') as manager_settings:
             settings = json.loads(manager_settings.read())
         
         universal_settings = settings.get("universal settings", {
@@ -525,7 +537,7 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
     with open(props_file, 'r') as f:
         lines = f.readlines()
     
-    with open("manager_settings.json", 'r') as settings:
+    with open(MANAGER_SETTINGS, 'r') as settings:
         old_settings = settings.read()
     old_settings = json.loads(old_settings)
     old_props = old_settings["server folder"]["worlds"].get(world)
@@ -611,7 +623,7 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
     return old_universal
 
 def update_all_universal_settings(server_folder):
-    with open("manager_settings.json", 'r') as manager_settings:
+    with open(MANAGER_SETTINGS, 'r') as manager_settings:
         settings = json.loads(manager_settings.read())
     
     world_names = settings.get("server folder").get("worlds").keys()
@@ -648,7 +660,7 @@ def update_all_universal_settings(server_folder):
             pass
 
 def apply_universal_settings(server_folder):
-    with open("manager_settings.json", 'r') as settings:
+    with open(MANAGER_SETTINGS, 'r') as settings:
         universal = json.loads(settings.read()).get("universal settings")
     
     with open(os.path.join(server_folder, "server.properties"), 'r') as f:
