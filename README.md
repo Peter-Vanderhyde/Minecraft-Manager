@@ -23,6 +23,7 @@ The host has the ability to
   > **Note**:  
   Newly created worlds do not generate any world files until their first time being run.
 - Easily backup server worlds.
+- Close the manager, but leave the server running.
 - Update worlds to newer versions.
 - Quickly access each world's mods folder.
 - Download mods and designate them as recommended for playing on a world. Clients can download these mods directly from the host.
@@ -47,14 +48,14 @@ For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to
 - Toggling the whitelist and changing the view/simulation distance through the GUI immediately applies the changes to the server world through the API.
 
 ## Host Instructions
-If you are hosting the server on your computer, you must have your `Manager_host` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
+If you are hosting the server on your computer, you must have your `Minecraft Manager` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
 >**MAKE SURE** you are downloading the **JRE** MSI version, not the **JDK !!**
 
 
 ### Initial Startup
-Run the `Host_manager.exe` file.  
-The first time you run the manager, it will prompt you to enter the path of the server folder.  
-Create an empty folder somewhere and select `Browse` to navigate to it.  
+Run the `Minecraft Manager.exe` file.  
+The first time you select the host mode, it will prompt you to enter the path of the server folder.  
+Create an empty folder somewhere, then select `Browse` in the manager to navigate to it.  
 Once you hit `Create New`, the program will automatically download the latest server.jar and begin setting up the server folder automatically.  
 After the folder is setup, you will be prompted to accept the EULA and enter the IP address to host the server on.
 ![Server Path Prompt Image](Images/server_path.png)  
