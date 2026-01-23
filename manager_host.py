@@ -23,7 +23,7 @@ import html
 import supervisor
 
 TESTING = False
-VERSION = "v2.10.0"
+VERSION = "v2.10.1"
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -116,6 +116,8 @@ class ServerManagerApp(QMainWindow):
         self.world_order = []
         self.universal_settings = {}
         self.curr_players = []
+        self.last_page_index = 0
+        self.installer_download_link = ""
         self.log_queue = queue.Queue()
         self.running_version = lambda: self.worlds[self.world]["version"]
 
@@ -401,7 +403,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         server_manager_layout.addLayout(left_column_layout, 2)  # Make the left column twice as wide
@@ -458,7 +460,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         error_layout.setColumnStretch(0, 1)
@@ -536,7 +538,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         server_path_layout.setColumnStretch(0, 1)
@@ -599,7 +601,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         connect_layout.setColumnStretch(0, 1)
@@ -649,7 +651,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         world_layout.setColumnStretch(0, 1)
@@ -811,7 +813,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         add_world_layout.setColumnStretch(0, 1)
@@ -862,7 +864,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         remove_world_layout.setColumnStretch(0, 1)
@@ -912,7 +914,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         edit_properties_layout = QGridLayout()
@@ -953,7 +955,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
@@ -1064,7 +1066,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
@@ -1110,7 +1112,7 @@ QWidget {
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.show_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
@@ -1120,6 +1122,42 @@ QWidget {
 
         mods_page = QWidget()
         mods_page.setLayout(page_layout)
+
+        # Page 12: Download Update Page
+        update_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+
+        download_button = QPushButton("Download Update")
+        download_button.setObjectName("blueButton")
+        download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.installer_download_link)))
+        open_url_button = QPushButton("View Releases Page")
+        open_url_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        back_button = QPushButton("Back")
+        back_button.setObjectName("redButton")
+        back_button.clicked.connect(lambda: self.stacked_layout.setCurrentIndex(self.last_page_index))
+
+        buttons_layout.addWidget(download_button)
+        buttons_layout.addWidget(open_url_button)
+        buttons_layout.addWidget(back_button)
+        center_column_layout.addLayout(buttons_layout)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(self.show_update_page)
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        update_layout.setColumnStretch(0, 1)
+        update_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        update_layout.addLayout(right_column_layout, 0, 9)
+        update_layout.setColumnStretch(9, 1)
+
+        update_page = QWidget()
+        update_page.setLayout(update_layout)
 
         #----------------------------------------------------
 
@@ -1134,6 +1172,7 @@ QWidget {
         self.stacked_layout.addWidget(new_world_type_page)
         self.stacked_layout.addWidget(commands_page_layout)
         self.stacked_layout.addWidget(mods_page)
+        self.stacked_layout.addWidget(update_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1354,6 +1393,11 @@ QWidget {
     
     def show_mods_page(self):
         self.stacked_layout.setCurrentIndex(10)
+    
+    def show_update_page(self):
+        if self.stacked_layout.currentIndex() != 11:
+            self.last_page_index = self.stacked_layout.currentIndex()
+        self.stacked_layout.setCurrentIndex(11)
     
     def save_properties_edit(self):
         world = self.dropdown.currentText()
@@ -1623,13 +1667,11 @@ QWidget {
         if latest_version:
             self.log_queue.put(f"<br>{latest_version} is available!")
             files = content["assets"]
-            download_link = ""
             for file in files:
                 if file["name"] == "Manager_Installer.exe":
-                    download_link = file["browser_download_url"]
+                    self.installer_download_link = file["browser_download_url"]
             
-                    self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</a></i>')
-                    self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
+                    self.log_queue.put("Click the version number in the corner to update.<br>")
         
         self.get_status()
     

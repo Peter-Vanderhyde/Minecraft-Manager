@@ -10,12 +10,13 @@ import subprocess
 import manager_host
 from queries import check_for_newer_app_version
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QFrame
+from file_funcs import pick_folder
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
 TESTING = False
-VERSION = "v2.10.0"
+VERSION = "v2.10.1"
 
 KEY_PATH = "Software\\MinecraftManager"
 
@@ -88,6 +89,9 @@ class ServerManagerApp(QMainWindow):
         self.status = ""
         self.server_version = ""
         self.worlds = {}
+        self.mods_download_path: Path | None = None
+        self.installer_download_link = ""
+        self.last_page_index = 0
         self.log_queue = queue.Queue()
         self.connection_delay_messages = ["Having trouble connecting? Either",
                                      "1. Your Hamachi is not open",
@@ -177,7 +181,7 @@ class ServerManagerApp(QMainWindow):
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.switch_to_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         connect_layout.setColumnStretch(0, 1)
@@ -206,7 +210,7 @@ class ServerManagerApp(QMainWindow):
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.switch_to_update_page)
 
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
@@ -331,7 +335,7 @@ class ServerManagerApp(QMainWindow):
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.switch_to_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignRight)
 
         server_manager_layout.addLayout(left_column_layout, 2)  # Make the left column twice as wide
@@ -359,9 +363,9 @@ class ServerManagerApp(QMainWindow):
         self.download_button.clicked.connect(self.download_mods)
         self.finish_button = QPushButton("Finish")
         self.finish_button.clicked.connect(self.switch_to_server_manager)
-        self.open_downloads_button = QPushButton("Open Downloads")
+        self.open_downloads_button = QPushButton("View Download Folder")
         self.open_downloads_button.setObjectName("blueButton")
-        self.open_downloads_button.clicked.connect(lambda: self.open_folder_explorer(Path.home() / "Downloads"))
+        self.open_downloads_button.clicked.connect(lambda: self.open_folder_explorer(self.mods_download_path or Path.home() / "Downloads"))
         self.cancel_download_button = QPushButton("Cancel")
         self.cancel_download_button.setObjectName("stopButton")
         self.cancel_download_button.clicked.connect(self.switch_to_server_manager)
@@ -384,7 +388,7 @@ class ServerManagerApp(QMainWindow):
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.switch_to_update_page)
         right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         page_layout.addStretch(1)
@@ -395,7 +399,7 @@ class ServerManagerApp(QMainWindow):
         download_page = QWidget()
         download_page.setLayout(page_layout)
 
-    # Page 5: Select Manager Mode
+        # Page 5: Select Manager Mode
         mode_layout = QGridLayout()
         center_column_layout = QVBoxLayout()
         buttons_layout = QVBoxLayout()
@@ -421,7 +425,7 @@ class ServerManagerApp(QMainWindow):
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
-        version.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        version.clicked.connect(self.switch_to_update_page)
         right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         mode_layout.setColumnStretch(0, 1)
@@ -432,6 +436,42 @@ class ServerManagerApp(QMainWindow):
         mode_page = QWidget()
         mode_page.setLayout(mode_layout)
 
+        # Page 6: Download Update Page
+        update_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        buttons_layout = QVBoxLayout()
+        buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
+
+        download_button = QPushButton("Download Update")
+        download_button.setObjectName("blueButton")
+        download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.installer_download_link)))
+        open_url_button = QPushButton("View Releases Page")
+        open_url_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
+        back_button = QPushButton("Back")
+        back_button.setObjectName("stopButton")
+        back_button.clicked.connect(lambda: self.stacked_layout.setCurrentIndex(self.last_page_index))
+
+        buttons_layout.addWidget(download_button)
+        buttons_layout.addWidget(open_url_button)
+        buttons_layout.addWidget(back_button)
+        center_column_layout.addLayout(buttons_layout)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(self.switch_to_update_page)
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        update_layout.setColumnStretch(0, 1)
+        update_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        update_layout.addLayout(right_column_layout, 0, 9)
+        update_layout.setColumnStretch(9, 1)
+
+        update_page = QWidget()
+        update_page.setLayout(update_layout)
+
         #----------------------------------------------------
 
         # Add pages to the stacked layout
@@ -440,6 +480,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(download_page)
         self.stacked_layout.addWidget(mode_page)
+        self.stacked_layout.addWidget(update_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -605,7 +646,7 @@ class ServerManagerApp(QMainWindow):
                             self.file_name = filename
                             file_bytes_needed = int(filesize)
                             self.download_message_signal.emit(f"Downloading mod {current_index}/{num_of_mods}\n{filename}")
-                            self.file = open(Path.home() / "Downloads" / self.file_name, "wb")
+                            self.file = open(self.mods_download_path / self.file_name, "wb")
                             to_take = min(len(buf), file_bytes_needed)
                             if to_take:
                                 self.file.write(buf[:to_take])
@@ -710,6 +751,11 @@ class ServerManagerApp(QMainWindow):
     
     def switch_to_mode_page(self):
         self.stacked_layout.setCurrentIndex(4)
+    
+    def switch_to_update_page(self):
+        if self.stacked_layout.currentIndex() != 5:
+            self.last_page_index = self.stacked_layout.currentIndex()
+        self.stacked_layout.setCurrentIndex(5)
 
     def check_messages(self):
         while not self.close_threads.is_set():
@@ -728,13 +774,11 @@ class ServerManagerApp(QMainWindow):
         if latest_version:
             self.log_queue.put(f"<br>{latest_version} is available!")
             files = content["assets"]
-            download_link = ""
             for file in files:
                 if file["name"] == "Manager_Installer.exe":
-                    download_link = file["browser_download_url"]
+                    self.installer_download_link = file["browser_download_url"]
             
-                    self.log_queue.put(f'Click <i><a href="{download_link}">Download Latest Version</a></i>')
-                    self.log_queue.put("or click the version number in the bottom right corner to go to the releases page.<br>")
+                    self.log_queue.put("Click the version number in the corner to update.<br>")
 
     def get_status(self):
         self.set_status(["pinging",None,None])
@@ -829,6 +873,11 @@ class ServerManagerApp(QMainWindow):
             self.world_version_label.setText("")
     
     def download_mods(self):
+        downloads_folder = Path.home() / "Downloads"
+        self.mods_download_path = pick_folder(self, downloads_folder, "Select Download Location")
+        if self.mods_download_path is None:
+            return
+        
         if self.dropdown.currentText():
             self.download_button.hide()
             self.cancel_download_button.hide()

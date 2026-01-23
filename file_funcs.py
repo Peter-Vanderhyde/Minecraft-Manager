@@ -5,6 +5,7 @@ import queries
 import time
 import glob
 import subprocess
+from pathlib import Path
 from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
@@ -372,17 +373,17 @@ def get_api_settings(server_path, api_version=1):
     except:
         return ("localhost", "25585", "")
 
-def pick_folder(parent, starting_path=""):
+def pick_folder(parent, starting_path: Path | str="", dialog_title="Open Folder"):
     # Show the file dialog for selecting a folder
     selected_folder = QFileDialog.getExistingDirectory(
         parent,                     # Parent widget
-        "Open Folder",              # Dialog title
-        starting_path               # Default directory (empty for no specific directory)
+        dialog_title,              # Dialog title
+        str(starting_path)               # Default directory (empty for no specific directory)
     )
 
     # If a folder was selected, return it's path
     if selected_folder:
-        return selected_folder
+        return Path(selected_folder)
 
 def open_folder_explorer(folder_path):
     QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))
