@@ -372,6 +372,9 @@ QWidget {
         self.commands_button.clicked.connect(self.show_commands_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
+        self.change_folder = QPushButton("Change Folder")
+        self.change_folder.setObjectName("yellowButton")
+        self.change_folder.clicked.connect(self.change_server_folder)
     
 
         functions_layout = QGridLayout()
@@ -396,6 +399,7 @@ QWidget {
         functions_layout.addWidget(self.world_manager_button, 7, 0, 1, 2)
         functions_layout.addWidget(self.commands_button, 8, 0, 1, 2)
         functions_layout.addWidget(self.open_folder_button, 9, 0, 1, 2)
+        functions_layout.addWidget(self.change_folder, 10, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -1638,7 +1642,6 @@ QWidget {
             if self.supervisor_connector.failed_to_load.is_set():
                 existing = False
                 self.supervisor_connector.failed_to_load.clear()
-                self.log_queue.put("None found.")
                 self.log_queue.put("Creating new supervisor...")
                 self.create_supervisor_process()
                 self.delay(1)
@@ -1647,8 +1650,6 @@ QWidget {
                     if self.supervisor_connector.failed_to_load.is_set():
                         self.log_queue.put("<font color='red'>Failed to connect to supervisor<br>Please restart manager.</font>")
                         break
-                if not self.supervisor_connector.failed_to_load.is_set():
-                    self.log_queue.put("<font color='green'>Success.</font>")
                 break
         
         if existing:
@@ -3235,6 +3236,10 @@ QWidget {
         else:
             self.server_chat.append(f'<font color="gray">Loading logs...</font>')
             self.chat_toggle.setText("Log Mode")
+    
+    def change_server_folder(self):
+        self.server_folder_path_entry.setText(self.server_path)
+        self.show_server_entry_page()
     
     def create_supervisor_process(self):
         curr_script = os.path.abspath(sys.argv[0])
