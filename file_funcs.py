@@ -383,7 +383,7 @@ def pick_folder(parent, starting_path: Path | str="", dialog_title="Open Folder"
 
     # If a folder was selected, return it's path
     if selected_folder:
-        return Path(selected_folder)
+        return selected_folder
 
 def open_folder_explorer(folder_path):
     QDesktopServices.openUrl(QUrl.fromLocalFile(folder_path))

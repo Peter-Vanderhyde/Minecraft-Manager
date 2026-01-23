@@ -874,7 +874,7 @@ class ServerManagerApp(QMainWindow):
     
     def download_mods(self):
         downloads_folder = Path.home() / "Downloads"
-        self.mods_download_path = pick_folder(self, downloads_folder, "Select Download Location")
+        self.mods_download_path = Path(pick_folder(self, downloads_folder, "Select Download Location"))
         if self.mods_download_path is None:
             return
         

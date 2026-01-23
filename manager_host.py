@@ -501,7 +501,7 @@ QWidget {
         self.server_folder_path_entry.textChanged.connect(self.check_server_path)
         self.browse_button = QPushButton("Browse")
         self.browse_button.setObjectName("browseButton")
-        self.browse_button.clicked.connect(lambda: self.server_folder_path_entry.setText(file_funcs.pick_folder(self) or
+        self.browse_button.clicked.connect(lambda: self.server_folder_path_entry.setText(file_funcs.pick_folder(self, starting_path=(self.server_folder_path_entry.text() or "")) or
                                                                                          self.server_folder_path_entry.text()))
 
         side_by_side.addWidget(self.server_folder_path_entry, 8)
@@ -2355,14 +2355,22 @@ QWidget {
             while not self.log_queue.empty():
                 self.log_queue.get()
             self.message_timer.start(1000)
-            if self.server_path:
+            if self.server_path == path:
+                pass
+            elif self.server_path:
+                self.worlds = {}
+                self.world_order = []
                 file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
                 saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
             else:
                 self.server_path = path
                 file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
-            self.start_manager_server()
+            
+            if self.receive_thread and self.receive_thread.is_alive():
+                self.show_main_page(ignore_load=True)
+            else:
+                self.start_manager_server()
     
     def create_server_folder(self):
         path = self.server_folder_path_entry.text()
@@ -2381,7 +2389,9 @@ QWidget {
         while not self.log_queue.empty():
             self.log_queue.get()
         self.message_timer.start(200)
-            
+        
+        self.worlds = {}
+        self.world_order = []
         file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
         
         self.ip_button.setEnabled(False)
@@ -2395,6 +2405,7 @@ QWidget {
         self.world_properties_button.setEnabled(False)
         self.world_mods_button.setEnabled(False)
         self.modrinth_button.hide()
+        self.change_folder.setEnabled(False)
 
         self.log_queue.put("Downloading latest server.jar file...")
         self.show_main_page(ignore_load=True)
@@ -2416,6 +2427,7 @@ QWidget {
             self.world_manager_button.setEnabled(True)
             self.commands_button.setEnabled(True)
             self.open_folder_button.setEnabled(True)
+            self.change_folder.setEnabled(True)
             
             if not self.check_eula():
                 self.show_error_page("By accepting, you are agreeing to<br>Minecraft's EULA.",
@@ -3238,8 +3250,11 @@ QWidget {
             self.chat_toggle.setText("Log Mode")
     
     def change_server_folder(self):
-        self.server_folder_path_entry.setText(self.server_path)
-        self.show_server_entry_page()
+        if self.query_status()[0] == "online":
+            self.log_queue.put("<font color='red'>Cannot change path while server is running.</font>")
+        else:
+            self.server_folder_path_entry.setText(self.server_path)
+            self.show_server_entry_page()
     
     def create_supervisor_process(self):
         curr_script = os.path.abspath(sys.argv[0])
@@ -3337,3 +3352,6 @@ def main(create_supervisor=False):
 
         server_manager_app.show()
         sys.exit(app.exec())
+
+if __name__ == '__main__':
+    main()
