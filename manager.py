@@ -792,9 +792,11 @@ class ServerManagerApp(QMainWindow):
     
     def start_server(self, world):
         self.send(f"MANAGER-REQUEST~~>start-server,{world}")
+        self.start_button.setEnabled(False)
     
     def stop_server(self):
         self.send("MANAGER-REQUEST~~>stop-server")
+        self.stop_button.setEnabled(False)
     
     def check_available_mods(self, world):
         self.send(f"MANAGER-REQUEST~~>check-mods,{world}")
