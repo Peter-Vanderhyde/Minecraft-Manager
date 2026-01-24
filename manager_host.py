@@ -3347,7 +3347,7 @@ QWidget {
 
 def main(create_supervisor=False):
     if create_supervisor:
-        supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0])], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=TESTING)
+        supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0]), "--host"], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=TESTING)
     else:
         app = QApplication(sys.argv)
         server_manager_app = ServerManagerApp()
