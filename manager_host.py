@@ -2366,6 +2366,7 @@ QWidget {
             elif self.server_path:
                 self.worlds = {}
                 self.world_order = []
+                self.dropdown.clear()
                 file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
                 saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
