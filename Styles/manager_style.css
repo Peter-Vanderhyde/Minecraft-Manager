@@ -38,6 +38,11 @@ QPushButton:disabled {
     background-color: #660000; /* Even darker red when pressed */
 }
 
+QPushButton:disabled {
+    background-color: #a0a0a0; /* Slightly lighter gray for disabled */
+    color: #d0d0d0; /* Lighter text color for disabled */
+}
+
 #stopButton:disabled,
 #blueButton:disabled,
 #restartButton:disabled {

@@ -90,6 +90,7 @@ class ServerManagerApp(QMainWindow):
     wait_for_server_shutdown_signal = pyqtSignal()
     stats_signal = pyqtSignal(object) # For memory stats
     close_manager_signal = pyqtSignal()
+    update_properties_signal = pyqtSignal(str, str, bool)
 
     def __init__(self):
         super().__init__()
@@ -136,6 +137,7 @@ class ServerManagerApp(QMainWindow):
         self.wait_for_server_shutdown_signal.connect(self.wait_for_server_shutdown)
         self.stats_signal.connect(self.update_stats)
         self.close_manager_signal.connect(self.close_manager)
+        self.update_properties_signal.connect(self.update_saved_properties)
 
         self.supervisor_connector = supervisor.SupervisorConnector(self.log_queue,
                                                                    self.server_log_queue,
@@ -1660,6 +1662,7 @@ QWidget {
             self.start_button.setEnabled(True)
         
         self.log_queue.put("Waiting for connections...")
+        self.log_queue.put("<font color='green'>Manager online.</font>")
         if not self.dropdown.currentText():
             self.log_queue.put("<br>You do not currently have any worlds added to your list.")
             self.log_queue.put("Click 'World Manager' to add a new world.")
@@ -1969,28 +1972,6 @@ QWidget {
                                 self.world = world
                                 self.world_version = version
                                 self.move_world_to_top(world)
-                                if not os.path.isfile(self.path(path, "saved_properties.properties")):
-                                    lines = []
-                                    with open(self.path(self.server_path, "server.properties"), 'r') as props:
-                                        lines = props.readlines()
-                                    with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
-                                        world_props.writelines(lines)
-                                else:
-                                    with open(self.path(self.server_path, "server.properties"), 'r') as serv:
-                                        serv_lines = serv.readlines()
-                                    
-                                    with open(self.path(path, "saved_properties.properties"), 'r') as saved:
-                                        saved_lines = saved.readlines()
-                                    
-                                    if len(serv_lines) > len(saved_lines):
-                                        with open(self.path(path, "saved_properties.properties"), 'w') as saved:
-                                            saved.writelines(serv_lines)
-                                    
-                                    if world == self.dropdown.currentText():
-                                        self.world_properties_button.setEnabled(True)
-                                        if fabric:
-                                            self.world_mods_button.setEnabled(True)
-                                            self.modrinth_button.show()
                                 
                                 if fabric and not os.path.exists(world_mods_folder):
                                     try:
@@ -2007,6 +1988,7 @@ QWidget {
                                     self.create_bus(self.get_api_version(version))
                                     self._poll_timer.stop()
                                 self._state = "complete"
+                                self.update_properties_signal.emit(path, world, fabric)
                             return
                         
                         if self._state == "complete":
@@ -2034,6 +2016,30 @@ QWidget {
             if self.supervisor_connector.loading_complete.is_set() or self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
                 self.get_status_signal.emit()
     
+    def update_saved_properties(self, path: str, world: str, fabric: bool):
+        if not os.path.isfile(self.path(path, "saved_properties.properties")):
+            lines = []
+            with open(self.path(self.server_path, "server.properties"), 'r') as props:
+                lines = props.readlines()
+            with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
+                world_props.writelines(lines)
+        else:
+            with open(self.path(self.server_path, "server.properties"), 'r') as serv:
+                serv_lines = serv.readlines()
+            
+            with open(self.path(path, "saved_properties.properties"), 'r') as saved:
+                saved_lines = saved.readlines()
+            
+            if len(serv_lines) > len(saved_lines):
+                with open(self.path(path, "saved_properties.properties"), 'w') as saved:
+                    saved.writelines(serv_lines)
+            
+            if world == self.dropdown.currentText():
+                self.world_properties_button.setEnabled(True)
+                if fabric:
+                    self.world_mods_button.setEnabled(True)
+                    self.modrinth_button.show()
+
     def close_supervisor_server(self, mode: str="auto"):
         if mode not in ["auto", "delayed", "immediate", "keep alive"]:
             raise Exception("Invalid closing mode: ", mode)
@@ -3354,4 +3360,7 @@ def main(create_supervisor=False):
         sys.exit(app.exec())
 
 if __name__ == '__main__':
-    main()
+    if "--supervisor" in sys.argv:
+        main(create_supervisor=True)
+    else:
+        main()
