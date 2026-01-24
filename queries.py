@@ -216,7 +216,7 @@ def get_player_uuid(name):
 
     return False
 
-def check_for_newer_app_version(curr_ver):
+def latest_app_info():
     try:
         response = requests.get("https://api.github.com/repos/Peter-Vanderhyde/Minecraft-Manager/releases/latest")
     except:
@@ -224,8 +224,11 @@ def check_for_newer_app_version(curr_ver):
     
     if response.status_code == 200:
         content = response.json()
-        latest_ver = content["tag_name"]
-        if curr_ver != latest_ver:
-            return content["name"], content
+        files = content["assets"]
+        link = ""
+        for file in files:
+            if file["name"] == "Manager_Installer.exe":
+                link = file["browser_download_url"]
+        return content["name"], content["tag_name"], link
         
-    return False, {}
+    return False, "", ""

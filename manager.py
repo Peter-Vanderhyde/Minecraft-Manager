@@ -8,7 +8,7 @@ import os
 import winreg
 import subprocess
 import manager_host
-from queries import check_for_newer_app_version
+from queries import latest_app_info
 from pathlib import Path
 from file_funcs import pick_folder
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox
@@ -90,7 +90,6 @@ class ServerManagerApp(QMainWindow):
         self.server_version = ""
         self.worlds = {}
         self.mods_download_path: Path | None = None
-        self.installer_download_link = ""
         self.last_page_index = 0
         self.log_queue = queue.Queue()
         self.connection_delay_messages = ["Having trouble connecting? Either",
@@ -444,7 +443,7 @@ class ServerManagerApp(QMainWindow):
 
         download_button = QPushButton("Download Update")
         download_button.setObjectName("blueButton")
-        download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(self.installer_download_link)))
+        download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(latest_app_info()[2])))
         open_url_button = QPushButton("View Releases Page")
         open_url_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         back_button = QPushButton("Back")
@@ -770,15 +769,11 @@ class ServerManagerApp(QMainWindow):
         self.get_worlds_list()
         self.get_status()
 
-        latest_version, content = check_for_newer_app_version(VERSION)
-        if latest_version:
-            self.log_queue.put(f"<br>{latest_version} is available!")
-            files = content["assets"]
-            for file in files:
-                if file["name"] == "Manager_Installer.exe":
-                    self.installer_download_link = file["browser_download_url"]
-            
-                    self.log_queue.put("Click the version number in the corner to update.<br>")
+        version_name, tag_version, link = latest_app_info()
+        if version_name:
+            if tag_version != VERSION:
+                self.log_queue.put(f"<br>{version_name} is available!")
+                self.log_queue.put("Click the version number in the corner to update.<br>")
 
     def get_status(self):
         self.set_status(["pinging",None,None])
