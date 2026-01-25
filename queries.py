@@ -227,7 +227,7 @@ def latest_app_info():
         files = content["assets"]
         link = ""
         for file in files:
-            if file["name"] == "Manager_Installer.exe":
+            if "Manager_Installer" in file["name"]:
                 link = file["browser_download_url"]
         return content["name"], content["tag_name"], link
         

@@ -23,7 +23,7 @@ import html
 import supervisor
 
 TESTING = False
-VERSION = "v2.10.2"
+VERSION = "v2.10.1"
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -1134,10 +1134,10 @@ QWidget {
         buttons_layout = QVBoxLayout()
         buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
-        download_button = QPushButton("Download Update")
+        download_button = QPushButton("Download Latest Version")
         download_button.setObjectName("blueButton")
         download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(queries.latest_app_info()[2])))
-        open_url_button = QPushButton("View Releases Page")
+        open_url_button = QPushButton("View Github Releases Page")
         open_url_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         back_button = QPushButton("Back")
         back_button.setObjectName("redButton")
