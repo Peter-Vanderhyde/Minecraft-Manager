@@ -23,7 +23,7 @@ import html
 import supervisor
 
 TESTING = False
-VERSION = "v2.10.1"
+VERSION = "v2.10.2"
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
