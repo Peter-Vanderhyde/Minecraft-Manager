@@ -22,8 +22,8 @@ import websock_mgmt
 import html
 import supervisor
 
-TESTING = False
-VERSION = "v2.10.1"
+VERSION = "v2.10.2"
+DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -2503,23 +2503,30 @@ QWidget {
                     return
                 
                 current_date = datetime.now().strftime("%m-%d-%y")
-                new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}.zip"
                 if os.path.exists(new_path):
+                    new_path = new_path.removesuffix(".zip")
                     index = 1
-                    while os.path.exists(f"{new_path}({str(index)})"):
+                    while os.path.exists(f"{new_path}({str(index)}).zip"):
                         index += 1
-                    
+
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
                     self.delay(0.5)
-                    shutil.copytree(world_path, f"{new_path}({str(index)})")
+                    if not file_funcs.backup_world(world_path, f"{new_path}({str(index)}).zip", self):
+                        self.log_queue.put(f"<font color='red'>Cancelled backup of '{os.path.basename(world_path)}'.</font>")
+                        return
                 else:
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
                     self.delay(0.5)
-                    shutil.copytree(world_path, new_path)
+                    if not file_funcs.backup_world(world_path, new_path, self):
+                        self.log_queue.put(f"<font color='red'>Cancelled backup of '{os.path.basename(world_path)}'.</font>")
+                        return
+                
                 self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
-            except:
+            except Exception as e:
+                print(e)
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
                 try:
                     new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
@@ -3260,7 +3267,7 @@ QWidget {
     
     def create_supervisor_process(self):
         curr_script = os.path.abspath(sys.argv[0])
-        if TESTING:
+        if DEBUG_LOGS:
             log = open("supervisor_debug.log", "a", buffering=1, encoding="utf-8")
             subprocess.Popen(
                 [sys.executable, curr_script, "--supervisor"],
@@ -3347,7 +3354,7 @@ QWidget {
 
 def main(create_supervisor=False):
     if create_supervisor:
-        supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0]), "--host"], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=TESTING)
+        supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0]), "--host"], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=DEBUG_LOGS)
     else:
         app = QApplication(sys.argv)
         server_manager_app = ServerManagerApp()

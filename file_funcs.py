@@ -5,8 +5,9 @@ import queries
 import time
 import glob
 import subprocess
+import zipfile
 from pathlib import Path
-from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtWidgets import QFileDialog, QProgressDialog, QApplication, QMessageBox
 from PyQt6.QtCore import QUrl
 from PyQt6.QtGui import QDesktopServices
 from queries import version_comparison
@@ -690,3 +691,79 @@ def apply_universal_settings(server_folder):
     
     with open(os.path.join(server_folder, "server.properties"), 'w') as f:
         f.writelines(lines)
+
+def format_size(bytes_size):
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    size = float(bytes_size)
+    for unit in units:
+        if size < 1024:
+            return f"{size:.2f} {unit}"
+        size /= 1024
+    return f"{size:.2f} PB"
+
+def get_total_size(path):
+    total = 0
+    for root, _, files in os.walk(path):
+        for name in files:
+            total += os.path.getsize(os.path.join(root, name))
+    return total
+
+def backup_world(world_folder_path, backup_zip_path, parent):
+    os.makedirs(os.path.dirname(backup_zip_path), exist_ok=True)
+    # World folder size
+    total_size = get_total_size(world_folder_path)
+    # Space available on disk
+    usage = shutil.disk_usage(os.path.dirname(backup_zip_path))
+    free_bytes = usage.free
+
+    if total_size >= free_bytes:
+        box = QMessageBox(parent)
+        box.setWindowTitle("Low Disk Space")
+        box.setText(f"Not enough disk space!<br>{os.path.basename(world_folder_path)} folder is {format_size(total_size)}.")
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setStandardButtons(QMessageBox.StandardButton.Close)
+        box.setStyleSheet("QLabel { color: black; }")
+        box.exec()
+        return False
+
+    total_files = 0
+    for _, _, files in os.walk(world_folder_path):
+        total_files += len(files)
+        
+    
+    dialog_box = QProgressDialog(
+        "Backing up world...",
+        "Cancel",
+        0,
+        total_files,
+        parent
+    )
+    dialog_box.setWindowTitle("World Backup")
+    dialog_box.setMinimumDuration(500)
+    dialog_box.setStyleSheet("QLabel {color: black;}")
+    dialog_box.setModal(True)
+    
+    processed = 0
+    try:
+        with zipfile.ZipFile(backup_zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            for root, _, files in os.walk(world_folder_path):
+                for name in files:
+                    dialog_box.setLabelText("Copying files...<br>" + name)
+                    full_path = os.path.join(root, name)
+                    arcname = os.path.relpath(full_path, world_folder_path)
+                    zf.write(full_path, arcname)
+                    processed += 1
+                    dialog_box.setValue(processed)
+                    
+                    QApplication.processEvents()
+                    if dialog_box.wasCanceled():
+                        dialog_box.setCancelButton(None)
+                        dialog_box.setLabelText("Cancelling...")
+                        raise RuntimeError("Backup canceled")
+        
+        return True
+    except RuntimeError:
+        if os.path.exists(backup_zip_path):
+            os.remove(backup_zip_path)
+        
+        return False

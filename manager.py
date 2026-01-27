@@ -15,8 +15,8 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
-TESTING = False
-VERSION = "v2.10.1"
+VERSION = "v2.10.2"
+DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"
 
@@ -909,7 +909,7 @@ class ServerManagerApp(QMainWindow):
     
     def open_host_app(self):
         curr_script = os.path.abspath(sys.argv[0])
-        if TESTING:
+        if DEBUG_LOGS:
             parsed = curr_script.split("\\")
             parsed.pop()
             parsed.append("manager_host.py")
