@@ -10,6 +10,7 @@
 /Installer
 /dist
 *.bat
+*.zip
 changes.md
 minecraft_mgmt_schemas.md
 test.py

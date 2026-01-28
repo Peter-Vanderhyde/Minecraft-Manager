@@ -91,6 +91,7 @@ class ServerManagerApp(QMainWindow):
     stats_signal = pyqtSignal(object) # For memory stats
     close_manager_signal = pyqtSignal()
     update_properties_signal = pyqtSignal(str, str, bool)
+    transfer_signal = pyqtSignal(str, object)
 
     def __init__(self):
         super().__init__()
@@ -137,6 +138,7 @@ class ServerManagerApp(QMainWindow):
         self.stats_signal.connect(self.update_stats)
         self.close_manager_signal.connect(self.close_manager)
         self.update_properties_signal.connect(self.update_saved_properties)
+        self.transfer_signal.connect(self.transfer_world)
 
         self.supervisor_connector = supervisor.SupervisorConnector(self.log_queue,
                                                                    self.server_log_queue,
@@ -1575,6 +1577,16 @@ QWidget {
                                     with open(file, "rb") as f:
                                         client.sendfile(f)
                                 self.send_data("file-transfer-complete", "", client)
+                        elif request == "get-world-size":
+                            if self.query_status()[0] == "online":
+                                self.tell(client, "<font color='red'>Cannot initiate world transfer while server is running.</font>")
+                                continue
+
+                            size = file_funcs.get_total_size(os.path.join(self.server_path, "worlds", args[0]))
+                            self.send_data("world-size", [size, args[0]], client)
+                        elif request == "begin-world-transfer":
+                            world = args[0]
+                            self.transfer_signal.emit(world, client)
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -2488,10 +2500,12 @@ QWidget {
                 self.saved_ip = self.host_ip
             self.start_manager_server()
     
-    def backup_world(self):
-        world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
+    def backup_world(self, world_path=None, progress_function=None, socket_writer=None):
+        streaming = (socket_writer is not None)
+        if not world_path:
+            world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
         if world_path is None:
-            return
+            return False
         
         world_path = os.path.normpath(world_path)
         world_folders = glob.glob(self.path(self.server_path, "worlds", "*/"))
@@ -2500,7 +2514,7 @@ QWidget {
                 if self.world == os.path.basename(world_path) and self.query_status()[0] == "online":
                     self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder while world is being run.</font>")
                     self.show_main_page()
-                    return
+                    return False
                 
                 current_date = datetime.now().strftime("%m-%d-%y")
                 new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}.zip"
@@ -2513,30 +2527,99 @@ QWidget {
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
                     self.delay(0.5)
-                    if not file_funcs.backup_world(world_path, f"{new_path}({str(index)}).zip", self):
-                        self.log_queue.put(f"<font color='red'>Cancelled backup of '{os.path.basename(world_path)}'.</font>")
-                        return
+                    new_path = f"{new_path}({str(index)}).zip"
+                    if not file_funcs.backup_world(world_path, new_path, self, progress_function, socket_writer):
+                        self.log_queue.put(f"<font color='red'>Cancelled {"transfer" if streaming else "backup"} of '{os.path.basename(world_path)}'.</font>")
+                        return False
                 else:
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
                     self.delay(0.5)
-                    if not file_funcs.backup_world(world_path, new_path, self):
-                        self.log_queue.put(f"<font color='red'>Cancelled backup of '{os.path.basename(world_path)}'.</font>")
-                        return
+                    if not file_funcs.backup_world(world_path, new_path, self, progress_function, socket_writer):
+                        self.log_queue.put(f"<font color='red'>Cancelled {"transfer" if streaming else "backup"} of '{os.path.basename(world_path)}'.</font>")
+                        return False
                 
-                self.log_queue.put(f"<font color='green'>Saved backup of '{os.path.basename(world_path)}'.</font>")
+                self.log_queue.put(f"<font color='green'>{"Completed transfer of" if streaming else "Saved backup of"} '{os.path.basename(world_path)}'.</font>")
+                return new_path
             except Exception as e:
+                print("Backup exception")
                 print(e)
-                self.log_queue.put(f"<font color='red'>ERROR: Unable to backup world folder.</font>")
+                self.log_queue.put(f"<font color='red'>ERROR: Unable to {"transfer" if streaming else "backup"} world folder.</font>")
+                if streaming:
+                    return False
+                
                 try:
                     new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
                     shutil.rmtree(new_path)
                 except:
                     pass
                 self.show_main_page()
+                return False
         elif world_path:
             self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
             self.show_main_page()
+            return False
+    
+    def transfer_world(self, world, client: socket.socket):
+        try:
+            self.log_queue.put(f"{self.timestamp()} {self.clients.get(client)} initiated a world transfer for {world}.")
+            world_path = self.path(self.server_path, "worlds", world)
+            total_files = 0
+            for _, _, names in os.walk(world_path):
+                total_files += len(names)
+
+            def progress_func(progress: int, file: str):
+                self.send_data("transfer-progress", [progress, file], client)
+            
+            class TransferSocket:
+                def __init__(self, host_ip):
+                    self.host_ip = host_ip
+                    self.transfer_client = None
+                    self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.sock.bind((host_ip, 0))
+                    self.port = self.sock.getsockname()[1]
+                
+                def waitfor(self, client_ip):
+                    self.sock.listen(1)
+                    print("Waiting for transfer connection.")
+                    while True:
+                        client, address = self.sock.accept()
+                        if address[0] != client_ip:
+                            client.close()
+                            continue
+
+                        self.transfer_client = client
+                        print("Connected")
+                        break
+                
+                def write(self, data):
+                    try:
+                        self.transfer_client.sendall(data)
+                        return len(data)
+                    except:
+                        raise RuntimeError("Transfer cancelled")
+                
+                def flush(self):
+                    pass
+                
+                def end_transfer(self):
+                    print("Ending transfer")
+                    self.transfer_client.shutdown(socket.SHUT_WR)
+            
+            transfer_sock = TransferSocket(self.host_ip)
+            self.send_data("starting-transfer", [total_files, world, transfer_sock.port], client)
+            transfer_sock.waitfor(client.getsockname()[0])
+
+            saved_as = self.backup_world(world_path, progress_function=progress_func, socket_writer=transfer_sock)
+            if not saved_as:
+                transfer_sock.end_transfer()
+                self.send_data("cancelled-transfer", world, client)
+            else:
+                self.send_data("transfer-complete", world, client)
+        except Exception as e:
+            print("Transfer exception")
+            print(e)
+        
     
     def add_existing_world(self, update=False):
         world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))

@@ -8,10 +8,10 @@ import os
 import winreg
 import subprocess
 import manager_host
+import file_funcs
 from queries import latest_app_info
 from pathlib import Path
-from file_funcs import pick_folder
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
 
@@ -73,6 +73,9 @@ class ServerManagerApp(QMainWindow):
     enable_mods_button_signal = pyqtSignal()
     download_complete_signal = pyqtSignal()
     log_message_signal = pyqtSignal(str)
+    download_query_signal = pyqtSignal(int, str)
+    setup_world_transfer_signal = pyqtSignal()
+    download_cancelled_signal = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -92,6 +95,8 @@ class ServerManagerApp(QMainWindow):
         self.mods_download_path: Path | None = None
         self.last_page_index = 0
         self.log_queue = queue.Queue()
+        self.world_transfer_location: str | None = None
+        self.cancelled_download = threading.Event()
         self.connection_delay_messages = ["Having trouble connecting? Either",
                                      "1. Your Hamachi is not open",
                                      "2. The host's Hamachi is not open",
@@ -110,6 +115,9 @@ class ServerManagerApp(QMainWindow):
         self.enable_mods_button_signal.connect(self.enable_mods_button)
         self.download_complete_signal.connect(self.download_complete)
         self.log_message_signal.connect(self.log_queue.put)
+        self.download_query_signal.connect(self.download_question_dialog)
+        self.setup_world_transfer_signal.connect(self.download_world_setup)
+        self.download_cancelled_signal.connect(self.cancel_download)
         
         self.init_ui()
         self.connect_button.clicked.connect(self.start_connection_thread)
@@ -319,6 +327,11 @@ class ServerManagerApp(QMainWindow):
         self.mods_download_button.hide()
         self.mods_download_button.setDisabled(True)
 
+        self.world_download_button = QPushButton("Download World")
+        self.world_download_button.setObjectName("blueButton")
+        self.world_download_button.clicked.connect(lambda: self.send_request(f"get-world-size,{self.dropdown.currentText()}"))
+        self.world_download_button.setEnabled(self.dropdown.currentText() != "")
+
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
         functions_layout.addWidget(self.dropdown, 1, 0, 1, 2)
@@ -326,6 +339,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.start_button, 3, 0, 1, 2)
         functions_layout.addWidget(self.stop_button, 4, 0, 1, 2)
         functions_layout.addWidget(self.mods_download_button, 5, 0, 1, 2)
+        functions_layout.addWidget(self.world_download_button, 6, 0, 1, 2)
 
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
@@ -355,6 +369,9 @@ class ServerManagerApp(QMainWindow):
         self.downloads_message.setObjectName("mediumText")
         self.downloads_message.setWordWrap(True)
         self.downloads_message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.download_file_label = QLabel("")
+        self.download_file_label.setObjectName("messageText")
+        self.download_file_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.download_progress = QProgressBar()
         self.download_progress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.download_progress.hide()
@@ -367,9 +384,10 @@ class ServerManagerApp(QMainWindow):
         self.open_downloads_button.clicked.connect(lambda: self.open_folder_explorer(self.mods_download_path or Path.home() / "Downloads"))
         self.cancel_download_button = QPushButton("Cancel")
         self.cancel_download_button.setObjectName("stopButton")
-        self.cancel_download_button.clicked.connect(self.switch_to_server_manager)
+        self.cancel_download_button.clicked.connect(self.cancel_download)
 
         center_layout.addWidget(self.downloads_message, alignment=Qt.AlignmentFlag.AlignCenter)
+        center_layout.addWidget(self.download_file_label, alignment=Qt.AlignmentFlag.AlignCenter)
         center_layout.addWidget(self.download_progress, alignment=Qt.AlignmentFlag.AlignCenter)
         buttons_layout = QHBoxLayout()
         buttons_layout.addStretch(1)
@@ -644,7 +662,7 @@ class ServerManagerApp(QMainWindow):
                             self.progress_range_signal.emit(0, total_file_sizes)
                             self.file_name = filename
                             file_bytes_needed = int(filesize)
-                            self.download_message_signal.emit(f"Downloading mod {current_index}/{num_of_mods}\n{filename}")
+                            self.download_message_signal.emit(f"{current_index}/{num_of_mods}\n{filename}")
                             self.file = open(self.mods_download_path / self.file_name, "wb")
                             to_take = min(len(buf), file_bytes_needed)
                             if to_take:
@@ -677,6 +695,71 @@ class ServerManagerApp(QMainWindow):
                                 self.download_complete_signal.emit()
                                 total_file_sizes = 0
                                 size_so_far = 0
+                            elif key == "world-size":
+                                size, world = args
+                                self.download_query_signal.emit(size, world)
+                            elif key == "starting-transfer":
+                                total_files, world, transfer_port = args
+                                self.setup_world_transfer_signal.emit()
+                                self.progress_range_signal.emit(0, total_files)
+                                self.progress_set_signal.emit(0)
+                                print("Finished prep")
+
+                                def write_zip(client: socket.socket):
+                                    save_path = str(self.world_transfer_location) + f"/{world}.zip"
+                                    try:
+                                        print("Beginning")
+                                        with open(save_path, 'wb') as zf:
+                                            while not self.close_threads.is_set():
+                                                data = client.recv(64 * 1024)
+                                                if not data:
+                                                    break
+                                                zf.write(data)
+                                    except:
+                                        if os.path.exists(save_path):
+                                            os.remove(save_path)
+                                    finally:
+                                        if self.close_threads.is_set() and os.path.exists(save_path):
+                                            os.remove(save_path)
+                                        if client:
+                                            print("Closed write client")
+                                            client.close()
+                                            self.cancelled_download.set()
+
+                                
+                                def detect_cancel(client: socket.socket):
+                                    while client:
+                                        if self.cancelled_download.is_set():
+                                            print("Detected cancel")
+                                            client.close()
+                                            break
+                                        time.sleep(0.1)
+                                    print("Excited cancel loop")
+
+                                transfer_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                transfer_sock.connect((self.host_ip, transfer_port))
+                                print("Connected")
+                                threading.Thread(target=write_zip, args=(transfer_sock,)).start()
+                                threading.Thread(target=detect_cancel, args=(transfer_sock,)).start()
+                            elif key == "transfer-progress":
+                                processed, file = args
+                                self.progress_set_signal.emit(processed)
+                                self.download_message_signal.emit(file)
+                            elif key == "transfer-complete":
+                                world = args[0]
+                                self.mods_download_path = self.world_transfer_location
+                                self.download_complete_signal.emit()
+                                self.log_queue.put(f"<font color='green'>Transfer of {world} completed.</font>")
+                            elif key == "cancelled-transfer":
+                                print("Got it")
+                                world = args[0]
+                                save_path = self.world_transfer_location + f"/{world}.zip"
+                                print("Started ending")
+                                self.download_cancelled_signal.emit()
+                                print("Switched")
+                                self.log_queue.put(f"<font color='red'>Transfer of {world} was cancelled.</font>")
+                                if os.path.exists(save_path):
+                                    os.remove(save_path)
                     else:
                         self.log_message_signal.emit(text)
                         
@@ -706,6 +789,9 @@ class ServerManagerApp(QMainWindow):
     
     def send(self, message):
         self.client.sendall(f"CLIENT-MESSAGE~~>{message}".encode("utf-8"))
+    
+    def send_request(self, data):
+        self.send(f"MANAGER-REQUEST~~>{data}")
 
     def switch_to_name_prompt(self):
         self.stacked_layout.setCurrentIndex(1) # Show the second page (Name Prompt)
@@ -777,24 +863,24 @@ class ServerManagerApp(QMainWindow):
 
     def get_status(self):
         self.set_status(["pinging",None,None])
-        self.send("MANAGER-REQUEST~~>get-status")
+        self.send_request("get-status")
 
     def get_players(self):
-        self.send("MANAGER-REQUEST~~>get-players")
+        self.send_request("get-players")
 
     def get_worlds_list(self):
-        self.send("MANAGER-REQUEST~~>get-worlds-list")
+        self.send_request("get-worlds-list")
     
     def start_server(self, world):
-        self.send(f"MANAGER-REQUEST~~>start-server,{world}")
+        self.send_request(f"start-server,{world}")
         self.start_button.setEnabled(False)
     
     def stop_server(self):
-        self.send("MANAGER-REQUEST~~>stop-server")
+        self.send_request("stop-server")
         self.stop_button.setEnabled(False)
     
     def check_available_mods(self, world):
-        self.send(f"MANAGER-REQUEST~~>check-mods,{world}")
+        self.send_request(f"check-mods,{world}")
     
     def set_status(self, info):
         status, version, world = info
@@ -866,12 +952,14 @@ class ServerManagerApp(QMainWindow):
                 self.check_available_mods(world)
             else:
                 self.mods_download_button.hide()
+            self.world_download_button.setEnabled(True)
         else:
             self.world_version_label.setText("")
+            self.world_download_button.setEnabled(False)
     
     def download_mods(self):
         downloads_folder = Path.home() / "Downloads"
-        self.mods_download_path = Path(pick_folder(self, downloads_folder, "Select Download Location"))
+        self.mods_download_path = Path(file_funcs.pick_folder(self, downloads_folder, "Select Download Location"))
         if self.mods_download_path is None:
             return
         
@@ -879,13 +967,32 @@ class ServerManagerApp(QMainWindow):
             self.download_button.hide()
             self.cancel_download_button.hide()
             self.download_progress.show()
-            self.send(f"MANAGER-REQUEST~~>download-mods,{self.dropdown.currentText()}")
+            self.downloads_message.setText("Downloading Mods...")
+            self.download_file_label.setText("")
+            self.send_request(f"download-mods,{self.dropdown.currentText()}")
+    
+    def download_world_setup(self):
+        self.cancelled_download.clear()
+        self.switch_to_download_page()
+        self.downloads_message.setText("Downloading World...")
+        self.download_file_label.setText("")
+        self.mods_download_path = None
+        self.download_button.hide()
+        self.cancel_download_button.show()
+        self.download_progress.show()
     
     def download_complete(self):
         self.downloads_message.setText("Download complete!")
+        self.download_file_label.setText("")
+        self.delay(0.5)
         self.finish_button.show()
         self.open_downloads_button.show()
+        self.cancel_download_button.hide()
         self.download_progress.hide()
+    
+    def cancel_download(self):
+        self.cancelled_download.set()
+        self.switch_to_server_manager()
     
     def set_progress_value(self, value):
         self.download_progress.setValue(value)
@@ -894,7 +1001,7 @@ class ServerManagerApp(QMainWindow):
         self.download_progress.setRange(minimum, maximum)
     
     def set_download_message_text(self, msg):
-        self.downloads_message.setText(msg)
+        self.download_file_label.setText(msg)
     
     def enable_mods_button(self):
         self.mods_download_button.setEnabled(True)
@@ -928,6 +1035,37 @@ class ServerManagerApp(QMainWindow):
                 close_fds=True
             )
             self.close()
+    
+    def download_question_dialog(self, size, world):
+        box = QMessageBox(self)
+        box.setWindowTitle("World Download")
+        box.setText(f"The {world} world is max {file_funcs.format_size(size)}.<br>Are you sure you want to download it?")
+        box.setStyleSheet("QLabel { color: black; }")
+        box.setIcon(QMessageBox.Icon.Question)
+        ok = QMessageBox.StandardButton.Ok
+        cancel = QMessageBox.StandardButton.Cancel
+        box.setStandardButtons(ok | cancel)
+        button = box.exec()
+        if button == ok:
+            download_folder = file_funcs.pick_folder(self, starting_path=(self.world_transfer_location or ""), dialog_title="World Download Location")
+            if not download_folder:
+                return
+            
+            print(download_folder)
+            free_space = file_funcs.get_disk_space(download_folder)
+            print(free_space)
+            if size >= free_space:
+                box = QMessageBox(self)
+                box.setWindowTitle("Low Disk Space")
+                box.setText(f"Not enough disk space!<br>Only {file_funcs.format_size(free_space)} of free space on drive.")
+                box.setIcon(QMessageBox.Icon.Critical)
+                box.setStandardButtons(QMessageBox.StandardButton.Close)
+                box.setStyleSheet("QLabel { color: black; }")
+                box.exec()
+                return
+            
+            self.send_request(f"begin-world-transfer,{world}")
+            self.world_transfer_location = download_folder
     
     def closeEvent(self, event):
         try:

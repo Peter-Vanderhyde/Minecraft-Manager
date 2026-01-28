@@ -708,62 +708,78 @@ def get_total_size(path):
             total += os.path.getsize(os.path.join(root, name))
     return total
 
-def backup_world(world_folder_path, backup_zip_path, parent):
-    os.makedirs(os.path.dirname(backup_zip_path), exist_ok=True)
-    # World folder size
-    total_size = get_total_size(world_folder_path)
-    # Space available on disk
-    usage = shutil.disk_usage(os.path.dirname(backup_zip_path))
-    free_bytes = usage.free
+def get_disk_space(path):
+    # Needs a path to know which drive to check
+    usage = shutil.disk_usage(os.path.dirname(path))
+    return usage.free
 
-    if total_size >= free_bytes:
-        box = QMessageBox(parent)
-        box.setWindowTitle("Low Disk Space")
-        box.setText(f"Not enough disk space!<br>{os.path.basename(world_folder_path)} folder is {format_size(total_size)}.")
-        box.setIcon(QMessageBox.Icon.Critical)
-        box.setStandardButtons(QMessageBox.StandardButton.Close)
-        box.setStyleSheet("QLabel { color: black; }")
-        box.exec()
-        return False
+def backup_world(world_folder_path, backup_zip_path, parent, progress_function=None, socket_writer=None):
+    if not socket_writer:
+        os.makedirs(os.path.dirname(backup_zip_path), exist_ok=True)
+        # World folder size
+        total_size = get_total_size(world_folder_path)
+        free_bytes = get_disk_space(backup_zip_path)
+
+        if total_size >= free_bytes:
+            box = QMessageBox(parent)
+            box.setWindowTitle("Low Disk Space")
+            box.setText(f"Not enough disk space!<br>{os.path.basename(world_folder_path)} folder is {format_size(total_size)}.")
+            box.setIcon(QMessageBox.Icon.Critical)
+            box.setStandardButtons(QMessageBox.StandardButton.Close)
+            box.setStyleSheet("QLabel { color: black; }")
+            box.exec()
+            return False
 
     total_files = 0
     for _, _, files in os.walk(world_folder_path):
         total_files += len(files)
-        
     
     dialog_box = QProgressDialog(
-        "Backing up world...",
+        ("Backing up world..." if not socket_writer else "Transferring world..."),
         "Cancel",
         0,
         total_files,
         parent
     )
-    dialog_box.setWindowTitle("World Backup")
+    dialog_box.setWindowTitle("World Backup" if not socket_writer else "World Transfer")
     dialog_box.setMinimumDuration(500)
     dialog_box.setStyleSheet("QLabel {color: black;}")
     dialog_box.setModal(True)
     
     processed = 0
+    last_updated = time.time()
     try:
-        with zipfile.ZipFile(backup_zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        with zipfile.ZipFile((socket_writer if socket_writer else backup_zip_path), "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for root, _, files in os.walk(world_folder_path):
                 for name in files:
                     dialog_box.setLabelText("Copying files...<br>" + name)
                     full_path = os.path.join(root, name)
                     arcname = os.path.relpath(full_path, world_folder_path)
-                    zf.write(full_path, arcname)
-                    processed += 1
-                    dialog_box.setValue(processed)
+                    try:
+                        zf.write(full_path, arcname)
+                    except RuntimeError:
+                        dialog_box.cancel()
                     
                     QApplication.processEvents()
                     if dialog_box.wasCanceled():
                         dialog_box.setCancelButton(None)
                         dialog_box.setLabelText("Cancelling...")
-                        raise RuntimeError("Backup canceled")
+                        raise RuntimeError("Backup cancelled")
+
+                    processed += 1
+                    dialog_box.setValue(processed)
+                    if progress_function and time.time() - last_updated >= 0.1:
+                        last_updated = time.time()
+                        progress_function(processed, name)
         
+        if socket_writer:
+            socket_writer.end_transfer()
         return True
     except RuntimeError:
-        if os.path.exists(backup_zip_path):
+        if not socket_writer and os.path.exists(backup_zip_path):
             os.remove(backup_zip_path)
         
         return False
+    except Exception as e:
+        print("File exception")
+        print(e)
