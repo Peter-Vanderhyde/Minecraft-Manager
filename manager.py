@@ -329,8 +329,8 @@ class ServerManagerApp(QMainWindow):
 
         self.world_download_button = QPushButton("Download World")
         self.world_download_button.setObjectName("blueButton")
-        self.world_download_button.clicked.connect(lambda: self.send_request(f"get-world-size,{self.dropdown.currentText()}"))
-        self.world_download_button.setEnabled(self.dropdown.currentText() != "")
+        self.world_download_button.clicked.connect(lambda: self.send_request("get-world-size", self.dropdown.currentText()))
+        self.world_download_button.setEnabled(False)
 
         functions_layout = QGridLayout()
         functions_layout.addWidget(self.functions_label, 0, 0, 1, 2)  # Label spanning two columns
@@ -737,6 +737,10 @@ class ServerManagerApp(QMainWindow):
                                 world = args[0]
                                 self.download_cancelled_signal.emit()
                                 self.log_queue.put(f"<font color='red'>Transfer of {world} was cancelled.</font>")
+                            elif key == "downloadable-world":
+                                world, download_enabled = args
+                                if world == self.dropdown.currentText():
+                                    self.world_download_button.setEnabled(download_enabled)
                     else:
                         self.log_message_signal.emit(text)
                         
@@ -767,8 +771,11 @@ class ServerManagerApp(QMainWindow):
     def send(self, message):
         self.client.sendall(f"CLIENT-MESSAGE~~>{message}".encode("utf-8"))
     
-    def send_request(self, data):
-        self.send(f"MANAGER-REQUEST~~>{data}")
+    def send_request(self, topic, *data):
+        args = ",".join(data)
+        if args != "":
+            args = "," + args
+        self.send(f"MANAGER-REQUEST~~>{topic}{args}")
 
     def switch_to_name_prompt(self):
         self.stacked_layout.setCurrentIndex(1) # Show the second page (Name Prompt)
@@ -849,7 +856,7 @@ class ServerManagerApp(QMainWindow):
         self.send_request("get-worlds-list")
     
     def start_server(self, world):
-        self.send_request(f"start-server,{world}")
+        self.send_request("start-server", world)
         self.start_button.setEnabled(False)
     
     def stop_server(self):
@@ -857,7 +864,7 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.setEnabled(False)
     
     def check_available_mods(self, world):
-        self.send_request(f"check-mods,{world}")
+        self.send_request("check-mods", world)
     
     def set_status(self, info):
         status, version, world = info
@@ -920,6 +927,7 @@ class ServerManagerApp(QMainWindow):
         self.set_current_world_version(self.dropdown.currentText())
 
     def set_current_world_version(self, world):
+        self.world_download_button.setEnabled(False)
         if world:
             self.selected_dropdown_text = world
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {"Fabric" * self.worlds[world]["fabric"]}')
@@ -929,10 +937,9 @@ class ServerManagerApp(QMainWindow):
                 self.check_available_mods(world)
             else:
                 self.mods_download_button.hide()
-            self.world_download_button.setEnabled(True)
+            self.send_request("check-download-enabled", world)
         else:
             self.world_version_label.setText("")
-            self.world_download_button.setEnabled(False)
     
     def download_mods(self):
         downloads_folder = Path.home() / "Downloads"

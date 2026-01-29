@@ -1594,6 +1594,9 @@ class ServerManagerApp(QMainWindow):
                         elif request == "begin-world-transfer":
                             world = args[0]
                             self.transfer_signal.emit(world, client)
+                        elif request == "check-download-enabled":
+                            world = args[0]
+                            self.send_data("downloadable-world", [world, world not in self.disabled_download_worlds], client)
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -3366,6 +3369,7 @@ class ServerManagerApp(QMainWindow):
         else:
             self.disabled_download_worlds.add(self.dropdown.currentText())
         file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.host_ip)
+        self.send_data("downloadable-world", [curr_world, enabled])
     
     def create_supervisor_process(self):
         curr_script = os.path.abspath(sys.argv[0])
