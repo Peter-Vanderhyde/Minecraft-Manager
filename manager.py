@@ -891,6 +891,7 @@ class ServerManagerApp(QMainWindow):
             self.world_label.setText("")
             self.refresh_button.setEnabled(False)
             self.players_info_box.clear()
+            self.players_info_box.append("<font color='red'>Server offline</font>")
             self.refresh_status_button.setEnabled(True)
             self.start_button.setEnabled(True)
             self.stop_button.setEnabled(False)

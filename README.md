@@ -14,7 +14,10 @@ Through this manager, both the host and clients have the ability to
 - Query the current players on the server.
 - Query the current status of the server including the version and the world name.
 - Chat with others connected to the manager.
+
+Clients have the ability to
 - Download mods directly from the host. The host can select mods for each Fabric world that can be downloaded from them.
+- Download worlds directly from the host, if the host has chosen to allow it.
   
 The host has the ability to
 - Choose what worlds they would like the clients to be able to choose from (including worlds running Fabric.)
