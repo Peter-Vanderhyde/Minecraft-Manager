@@ -631,8 +631,9 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
     worlds = old_settings["server folder"]["worlds"]
     worlds[world] = old_props
     world_order = old_settings["server folder"].get("world order", [])
+    disabled_download_worlds = old_settings["server folder"].get("disabled download", [])
     
-    update_settings(file_lock, ips, server_folder, worlds, world_order, old_universal, host_ip)
+    update_settings(file_lock, ips, server_folder, worlds, world_order, set(disabled_download_worlds), old_universal, host_ip)
     update_all_universal_settings(server_folder)
     return old_universal
 
