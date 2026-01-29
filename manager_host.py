@@ -3368,7 +3368,7 @@ class ServerManagerApp(QMainWindow):
             self.disabled_download_worlds.remove(curr_world)
         else:
             self.disabled_download_worlds.add(self.dropdown.currentText())
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.host_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         self.send_data("downloadable-world", [curr_world, enabled])
     
     def create_supervisor_process(self):
