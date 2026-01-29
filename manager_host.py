@@ -2542,8 +2542,6 @@ QWidget {
                 self.log_queue.put(f"<font color='green'>{"Completed transfer of" if streaming else "Saved backup of"} '{os.path.basename(world_path)}'.</font>")
                 return new_path
             except Exception as e:
-                print("Backup exception")
-                print(e)
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to {"transfer" if streaming else "backup"} world folder.</font>")
                 if streaming:
                     return False
@@ -2581,7 +2579,6 @@ QWidget {
                 
                 def waitfor(self, client_ip):
                     self.sock.listen(1)
-                    print("Waiting for transfer connection.")
                     while True:
                         client, address = self.sock.accept()
                         if address[0] != client_ip:
@@ -2589,7 +2586,6 @@ QWidget {
                             continue
 
                         self.transfer_client = client
-                        print("Connected")
                         break
                 
                 def write(self, data):
@@ -2603,7 +2599,6 @@ QWidget {
                     pass
                 
                 def end_transfer(self):
-                    print("Ending transfer")
                     self.transfer_client.shutdown(socket.SHUT_WR)
             
             transfer_sock = TransferSocket(self.host_ip)
@@ -2613,12 +2608,11 @@ QWidget {
             saved_as = self.backup_world(world_path, progress_function=progress_func, socket_writer=transfer_sock)
             if not saved_as:
                 transfer_sock.end_transfer()
-                self.send_data("cancelled-transfer", world, client)
+                self.send_data("cancelled-transfer", None, client)
             else:
                 self.send_data("transfer-complete", world, client)
         except Exception as e:
-            print("Transfer exception")
-            print(e)
+            raise e
         
     
     def add_existing_world(self, update=False):

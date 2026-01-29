@@ -528,7 +528,6 @@ class SupervisorConnector:
             await wsocket.send(json.dumps({"type": "loaded_status"}))
             return True
         except Exception as e:
-            print(e)
             self.failed_to_load.set()
             return False
     

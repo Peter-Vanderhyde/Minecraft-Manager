@@ -305,7 +305,6 @@ def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_
         
         return True
     except Exception as e:
-        print(e)
         return False
 
 def get_api_settings(server_path, api_version=1):
@@ -743,7 +742,14 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
     )
     dialog_box.setWindowTitle("World Backup" if not socket_writer else "World Transfer")
     dialog_box.setMinimumDuration(500)
-    dialog_box.setStyleSheet("QLabel {color: black;}")
+    dialog_box.setStyleSheet("""
+                             QLabel {
+                                color: black;
+                             }
+                             QPushButton {
+                                color: lightcoral;
+                                background-color: darkred;
+                             }""")
     dialog_box.setModal(True)
     
     processed = 0
@@ -781,5 +787,4 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
         
         return False
     except Exception as e:
-        print("File exception")
-        print(e)
+        return False
