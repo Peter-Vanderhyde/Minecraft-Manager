@@ -117,6 +117,7 @@ class ServerManagerApp(QMainWindow):
         self.worlds = {}
         self.world_order = []
         self.universal_settings = {}
+        self.disabled_download_worlds: set = set()
         self.curr_players = []
         self.last_page_index = 0
         self.log_queue = queue.Queue()
@@ -185,7 +186,7 @@ class ServerManagerApp(QMainWindow):
                 return
 
 
-        self.host_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
         self.ip_button.setText(f"IP: {self.host_ip}")
         self.clear_log_queue()
@@ -304,11 +305,11 @@ class ServerManagerApp(QMainWindow):
 
         tab = QWidget()
         tab.setStyleSheet("""
-QWidget {
-    color: black;
-    background: transparent;
-}
-""")
+                        QWidget {
+                            color: black;
+                            background: transparent;
+                        }
+                        """)
 
         box = QVBoxLayout(tab)
         box.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -352,6 +353,11 @@ QWidget {
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("redButton")
         self.stop_button.setEnabled(False)
+        self.enable_download_checkbox = QCheckBox("Downloadable")
+        self.enable_download_checkbox.setObjectName("chatCheckBox")
+        self.enable_download_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.enable_download_checkbox.setChecked(True)
+        self.enable_download_checkbox.clicked.connect(self.toggle_downloadable)
 
         separator = QFrame(self)
         separator.setFrameShape(QFrame.Shape.HLine)
@@ -390,6 +396,7 @@ QWidget {
         box.addWidget(self.dropdown, 1)
         dropdown_layout.addLayout(box)  # Dropdown for world options
         dropdown_layout.addWidget(self.world_version_label, alignment=Qt.AlignmentFlag.AlignHCenter)
+        dropdown_layout.addWidget(self.enable_download_checkbox, alignment=Qt.AlignmentFlag.AlignHCenter)
         functions_layout.addLayout(dropdown_layout, 1, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
 
         functions_layout.addWidget(self.start_button, 2, 0, 1, 1)
@@ -1295,7 +1302,7 @@ QWidget {
     
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+            saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
@@ -1487,7 +1494,7 @@ QWidget {
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -1730,7 +1737,7 @@ QWidget {
             outdated = True
         
         if outdated:
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         
     
     def message_entered(self):
@@ -1946,7 +1953,7 @@ QWidget {
                     else:
                         if seed is not None:
                             self.worlds[world].pop("seed")
-                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
                 
                     with open(self.path(self.server_path, "run.bat"), 'r') as f:
                         args = f.read()
@@ -2356,11 +2363,16 @@ QWidget {
             else:
                 self.world_mods_button.setEnabled(False)
                 self.modrinth_button.hide()
+            
+            downloadable = world not in self.disabled_download_worlds
+            self.enable_download_checkbox.setChecked(downloadable)
+            self.enable_download_checkbox.setEnabled(True)
         else:
             self.world_version_label.setText("")
             self.world_properties_button.setEnabled(False)
             self.world_mods_button.setEnabled(False)
             self.modrinth_button.hide()
+            self.enable_download_checkbox.setDisabled(True)
     
     def set_server_path(self):
         path = self.server_folder_path_entry.text()
@@ -2374,12 +2386,12 @@ QWidget {
                 self.worlds = {}
                 self.world_order = []
                 self.dropdown.clear()
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
-                saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
             else:
                 self.server_path = path
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
             
             if self.receive_thread and self.receive_thread.is_alive():
                 self.show_main_page(ignore_load=True)
@@ -2406,7 +2418,8 @@ QWidget {
         
         self.worlds = {}
         self.world_order = []
-        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+        self.disabled_download_worlds = set()
+        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         
         self.ip_button.setEnabled(False)
         self.refresh_button.setEnabled(False)
@@ -2420,6 +2433,7 @@ QWidget {
         self.world_mods_button.setEnabled(False)
         self.modrinth_button.hide()
         self.change_folder.setEnabled(False)
+        self.enable_download_checkbox.setEnabled(False)
 
         self.log_queue.put("Downloading latest server.jar file...")
         self.show_main_page(ignore_load=True)
@@ -2442,6 +2456,8 @@ QWidget {
             self.commands_button.setEnabled(True)
             self.open_folder_button.setEnabled(True)
             self.change_folder.setEnabled(True)
+            if self.dropdown.currentText() != "":
+                self.enable_download_checkbox.setEnabled(True)
             
             if not self.check_eula():
                 self.show_error_page("By accepting, you are agreeing to<br>Minecraft's EULA.",
@@ -2496,7 +2512,7 @@ QWidget {
             self.host_ip = ip
             self.delay(0.5)
             if self.default_ip_check.isChecked():
-                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, ip=self.host_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, ip=self.host_ip)
                 self.saved_ip = self.host_ip
             self.start_manager_server()
     
@@ -2764,7 +2780,7 @@ QWidget {
                 "level-type": self.level_type_dropdown.currentText()
             }
             self.world_order.insert(0, name)
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
             file_funcs.save_world_properties(self.path(os.path.join(self.server_path, "worlds", name)), self.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
@@ -2798,7 +2814,7 @@ QWidget {
                 "level-type": self.level_type_dropdown.currentText()
             }
             self.world_order.insert(0, self.new_world_name_edit.text())
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -2871,7 +2887,7 @@ QWidget {
         
         self.worlds.pop(world)
         self.world_order.remove(world)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         self.set_worlds_list()
         self.send_data("worlds-list", self.query_worlds())
         if not updating:
@@ -2998,7 +3014,7 @@ QWidget {
         self.set_whitelist()
         self.update_view_distance()
         self.update_simulation_distance()
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         file_funcs.update_all_universal_settings(self.server_path)
         if self.status == "online" and self.bus is not None:
             self.bus.view_distance.emit(int(self.universal_settings["view distance"]))
@@ -3012,7 +3028,7 @@ QWidget {
         self.dropdown.clear()
         self.dropdown.addItems(self.world_order)
         self.dropdown.setCurrentText(current_selected)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
     
     def open_player_context_menu(self, item_pos, cursor_pos):
         item = self.players_info_box.itemAt(item_pos)
@@ -3341,6 +3357,15 @@ QWidget {
         else:
             self.server_folder_path_entry.setText(self.server_path)
             self.show_server_entry_page()
+    
+    def toggle_downloadable(self):
+        enabled = self.enable_download_checkbox.isChecked()
+        curr_world = self.dropdown.currentText()
+        if enabled and curr_world in self.disabled_download_worlds:
+            self.disabled_download_worlds.remove(curr_world)
+        else:
+            self.disabled_download_worlds.add(self.dropdown.currentText())
+        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.host_ip)
     
     def create_supervisor_process(self):
         curr_script = os.path.abspath(sys.argv[0])

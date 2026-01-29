@@ -31,7 +31,8 @@ def load_settings(log_queue, file_lock):
         "server folder": {
             "path": "",
             "worlds": {},
-            "world order": []
+            "world order": [],
+            "disabled download": []
         },
         "universal settings": {
             "gui enabled": False,
@@ -55,6 +56,7 @@ def load_settings(log_queue, file_lock):
     server_path = data["server folder"].get("path")
     worlds = data["server folder"].get("worlds")
     world_order = data["server folder"].get("world order", [])
+    disabled_download_worlds = data["server folder"].get("disabled download", [])
     universal_settings = data.get("universal settings")
     
     if worlds is not None:
@@ -69,8 +71,8 @@ def load_settings(log_queue, file_lock):
             ips = {}
         if host_ip is None:
             host_ip = ""
-        update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=host_ip)
-    return host_ip, ips, server_path, worlds, world_order, universal_settings
+        update_settings(file_lock, ips, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=host_ip)
+    return host_ip, ips, server_path, worlds, world_order, set(disabled_download_worlds), universal_settings
 
 def load_worlds(server_path, worlds, log_queue):
     # Add worlds folder if not already present
@@ -104,10 +106,21 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_settings(file_lock, ips, server_path, worlds, world_order, universal_settings, ip=""):
+def update_settings(file_lock, ips, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=""):
     with file_lock:
         with open(MANAGER_SETTINGS, 'w') as f:
-            json.dump({"ip": ip, "names": ips, "server folder": {"path": server_path, "worlds": worlds, "world order": world_order}, "universal settings": universal_settings}, f, indent=4)
+            json.dump(
+                {
+                    "ip": ip,
+                    "names": ips,
+                    "server folder": {
+                        "path": server_path,
+                        "worlds": worlds,
+                        "world order": world_order,
+                        "disabled download": list(disabled_download_worlds)
+                    },
+                    "universal settings": universal_settings
+                }, f, indent=4)
     save_all_world_properties(server_path, worlds)
 
 def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, server_path, log_queue, seed=None):
