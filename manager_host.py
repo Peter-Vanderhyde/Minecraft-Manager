@@ -2627,7 +2627,7 @@ class ServerManagerApp(QMainWindow):
             saved_as = self.backup_world(world_path, progress_function=progress_func, socket_writer=transfer_sock)
             if not saved_as:
                 transfer_sock.end_transfer()
-                self.send_data("cancelled-transfer", None, client)
+                self.send_data("cancelled-transfer", world, client)
             else:
                 self.send_data("transfer-complete", world, client)
         except Exception as e:
