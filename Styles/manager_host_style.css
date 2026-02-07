@@ -158,7 +158,7 @@ QLabel {
     font-size: 16px;
 }
 
-#world_details, #world_version, #ipLabel {
+#world_details, #world_version, #ipLabel, #largeTitle {
     background-color: rgba(55, 55, 55, 150);
     border-radius: 5%;
     padding: 2;
@@ -183,7 +183,7 @@ QLabel {
     font-size: 40px;
 }
 
-#largeText {
+#largeText, #largeTitle {
     font-size: 35px;
 }
 

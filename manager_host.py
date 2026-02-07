@@ -22,7 +22,7 @@ import websock_mgmt
 import html
 import supervisor
 
-VERSION = "v2.10.2"
+VERSION = "v2.10.3"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -688,7 +688,7 @@ class ServerManagerApp(QMainWindow):
         bot_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.add_world_label = QLabel("")
-        self.add_world_label.setObjectName("largeText")
+        self.add_world_label.setObjectName("largeTitle")
         self.new_world_name_edit = QLineEdit("")
         self.new_world_name_edit.setObjectName("lineEdit")
         self.new_world_name_edit.setPlaceholderText("World Name")
@@ -753,6 +753,7 @@ class ServerManagerApp(QMainWindow):
         cancel_button.clicked.connect(self.show_new_world_type_page)
         self.add_world_error = QLabel("")
         self.add_world_error.setObjectName("messageText")
+        self.add_world_error.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         top_box.addWidget(self.add_world_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         top_box.addWidget(self.new_world_name_edit)
@@ -2651,7 +2652,7 @@ class ServerManagerApp(QMainWindow):
                     self.add_world(world=os.path.basename(world_path), new=False)
                     self.mc_version_dropdown.setCurrentIndex(0)
                     old_properties = file_funcs.load_world_properties(world_path)
-                    version = old_properties["version"]
+                    version: str = old_properties["version"]
                     if version:
                         if version not in queries.get_mc_versions(include_snapshots=False):
                             self.include_snapshots_check.setChecked(True)
@@ -2659,6 +2660,14 @@ class ServerManagerApp(QMainWindow):
                             self.mc_version_dropdown.setCurrentText(version)
                         except:
                             pass
+
+                        version_list = queries.get_mc_versions(include_snapshots=True)
+                        folder_layout_update_version = "26.1-snapshot-6"
+                        check_index = version_list.index(folder_layout_update_version)
+                        if version_list.index(version) < check_index:
+                            # World was generated after the folder layout update. Cannot revert to older version, so remove those versions.
+                            self.set_version_range(folder_layout_update_version)
+                    
                     self.gamemode_dropdown.setCurrentText(old_properties["gamemode"])
                     self.difficulty_dropdown.setCurrentText(old_properties["difficulty"])
                     self.fabric_dropdown.setCurrentText("Enabled" if old_properties["fabric"] else "Disabled")
@@ -2838,9 +2847,15 @@ class ServerManagerApp(QMainWindow):
                     old_version = f.readline()
         
         new_version = self.mc_version_dropdown.currentText()
+        self.add_existing_world_button.setEnabled(True)
         if new_version and old_version:
             if queries.version_comparison(new_version, old_version, before=True):
-                self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
+                if queries.version_comparison(old_version, "26.1-snapshot-6", after=True, equal=True) and \
+                        queries.version_comparison(new_version, "26.1-snapshot-6", before=True):
+                    self.add_world_error.setText(f"Warning! Invalid version.<br>The existing world was generated in {old_version}!<br>This world cannot be reverted to any version before 26.1-snapshot-6.")
+                    self.add_existing_world_button.setEnabled(False)
+                else:
+                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}!<br>Selecting this older version could break the world.")
             else:
                 self.add_world_error.setText("")
         
@@ -3223,12 +3238,16 @@ class ServerManagerApp(QMainWindow):
         snapshot_versions = queries.get_mc_versions(include_snapshots=True)
         new_versions = []
         if snapshot_versions[0] == version:
+            # Is latest snapshot/release
             return False
         elif release_versions[0] == version:
+            # Just show all snapshots after latest release
             self.include_snapshots_check.setChecked(True)
             self.include_snapshots_check.setDisabled(True)
             new_versions = snapshot_versions[:snapshot_versions.index(version)]
         else:
+            # Check if there's at least one release version it can update to
+            # If there is, just show the releases, since the default view does not include snapshots
             check_index = snapshot_versions.index(version) - 1
             while check_index >= 0:
                 check_version = snapshot_versions[check_index]
@@ -3236,6 +3255,7 @@ class ServerManagerApp(QMainWindow):
                     break
                 check_index -= 1
             if check_index < 0:
+                # No more recent releases were found, so force snapshot mode
                 self.include_snapshots_check.setDisabled(True)
                 self.include_snapshots_check.setChecked(True)
                 new_versions = snapshot_versions[:snapshot_versions.index(version)]

@@ -188,7 +188,7 @@ def get_mc_versions(include_snapshots=False):
 
 def version_comparison(version, test_version, before=False, after=False, equal=False):
     versions = get_mc_versions(include_snapshots=True)
-    if versions[0] == test_version and after:
+    if versions[0] == test_version and after and not equal:
         return False
     
     v_index = versions.index(version)
