@@ -2653,6 +2653,9 @@ class ServerManagerApp(QMainWindow):
                     self.mc_version_dropdown.setCurrentIndex(0)
                     old_properties = file_funcs.load_world_properties(world_path)
                     version: str = old_properties["version"]
+                    if not version:
+                        # No version found, so at least place the version before or after the data layout update
+                        version = file_funcs.get_folder_layout_version(world_path, self.log_queue)
                     if version:
                         if version not in queries.get_mc_versions(include_snapshots=False):
                             self.include_snapshots_check.setChecked(True)
@@ -2833,11 +2836,17 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page()
     
     def version_dropdown_changed(self):
-        old_version = file_funcs.load_world_properties(self.path(self.server_path, "worlds", self.add_world_label.text()))["version"]
+        world_path = self.path(self.server_path, "worlds", self.add_world_label.text())
+        old_version = file_funcs.load_world_properties(world_path)["version"]
+        unknown = ""
         if not old_version:
             if os.path.isfile(self.path(self.server_path, "worlds", self.add_world_label.text(), "version.txt")):
                 with open(self.path(self.server_path, "worlds", self.add_world_label.text(), "version.txt"), 'r') as f:
                     old_version = f.readline()
+        
+        if not old_version:
+            old_version = file_funcs.get_folder_layout_version(world_path, self.log_queue)
+            unknown = " or earlier" if (old_version == "1.21.11") else " or later"
         
         new_version = self.mc_version_dropdown.currentText()
         self.add_existing_world_button.setEnabled(True)
@@ -2845,17 +2854,17 @@ class ServerManagerApp(QMainWindow):
             if queries.version_comparison(new_version, old_version, before=True):
                 if queries.version_comparison(old_version, "26.1-snapshot-6", after=True, equal=True) and \
                         queries.version_comparison(new_version, "26.1-snapshot-6", before=True):
-                    self.add_world_error.setText(f"Warning! Invalid version.<br>The existing world was generated in {old_version}.<br>This world cannot be reverted past 26.1-snapshot-6.")
+                    self.add_world_error.setText(f"Warning! Invalid version.<br>The existing world was generated in {old_version}{unknown}.<br>This world cannot be reverted past 26.1-snapshot-6.")
                     self.add_existing_world_button.setEnabled(False)
                 else:
-                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}.<br>Selecting this older version could break the world.")
+                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}{unknown}.<br>Selecting this older version could break the world.")
             elif queries.version_comparison(old_version, "26.1-snapshot-6", before=True) and \
                     queries.version_comparison(new_version, "26.1-snapshot-6", after=True, equal=True):
                 if self.add_existing_world_button.isHidden():
-                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}.<br>There are major data saving differences applied in 26.1-snapshot-6.<br>\
+                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}{unknown}.<br>There are major data saving differences applied in 26.1-snapshot-6.<br>\
                                                 It is recommended to backup world before updating.")
                 else:
-                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}.<br>There are major data saving differences applied in 26.1-snapshot-6.<br>\
+                    self.add_world_error.setText(f"Warning! The existing world was generated in {old_version}{unknown}.<br>There are major data saving differences applied in 26.1-snapshot-6.<br>\
                                                 Instead, please:<br>1. Add world as older version<br>2. Update after using the world manager.")
                     self.add_existing_world_button.setEnabled(False)
             else:

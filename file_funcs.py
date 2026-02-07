@@ -802,3 +802,12 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
         return False
     except Exception as e:
         return False
+
+
+def get_folder_layout_version(world_path, log_queue):
+    if os.path.isdir(os.path.join(world_path, "DIM1")):
+        version = "1.21.11"
+    else:
+        latest_release = queries.get_latest_release(log_queue)
+        version = latest_release or "26.1-snapshot-6"
+    return version
