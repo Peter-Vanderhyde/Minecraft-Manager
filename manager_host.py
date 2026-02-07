@@ -2844,7 +2844,7 @@ class ServerManagerApp(QMainWindow):
                 with open(self.path(self.server_path, "worlds", self.add_world_label.text(), "version.txt"), 'r') as f:
                     old_version = f.readline()
         
-        if not old_version:
+        if not old_version and self.create_new_world_button.isHidden():
             old_version = file_funcs.get_folder_layout_version(world_path, self.log_queue)
             unknown = " or earlier" if (old_version == "1.21.11") else " or later"
         
