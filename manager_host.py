@@ -3221,9 +3221,19 @@ class ServerManagerApp(QMainWindow):
     
     def change_snapshot_state(self, state: Qt.CheckState):
         if self.update_existing_world_button.isHidden():
-            new_versions = queries.get_mc_versions(state == Qt.CheckState.Checked)
+            curr_selection = self.mc_version_dropdown.currentText()
+            all_versions = queries.get_mc_versions(include_snapshots=True)
+            release_versions = queries.get_mc_versions()
+            if state == Qt.CheckState.Unchecked:
+                start = all_versions.index(curr_selection)
+                for version in all_versions[start:]:
+                    if version in release_versions:
+                        curr_selection = version
+                        break
+            
             self.mc_version_dropdown.clear()
-            self.mc_version_dropdown.addItems(new_versions)
+            self.mc_version_dropdown.addItems(all_versions if state == Qt.CheckState.Checked else release_versions)
+            self.mc_version_dropdown.setCurrentText(curr_selection)
         else:
             # In updating page, so limit versions available
             version = self.worlds[self.add_world_label.text()]["version"]
