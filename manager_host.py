@@ -22,7 +22,7 @@ import websock_mgmt
 import html
 import supervisor
 
-VERSION = "v2.10.3"
+VERSION = "v2.10.4"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
