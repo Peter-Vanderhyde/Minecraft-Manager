@@ -3061,7 +3061,8 @@ class ServerManagerApp(QMainWindow):
     
     def open_player_context_menu(self, item_pos, cursor_pos):
         item = self.players_info_box.itemAt(item_pos)
-        if not item or (not self.is_api_compatible(self.running_version()) and not self.supervisor_connector.connected()) or item.text() == "No players online":
+        if not item or item.text() in ["No players online", "Server offline"] or \
+                (not self.is_api_compatible(self.running_version()) and not self.supervisor_connector.connected()):
             return
         
         name = item.text().removeprefix("[op] ")
