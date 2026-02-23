@@ -3508,6 +3508,7 @@ def main(create_supervisor=False):
         supervisor.create_supervisor([sys.executable, os.path.abspath(sys.argv[0]), "--host"], Image.open(os.path.normpath(os.path.join(IMAGE_PATH, "app_icon.ico"))), debug_logs=DEBUG_LOGS)
     else:
         app = QApplication(sys.argv)
+        app.setStyle("Fusion")
         server_manager_app = ServerManagerApp()
 
         server_manager_app.show()
