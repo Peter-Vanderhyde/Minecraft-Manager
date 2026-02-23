@@ -22,7 +22,7 @@ import websock_mgmt
 import html
 import supervisor
 
-VERSION = "v2.10.4"
+VERSION = "v2.10.5"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -723,6 +723,11 @@ class ServerManagerApp(QMainWindow):
         self.difficulty_dropdown.addItems(diffs)
         self.difficulty_dropdown.setCurrentText("Normal")
 
+        self.level_type_label = QLabel("World Type")
+        self.level_type_label.setObjectName("details")
+        self.level_type_dropdown = QComboBox()
+        self.level_type_dropdown.addItems(["Normal", "Flat", "Large biomes", "Amplified"])
+
         self.is_fabric_check = QCheckBox("Fabric")
         self.is_fabric_check.setObjectName("checkbox")
         self.is_fabric_check.hide()
@@ -733,11 +738,6 @@ class ServerManagerApp(QMainWindow):
         self.fabric_dropdown.currentTextChanged.connect(lambda: self.is_fabric_check.setChecked(self.fabric_dropdown.currentText() == "Enabled"))
         self.fabric_dropdown.setCurrentText("Disabled")
         self.is_fabric_check.setChecked(False)
-
-        self.level_type_label = QLabel("World Type")
-        self.level_type_label.setObjectName("details")
-        self.level_type_dropdown = QComboBox()
-        self.level_type_dropdown.addItems(["Normal", "Flat", "Large biomes", "Amplified"])
 
         self.add_existing_world_button = QPushButton("Add World")
         self.add_existing_world_button.hide()
@@ -794,21 +794,21 @@ class ServerManagerApp(QMainWindow):
         top_box.addLayout(temp)
         temp = QHBoxLayout()
         left = QHBoxLayout()
-        left.addWidget(self.fabric_label, 1, alignment=Qt.AlignmentFlag.AlignRight)
-        right = QHBoxLayout()
-        self.fabric_dropdown.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.fabric_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        right.addWidget(self.fabric_dropdown, 1, alignment=Qt.AlignmentFlag.AlignLeft)
-        temp.addLayout(left)
-        temp.addLayout(right)
-        top_box.addLayout(temp)
-        temp = QHBoxLayout()
-        left = QHBoxLayout()
         left.addWidget(self.level_type_label, 1, alignment=Qt.AlignmentFlag.AlignRight)
         right = QHBoxLayout()
         self.level_type_dropdown.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.level_type_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         right.addWidget(self.level_type_dropdown, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        temp.addLayout(left)
+        temp.addLayout(right)
+        top_box.addLayout(temp)
+        temp = QHBoxLayout()
+        left = QHBoxLayout()
+        left.addWidget(self.fabric_label, 1, alignment=Qt.AlignmentFlag.AlignRight)
+        right = QHBoxLayout()
+        self.fabric_dropdown.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.fabric_dropdown.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        right.addWidget(self.fabric_dropdown, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         temp.addLayout(left)
         temp.addLayout(right)
         top_box.addLayout(temp)
@@ -2029,6 +2029,9 @@ class ServerManagerApp(QMainWindow):
                 except Exception as e:
                     error = f"<font color='red'>Uh oh. There was a problem running the server world.</font>"
                     self.log_queue.put(f"<font color='red'>ERROR: Problem running world '{world}'! {e}</font>")
+                    self.start_button.setEnabled(True)
+                    if "OneDrive" in str(e):
+                        self.log_queue.put("<font color='red'>This might be fixed by moving the server folder outside of OneDrive.</font>")
                     return error
         finally:
             if self.supervisor_connector.loading_complete.is_set() or self.supervisor_connector.failed_to_load.is_set() or not self.supervisor_connector.connected():
