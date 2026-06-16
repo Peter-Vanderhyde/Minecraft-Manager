@@ -704,6 +704,7 @@ class ServerManagerApp(QMainWindow):
 
                                 def write_zip(client: socket.socket):
                                     save_path = str(self.world_transfer_location) + f"/{world}.zip"
+                                    success = False
                                     try:
                                         with open(save_path, 'wb') as zf:
                                             while not self.close_threads.is_set() and not self.cancelled_download.is_set():
@@ -711,12 +712,12 @@ class ServerManagerApp(QMainWindow):
                                                 if not data:
                                                     break
                                                 zf.write(data)
-                                        self.cancelled_download.set()
+                                        success = True
                                     except:
                                         if os.path.exists(save_path):
                                             os.remove(save_path)
                                     finally:
-                                        if (self.close_threads.is_set() or self.cancelled_download.is_set()) and os.path.exists(save_path):
+                                        if not success and os.path.exists(save_path):
                                             os.remove(save_path)
                                         client.shutdown(socket.SHUT_RDWR)
                                         client.close()
@@ -1025,7 +1026,7 @@ class ServerManagerApp(QMainWindow):
         box = QMessageBox(self)
         box.setWindowTitle("World Download")
         box.setText(f"The uncompressed {world} world is {file_funcs.format_size(size)}.<br>Are you sure you want to download it?")
-        box.setStyleSheet("QLabel { color: black; }")
+        box.setStyleSheet("QLabel { color: green; }")
         box.setIcon(QMessageBox.Icon.Question)
         ok = QMessageBox.StandardButton.Ok
         cancel = QMessageBox.StandardButton.Cancel
@@ -1056,7 +1057,7 @@ class ServerManagerApp(QMainWindow):
                 box.setText(f"Not enough disk space!<br>Only {file_funcs.format_size(free_space)} of free space on drive.")
                 box.setIcon(QMessageBox.Icon.Critical)
                 box.setStandardButtons(QMessageBox.StandardButton.Close)
-                box.setStyleSheet("QLabel { color: black; }")
+                box.setStyleSheet("QLabel { color: red; }")
                 box.exec()
                 return
             

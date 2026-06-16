@@ -2626,7 +2626,7 @@ class ServerManagerApp(QMainWindow):
             
             transfer_sock = TransferSocket(self.host_ip)
             self.send_data("starting-transfer", [total_files, world, transfer_sock.port], client)
-            transfer_sock.waitfor(client.getsockname()[0])
+            transfer_sock.waitfor(client.getpeername()[0])
 
             saved_as = self.backup_world(world_path, progress_function=progress_func, socket_writer=transfer_sock)
             if not saved_as:
