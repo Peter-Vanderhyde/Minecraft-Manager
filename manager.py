@@ -308,7 +308,7 @@ class ServerManagerApp(QMainWindow):
 
         # Right column
         right_column_layout = QVBoxLayout()
-        self.functions_label = QLabel("Functions")
+        self.functions_label = QLabel("Worlds")
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.dropdown = QComboBox()
         self.dropdown.currentTextChanged.connect(self.set_current_world_version)
@@ -1085,6 +1085,7 @@ if __name__ == "__main__":
         manager_host.main(create_supervisor=True)
     else:
         app = QApplication(sys.argv)
+        app.setStyle("Fusion")
         server_manager_app = ServerManagerApp()
 
         server_manager_app.show()

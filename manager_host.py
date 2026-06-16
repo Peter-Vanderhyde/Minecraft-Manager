@@ -341,7 +341,7 @@ class ServerManagerApp(QMainWindow):
 
         # Right column
         right_column_layout = QVBoxLayout()
-        self.functions_label = QLabel("Functions")
+        self.functions_label = QLabel("Worlds")
         self.functions_label.setFont(QFont(self.functions_label.font().family(), int(self.functions_label.font().pointSize() * 1.5)))
         self.start_button = QPushButton("Start")
         self.start_button.clicked.connect(lambda: self.start_server(self.dropdown.currentText()))
