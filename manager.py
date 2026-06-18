@@ -630,7 +630,7 @@ class ServerManagerApp(QMainWindow):
                         self.file.close()
                         self.file = None
                         expecting_file = False
-                        self.log_queue.put(f"Downloaded '{self.file_name}'.")
+                        self.log_queue.put(f"{self.timestamp()} Downloaded '{self.file_name}'.")
                     else:
                         continue
 
@@ -733,11 +733,11 @@ class ServerManagerApp(QMainWindow):
                                 world = args[0]
                                 self.mods_download_path = self.world_transfer_location
                                 self.download_complete_signal.emit()
-                                self.log_queue.put(f"<font color='green'>Transfer of {world} completed.</font>")
+                                self.log_queue.put(f"{self.timestamp()} <font color='green'>Transfer of {world} completed.</font>")
                             elif key == "cancelled-transfer":
                                 world = args[0]
                                 self.download_cancelled_signal.emit()
-                                self.log_queue.put(f"<font color='red'>Transfer of {world} was cancelled.</font>")
+                                self.log_queue.put(f"{self.timestamp()} <font color='red'>Transfer of {world} was cancelled.</font>")
                             elif key == "downloadable-world":
                                 world, download_enabled = args
                                 if world == self.dropdown.currentText():
@@ -843,8 +843,8 @@ class ServerManagerApp(QMainWindow):
         version_name, tag_version, link = latest_app_info()
         if version_name:
             if tag_version != VERSION:
-                self.log_queue.put(f"<br>{version_name} is available!")
-                self.log_queue.put("Click the version number in the corner to update.<br>")
+                self.log_queue.put(f"<br>{self.timestamp()} {version_name} is available!")
+                self.log_queue.put(f"{self.timestamp()} Click the version number in the corner to update.<br>")
 
     def get_status(self):
         self.set_status(["pinging",None,None])
@@ -1063,6 +1063,15 @@ class ServerManagerApp(QMainWindow):
             
             self.send_request(f"begin-world-transfer,{world}")
             self.world_transfer_location = download_folder
+    
+    def timestamp(self):
+        t = time.localtime(time.time())
+        hour = t.tm_hour
+        min = t.tm_min
+        if min < 10:
+            min = f"0{t.tm_min}"
+        timestamp = f"[{hour}:{min}]"
+        return timestamp
     
     def closeEvent(self, event):
         try:

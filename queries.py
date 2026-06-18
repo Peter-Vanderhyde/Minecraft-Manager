@@ -13,7 +13,6 @@ def status(ip, port):
 def players(ip, port):
     try:
         query = JavaServer.lookup(f"{ip}:{port}", 1).query()
-        print(query.players)
         return query.players.list
     except (TimeoutError, ConnectionResetError):
         return []

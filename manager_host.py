@@ -1507,7 +1507,7 @@ class ServerManagerApp(QMainWindow):
                 time.sleep(1)
         
         t_stamp = self.timestamp()
-        self.log_queue.put(f"{t_stamp} <font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
+        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
         self.tell(client, f"{t_stamp} You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
@@ -1531,7 +1531,7 @@ class ServerManagerApp(QMainWindow):
                         continue
 
                     if not message.startswith("MANAGER-REQUEST"):
-                        self.log_queue.put(f'{self.timestamp()} <font color="blue">{html.escape(self.clients[client])}: {message}</font>')
+                        self.log_queue.put(f'<font color="blue">{html.escape(self.clients[client])}: {message}</font>')
                         self.broadcast(message, client)
                     else:
                         data = message.split('~~>')[-1].split(',')
@@ -1610,7 +1610,7 @@ class ServerManagerApp(QMainWindow):
             time.sleep(0.5)
         
         client.close()
-        self.log_queue.put(f"{self.timestamp()} <font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
+        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
         self.broadcast(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
         self.clients.pop(client)
 
@@ -1644,7 +1644,7 @@ class ServerManagerApp(QMainWindow):
     def check_messages(self):
         while not self.log_queue.empty():
             message = self.log_queue.get()
-            self.log_box.append(f'<p style="margin: 0;">{message}</p>')
+            self.log_box.append(f'<p style="margin: 0;">{self.timestamp()} {message}</p>')
             scrollbar = self.log_box.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
         
@@ -1684,7 +1684,7 @@ class ServerManagerApp(QMainWindow):
             self.start_button.setEnabled(True)
         
         self.log_queue.put("Waiting for connections...")
-        self.log_queue.put("<font color='green'>Manager online.</font>")
+        self.log_queue.put("<font color='green'>Manager online.<br></font>")
         if not self.dropdown.currentText():
             self.log_queue.put("<br>You do not currently have any worlds added to your list.")
             self.log_queue.put("Click 'World Manager' to add a new world.")
@@ -1692,7 +1692,7 @@ class ServerManagerApp(QMainWindow):
         version_name, tag_version, link = queries.latest_app_info()
         if version_name:
             if tag_version != VERSION:
-                self.log_queue.put(f"<br>{version_name} is available!")
+                self.log_queue.put(f"{version_name} is available!")
                 self.log_queue.put("Click the version number in the corner to update.<br>")
         
         self.get_status()
@@ -1749,7 +1749,7 @@ class ServerManagerApp(QMainWindow):
         if message != "":
             self.message_entry.clear()
             if self.chat_tabs.currentIndex() == 0:
-                self.log_queue.put(f'{self.timestamp()} <font color="green">You: {message}</font>')
+                self.log_queue.put(f'<font color="green">You: {message}</font>')
                 self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
             else:
                 if not self.chat_toggle.isChecked():
@@ -1779,7 +1779,7 @@ class ServerManagerApp(QMainWindow):
                 self.delay(1)
                 waited += 1
             self.get_status_signal.emit()
-            self.log_queue.put(f"{self.timestamp()} Server world '{self.world}' has been started.")
+            self.log_queue.put(f"Server world '{self.world}' has been started.")
             self.broadcast(f"{self.timestamp()} Server world '{self.world}' has been started.")
             self.send_data("start", "refresh")
         else:
@@ -1791,7 +1791,7 @@ class ServerManagerApp(QMainWindow):
     def api_closed(self):
         self.shutdown_bus()
         self.get_status_signal.emit()
-        self.log_queue.put(f"{self.timestamp()} Server has been stopped.")
+        self.log_queue.put(f"Server has been stopped.")
         self.broadcast(f"{self.timestamp()} Server has been stopped.")
         self.send_data("stop", "refresh")
         if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
@@ -2012,7 +2012,7 @@ class ServerManagerApp(QMainWindow):
                         if self._state == "complete":
                             if self.supervisor_connector.loading_complete.is_set():
                                 self._poll_timer.stop()
-                                self.log_queue.put(f"{self.timestamp()} Server world '{world}' has been started.")
+                                self.log_queue.put(f"Server world '{world}' has been started.")
                                 self.broadcast(f"{self.timestamp()} Server world '{world}' has been started.")
                                 self.send_data("start", "refresh")
                                 self.get_status_signal.emit()
@@ -2125,7 +2125,7 @@ class ServerManagerApp(QMainWindow):
             self.delay(1)
             self.get_status_signal.emit()
         
-        self.log_queue.put(f"{self.timestamp()} Server has been stopped.")
+        self.log_queue.put(f"Server has been stopped.")
         self.broadcast(f"{self.timestamp()} Server has been stopped.")
         self.send_data("stop", "refresh")
         self.waiting_for_server_shutdown.clear()
@@ -2338,7 +2338,7 @@ class ServerManagerApp(QMainWindow):
         self.curr_players.remove(player_obj["name"])
         self.update_players_list()
         formatted_text = self.color_segments([player_obj['name'], " disconnected ", "from the server."], ["purple", "red", None])
-        self.log_queue.put(f"{self.timestamp()} {formatted_text}")
+        self.log_queue.put(formatted_text)
         self.broadcast(formatted_text)
     
     def add_player(self, player_obj: dict):
@@ -2348,7 +2348,7 @@ class ServerManagerApp(QMainWindow):
         self.curr_players.append(player_obj["name"])
         self.update_players_list()
         formatted_text = self.color_segments([player_obj['name'], " joined ", "the server."], ["purple", "green", None])
-        self.log_queue.put(f"{self.timestamp()} {formatted_text}")
+        self.log_queue.put(formatted_text)
         self.broadcast(formatted_text)
     
     def set_worlds_list(self):
@@ -2384,8 +2384,7 @@ class ServerManagerApp(QMainWindow):
     def set_server_path(self):
         path = self.server_folder_path_entry.text()
         if os.path.isdir(path):
-            while not self.log_queue.empty():
-                self.log_queue.get()
+            self.clear_log_queue()
             self.message_timer.start(1000)
             if self.server_path == path:
                 pass
@@ -2419,8 +2418,7 @@ class ServerManagerApp(QMainWindow):
             # Build up directories to the requested one
             create_path(path)
         
-        while not self.log_queue.empty():
-            self.log_queue.get()
+        self.clear_log_queue()
         self.message_timer.start(200)
         
         self.worlds = {}
@@ -2583,7 +2581,7 @@ class ServerManagerApp(QMainWindow):
     
     def transfer_world(self, world, client: socket.socket):
         try:
-            self.log_queue.put(f"{self.timestamp()} {self.clients.get(client)} initiated a world transfer for {world}.")
+            self.log_queue.put(f"{self.clients.get(client)} initiated a world transfer for {world}.")
             world_path = self.path(self.server_path, "worlds", world)
             total_files = 0
             for _, _, names in os.walk(world_path):
