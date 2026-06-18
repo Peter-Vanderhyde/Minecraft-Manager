@@ -739,7 +739,7 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
             box.setText(f"Not enough disk space!<br>{os.path.basename(world_folder_path)} folder is {format_size(total_size)}.")
             box.setIcon(QMessageBox.Icon.Critical)
             box.setStandardButtons(QMessageBox.StandardButton.Close)
-            box.setStyleSheet("QLabel { color: black; }")
+            box.setStyleSheet("QLabel { color: red; }")
             box.exec()
             return False
 
@@ -758,7 +758,7 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
     dialog_box.setMinimumDuration(500)
     dialog_box.setStyleSheet("""
                              QLabel {
-                                color: black;
+                                color: green;
                              }
                              QPushButton {
                                 color: lightcoral;

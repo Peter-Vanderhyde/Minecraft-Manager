@@ -6,14 +6,15 @@ from mcstatus import JavaServer
 def status(ip, port):
     try:
         query = JavaServer.lookup(f"{ip}:{port}", 1).query()
-        return "online", query.software.brand, query.software.version, query.map
-    except:
+        return "online", query.software.brand, query.software.version, query.map_name
+    except ConnectionResetError:
         return "offline", "", "", ""
 
 def players(ip, port):
     try:
         query = JavaServer.lookup(f"{ip}:{port}", 1).query()
-        return query.players.names
+        print(query.players)
+        return query.players.list
     except (TimeoutError, ConnectionResetError):
         return []
 
