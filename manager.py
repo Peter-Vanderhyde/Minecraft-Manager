@@ -65,7 +65,7 @@ class ConnectionWorker(QObject):
 
 class StatusWorker(QObject):
     manager_status_result = pyqtSignal(bool)
-    server_status_result = pyqtSignal(bool, str, int, int)
+    server_status_result = pyqtSignal(bool, str, str, int, int)
 
     def __init__(self, ip, port):
         super().__init__()
@@ -83,10 +83,25 @@ class StatusWorker(QObject):
             self.manager_status_result.emit(False)
         
         try:
-            response = mcstatus.JavaServer.lookup(f"{self.ip}:{SERVER_PORT}", 1).query()
-            self.server_status_result.emit(True, response.map_name, response.players.online, response.players.max)
-        except (ConnectionError, TimeoutError):
-            self.server_status_result.emit(False, "", 0, 0)
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.settimeout(2.0)
+            client.connect((self.ip, 5676))
+            data = client.recv(1024).decode("utf-8")
+            client.close()
+            response = json.loads(data)
+            self.server_status_result.emit(response["status"],
+                                           response["world"]["name"],
+                                           response["world"]["version"],
+                                           response["players"]["online"],
+                                           response["players"]["max"])
+        except (socket.timeout, socket.error, json.JSONDecodeError):
+            self.server_status_result.emit(False, "", "", 0, 0)
+
+        # try:
+        #     response = mcstatus.JavaServer.lookup(f"{self.ip}:{SERVER_PORT}", 1).query()
+        #     self.server_status_result.emit(True, response.map_name, response.players.online, response.players.max)
+        # except (ConnectionError, TimeoutError):
+        #     self.server_status_result.emit(False, "", 0, 0)
 
 class ServerButton(QPushButton):
     connect_to_server = pyqtSignal(str)

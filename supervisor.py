@@ -7,6 +7,7 @@ import queue
 import threading
 import psutil
 import pystray
+import mcstatus
 from queries import version_comparison, players
 
 CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
@@ -414,7 +415,43 @@ class Supervisor:
             if self._client is wsocket:
                 self._client = None
     
+    async def handle_status_ping(self, reader, writer):
+        """Responds to external pings with the current server state."""
+        try:
+            response = {"status": False, "world": {"name": "", "version": ""}, "players": {"online": 0, "max": 0}}
+            if not self._mc_is_alive():
+                writer.write(json.dumps(response).encode('utf-8'))
+                await writer.drain()
+            else:
+                try:
+                    query = mcstatus.JavaServer.lookup(f"127.0.0.1:25565", 1).query()
+                    response["status"] = True
+                    response["world"] = {"name": query.map_name, "version": self._mc_version}
+                    response["players"] = {"online": query.players.online, "max": query.players.max}
+                except (ConnectionResetError, TimeoutError):
+                    pass
+
+                # Send it and immediately close the connection
+                writer.write(json.dumps(response).encode('utf-8'))
+                await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    async def start_status_server(self):
+        """Runs a lightweight TCP server on port 5676 for external status checks."""
+        try:
+            server = await asyncio.start_server(self.handle_status_ping, '0.0.0.0', 5676)
+            async with server:
+                await server.serve_forever()
+        except asyncio.CancelledError:
+            pass
+    
     async def startup(self):
+        self._status_server_task = asyncio.create_task(self.start_status_server())
+
         try:
             async with websockets.serve(self.handler, self.host, self.port):
                 # print(f"Supervisor listening on ws://{self.host}:{self.port}")
@@ -449,6 +486,14 @@ class Supervisor:
 
         finally:
             self.icon.stop()
+
+            if hasattr(self, '_status_server_task') and not self._status_server_task.done():
+                self._status_server_task.cancel()
+                try:
+                    await self._status_server_task
+                except asyncio.CancelledError:
+                    pass
+            
             if self.loop and self.loop.is_running():
                 self.loop.call_soon_threadsafe(self.loop.stop)
                 self.loop_thread.join()
