@@ -171,6 +171,7 @@ class ServerButton(QPushButton):
             self.player_label.setText("- / -")
     
     def get_info_status(self):
+        self.setDisabled(True)
         self.manager_status_label.setText("Pinging...")
         self.manager_status_label.setStyleSheet("color: #ffcdcd; font-weight: bold; border: none;")
         self.server_label.setText("Pinging...")
@@ -189,6 +190,34 @@ class ServerButton(QPushButton):
     def set_players(self, current, max):
         self.player_label.setText(f"{str(current)} / {str(max)}")
 
+class DeleteServerButton(QPushButton):
+    def __init__(self, server_button: ServerButton):
+        super().__init__()
+        self.server_button = server_button
+
+        main_layout = QHBoxLayout(self)
+        delete_label = QLabel("X")
+        delete_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        delete_label.setStyleSheet("color: white; font-size: 25px; border: none;")
+        main_layout.addWidget(delete_label)
+        self.setMinimumHeight(65)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet("""
+            DeleteServerButton {
+                background-color: #8a3939;
+                border: 1px solid #6b2727;
+                border-radius: 6px;
+                margin: 0px 0px;
+                padding: 0px 0px;
+            }
+            DeleteServerButton:hover {
+               background-color: #672626;
+               border-color: #4e1a1a;
+            }
+            DeleteServerButton:pressed {
+               background-color: #571a1a;
+            }"""
+        )
 
 class ServerManagerApp(QMainWindow):
     set_status_signal = pyqtSignal(list)
@@ -347,8 +376,9 @@ class ServerManagerApp(QMainWindow):
 
         # Left column
         left_column_layout = QVBoxLayout()
-        self.change_ip = QPushButton("Change IP")
-        self.change_ip.pressed.connect(self.switch_to_connect_page)
+        self.leave_room = QPushButton("Disconnect")
+        self.leave_room.setObjectName("stopButton")
+        self.leave_room.pressed.connect(self.switch_to_connect_page)
         self.refresh_button = QPushButton("\u21BB")
         self.refresh_button.setObjectName("smallGreenButton")
         self.refresh_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -361,7 +391,7 @@ class ServerManagerApp(QMainWindow):
         players_label_layout = QHBoxLayout()
         players_label_layout.addWidget(self.refresh_button)
         players_label_layout.addWidget(self.current_players_label)
-        left_column_layout.addWidget(self.change_ip)
+        left_column_layout.addWidget(self.leave_room)
         left_column_layout.addLayout(players_label_layout)
         left_column_layout.addWidget(self.players_info_box)
 
@@ -542,12 +572,20 @@ class ServerManagerApp(QMainWindow):
 
         server1 = ServerButton("Test Server 1", "25.10.115.147", self.port)
         server2 = ServerButton("Test Hermitcraft Server", "127.0.0.1", self.port)
+        # server3 = ServerButton("Example", "127.0.0.1", self.port)
 
         self.saved_servers.append(server1)
         self.saved_servers.append(server2)
+        # self.saved_servers.append(server3)
 
         for server in self.saved_servers:
-            list_layout.addWidget(server)
+            server_buttons = QHBoxLayout()
+            server_buttons.addWidget(server)
+            delete_button = DeleteServerButton(server)
+            delete_button.clicked.connect(lambda checked=False, db=delete_button : self.delete_server(db))
+            server_buttons.addWidget(delete_button)
+            list_layout.addLayout(server_buttons)
+
         self.refresh_saved_servers()
 
         list_layout.addStretch()
@@ -1221,6 +1259,10 @@ class ServerManagerApp(QMainWindow):
             min = f"0{t.tm_min}"
         timestamp = f"[{hour}:{min}]"
         return timestamp
+
+    def delete_server(self, delete_button: DeleteServerButton):
+        delete_button.hide()
+        delete_button.server_button.hide()
     
     def closeEvent(self, event):
         try:
