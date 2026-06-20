@@ -186,7 +186,7 @@ class ServerManagerApp(QMainWindow):
                 return
 
 
-        self.host_ip, self.ips, _, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.host_ip, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
         self.ip_button.setText(f"IP: {self.host_ip}")
         self.clear_log_queue()
@@ -1303,7 +1303,7 @@ class ServerManagerApp(QMainWindow):
     
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            saved_ip, self.ips, _, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+            saved_ip, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
@@ -1495,7 +1495,7 @@ class ServerManagerApp(QMainWindow):
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                    file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -1741,7 +1741,7 @@ class ServerManagerApp(QMainWindow):
             outdated = True
         
         if outdated:
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         
     
     def message_entered(self):
@@ -1957,7 +1957,7 @@ class ServerManagerApp(QMainWindow):
                     else:
                         if seed is not None:
                             self.worlds[world].pop("seed")
-                            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
                 
                     with open(self.path(self.server_path, "run.bat"), 'r') as f:
                         args = f.read()
@@ -2392,12 +2392,12 @@ class ServerManagerApp(QMainWindow):
                 self.worlds = {}
                 self.world_order = []
                 self.dropdown.clear()
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
-                saved_ip, self.ips, _, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+                file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                saved_ip, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
             else:
                 self.server_path = path
-                file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
             
             if self.receive_thread and self.receive_thread.is_alive():
                 self.show_main_page(ignore_load=True)
@@ -2424,7 +2424,7 @@ class ServerManagerApp(QMainWindow):
         self.worlds = {}
         self.world_order = []
         self.disabled_download_worlds = set()
-        file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         
         self.ip_button.setEnabled(False)
         self.refresh_button.setEnabled(False)
@@ -2517,7 +2517,7 @@ class ServerManagerApp(QMainWindow):
             self.host_ip = ip
             self.delay(0.5)
             if self.default_ip_check.isChecked():
-                file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, ip=self.host_ip)
+                file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, ip=self.host_ip)
                 self.saved_ip = self.host_ip
             self.start_manager_server()
     
@@ -2789,7 +2789,7 @@ class ServerManagerApp(QMainWindow):
                 "level-type": self.level_type_dropdown.currentText()
             }
             self.world_order.insert(0, name)
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
             file_funcs.save_world_properties(self.path(os.path.join(self.server_path, "worlds", name)), self.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
@@ -2823,7 +2823,7 @@ class ServerManagerApp(QMainWindow):
                 "level-type": self.level_type_dropdown.currentText()
             }
             self.world_order.insert(0, self.new_world_name_edit.text())
-            file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -2917,7 +2917,7 @@ class ServerManagerApp(QMainWindow):
         
         self.worlds.pop(world)
         self.world_order.remove(world)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         self.set_worlds_list()
         self.send_data("worlds-list", self.query_worlds())
         if not updating:
@@ -3044,7 +3044,7 @@ class ServerManagerApp(QMainWindow):
         self.set_whitelist()
         self.update_view_distance()
         self.update_simulation_distance()
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         file_funcs.update_all_universal_settings(self.server_path)
         if self.status == "online" and self.bus is not None:
             self.bus.view_distance.emit(int(self.universal_settings["view distance"]))
@@ -3058,7 +3058,7 @@ class ServerManagerApp(QMainWindow):
         self.dropdown.clear()
         self.dropdown.addItems(self.world_order)
         self.dropdown.setCurrentText(current_selected)
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
     
     def open_player_context_menu(self, item_pos, cursor_pos):
         item = self.players_info_box.itemAt(item_pos)
@@ -3411,7 +3411,7 @@ class ServerManagerApp(QMainWindow):
             self.disabled_download_worlds.remove(curr_world)
         else:
             self.disabled_download_worlds.add(self.dropdown.currentText())
-        file_funcs.update_settings(self.file_lock, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
         self.send_data("downloadable-world", [curr_world, enabled])
     
     def create_supervisor_process(self):
