@@ -426,7 +426,7 @@ class Supervisor:
                 try:
                     query = mcstatus.JavaServer.lookup(f"127.0.0.1:25565", 1).query()
                     response["status"] = True
-                    response["world"] = {"name": query.map_name, "version": self._mc_version}
+                    response["world"] = {"name": query.map_name.removeprefix("worlds/"), "version": self._mc_version}
                     response["players"] = {"online": query.players.online, "max": query.players.max}
                 except (ConnectionResetError, TimeoutError):
                     pass

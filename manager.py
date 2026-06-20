@@ -41,7 +41,7 @@ class BackgroundWidget(QWidget):
         painter.drawPixmap(QRect(0, 0, self.width(), self.height()), self.background_image)
 
 class ConnectionWorker(QObject):
-    connection_success = pyqtSignal(object)
+    connection_success = pyqtSignal()
     connection_failure = pyqtSignal()
 
     def __init__(self, ip, port):
@@ -52,11 +52,12 @@ class ConnectionWorker(QObject):
     def attempt_connection(self):
         try:
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client.setblocking(False)
+            client.setblocking(True)
             client.settimeout(5)
             client.connect((self.ip, self.port))
-            client.sendall("connection test".encode("utf-8"))
-            self.connection_success.emit(client)
+            # client.sendall("connection test".encode("utf-8"))
+            client.close()
+            self.connection_success.emit()
         except socket.error as e:
             if e.errno == 10035:
                 time.sleep(0.1)
@@ -97,12 +98,6 @@ class StatusWorker(QObject):
         except (socket.timeout, socket.error, json.JSONDecodeError):
             self.server_status_result.emit(False, "", "", 0, 0)
 
-        # try:
-        #     response = mcstatus.JavaServer.lookup(f"{self.ip}:{SERVER_PORT}", 1).query()
-        #     self.server_status_result.emit(True, response.map_name, response.players.online, response.players.max)
-        # except (ConnectionError, TimeoutError):
-        #     self.server_status_result.emit(False, "", 0, 0)
-
 class ServerButton(QPushButton):
     connect_to_server = pyqtSignal(str)
 
@@ -123,6 +118,7 @@ class ServerButton(QPushButton):
         left_layout.addWidget(self.name_label)
         left_layout.addWidget(self.manager_status_label)
         self.server_label = QLabel("Pinging...")
+        self.server_label.setStyleSheet("font-size: 14px; font-weight: bold; border: none;")
         self.player_label = QLabel("- / -", self)
         self.player_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.player_label.setStyleSheet("font-size: 16px; border: none;")
@@ -148,31 +144,37 @@ class ServerButton(QPushButton):
             ServerButton:pressed {
                background-color: #31547c;
             }
-        """)
+            ServerButton:disabled {
+               background-color: #a0a0a0;
+            }""")
+        self.setDisabled(True)
         self.clicked.connect(lambda: self.connect_to_server.emit(self.server_ip))
     
     def set_manager_status(self, is_online: bool):
         if is_online:
+            self.setEnabled(True)
             self.manager_status_label.setText("Manager Running")
             self.manager_status_label.setStyleSheet("color: #92c69e; font-weight: bold; border: none;")
         else:
+            self.setDisabled(True)
             self.manager_status_label.setText("Manager Offline")
             self.manager_status_label.setStyleSheet("color: #8e0e1b; font-weight: bold; border: none;")
     
-    def set_server_status(self, is_online: bool, world_name="", curr_players=0, max_players=0):
+    def set_server_status(self, is_online: bool, world_name="", world_version="", curr_players=0, max_players=0):
         if is_online:
-            self.server_label.setText(f"Server Online: {world_name}")
-            self.server_label.setStyleSheet("color: #146527; font-weight: bold; border: none;")
+            self.server_label.setText(f"{world_name} - {world_version}")
+            self.server_label.setStyleSheet("color: #146527; font-size: 14px; font-weight: bold; border: none;")
             self.set_players(curr_players, max_players)
         else:
             self.server_label.setText("Server Offline")
-            self.server_label.setStyleSheet("color: #8e0e1b; font-weight: bold; border: none;")
+            self.server_label.setStyleSheet("color: #8e0e1b; font-size: 14px; font-weight: bold; border: none;")
             self.player_label.setText("- / -")
     
     def get_info_status(self):
         self.manager_status_label.setText("Pinging...")
         self.manager_status_label.setStyleSheet("color: #ffcdcd; font-weight: bold; border: none;")
         self.server_label.setText("Pinging...")
+        self.server_label.setStyleSheet("color: #ffffff; font-size: 14px; font-weight: bold; border: none;")
         self.status_thread = QThread(self)
         self.status_worker = StatusWorker(self.server_ip, self.server_port)
         self.status_worker.moveToThread(self.status_thread)
@@ -248,8 +250,6 @@ class ServerManagerApp(QMainWindow):
         self.download_cancelled_signal.connect(self.cancel_download)
         
         self.init_ui()
-        self.connect_button.clicked.connect(self.start_connection_thread)
-        self.host_ip_entry.returnPressed.connect(self.start_connection_thread)
         self.switch_to_mode_page()
 
     def init_ui(self):
@@ -270,31 +270,10 @@ class ServerManagerApp(QMainWindow):
         input_layout = QVBoxLayout()
         input_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
-        host_ip_label = QLabel("Host IP:")
-        host_ip_label.setObjectName("mediumText")
-        host_ip_label.setFont(QFont(host_ip_label.font().family(), int(host_ip_label.font().pointSize() * 1.5)))
-        host_ip_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        self.host_ip_entry = QLineEdit(self.host_ip)  # Set default IP
-        self.host_ip_entry.setMinimumWidth(self.width() // 2)
-        self.host_ip_entry.setMaximumWidth(self.width() // 2)
-        self.host_ip_entry.setFont(QFont(self.host_ip_entry.font().family(), int(self.host_ip_entry.font().pointSize() * 1.5)))
-        self.host_ip_entry.setPlaceholderText("IP Address")
-
-        self.default_ip_checkbox = QCheckBox("Set as default IP")
-        self.default_ip_checkbox.setChecked(False)
-
-        self.connect_button = QPushButton("Connect")
-
-        input_layout.addWidget(host_ip_label)
-        input_layout.addWidget(self.host_ip_entry)
-        input_layout.addWidget(self.connect_button)
-        input_layout.addWidget(self.default_ip_checkbox)
-
         # Shown when connection failure
         message_layout = QVBoxLayout()
         message_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        self.connecting_label = QLabel("Connection Failed")
+        self.connecting_label = QLabel("Connecting...")
         self.connecting_label.setObjectName("connectingText")
         self.connecting_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         message_layout.addWidget(self.connecting_label)
@@ -306,8 +285,14 @@ class ServerManagerApp(QMainWindow):
             label.setObjectName("messageText")
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             message_layout.addWidget(label)
+        
+        self.go_back_button = QPushButton("Go Back")
+        self.go_back_button.setObjectName("blueButton")
+        self.go_back_button.hide()
+        self.go_back_button.clicked.connect(self.switch_to_mode_page)
+        message_layout.addWidget(self.go_back_button)
 
-        center_column_layout.addLayout(input_layout)
+        # center_column_layout.addLayout(input_layout)
         center_column_layout.addLayout(message_layout)
 
 
@@ -542,7 +527,8 @@ class ServerManagerApp(QMainWindow):
         download_page = QWidget()
         download_page.setLayout(page_layout)
 
-        # Page 5: Select Manager Mod
+        # Page 5: Server Selection Page
+        content_layout = QVBoxLayout()
         list_container = QWidget()
         list_container.setObjectName("listContainer")
         list_container.setStyleSheet("""#listContainer {
@@ -552,13 +538,17 @@ class ServerManagerApp(QMainWindow):
         list_layout.setSpacing(10)
         list_layout.setContentsMargins(10, 10, 10, 10)
 
-        server1 = ServerButton("Test Server 1", "25.10.115.147", self.port)
-        list_layout.addWidget(server1)
-        server1.get_info_status()
+        self.saved_servers = []
 
+        server1 = ServerButton("Test Server 1", "25.10.115.147", self.port)
         server2 = ServerButton("Test Hermitcraft Server", "127.0.0.1", self.port)
-        list_layout.addWidget(server2)
-        server2.get_info_status()
+
+        self.saved_servers.append(server1)
+        self.saved_servers.append(server2)
+
+        for server in self.saved_servers:
+            list_layout.addWidget(server)
+        self.refresh_saved_servers()
 
         list_layout.addStretch()
 
@@ -566,41 +556,36 @@ class ServerManagerApp(QMainWindow):
         scroll_area.setWidget(list_container)
         scroll_area.setWidgetResizable(True)
 
-        # mode_layout = QGridLayout()
-        # center_column_layout = QVBoxLayout()
-        # buttons_layout = QVBoxLayout()
-        # buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
-        # mode_label = QLabel("Select Manager Mode")
-        # mode_label.setObjectName("mediumText")
-        # mode_label.setFont(QFont(mode_label.font().family(), int(mode_label.font().pointSize() * 1.5)))
-        # mode_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        page_label = QLabel("Server Selection")
+        page_label.setObjectName("mediumText")
 
-        # client_button = QPushButton("Client")
-        # client_button.clicked.connect(self.show_connect_page)
-        # host_button = QPushButton("Host")
-        # host_button.clicked.connect(self.open_host_app)
+        h_box = QHBoxLayout()
+        host_button = QPushButton("Host")
+        host_button.setObjectName("blueButton")
+        host_button.clicked.connect(self.open_host_app)
+        refresh_button = QPushButton("Refresh")
+        refresh_button.setObjectName("blueButton")
+        refresh_button.clicked.connect(self.refresh_saved_servers)
+        h_box.addWidget(host_button)
+        h_box.addWidget(refresh_button)
+        h_box.addStretch()
+        add_server_button = QPushButton("Add Server")
+        add_server_button.setObjectName("blueButton")
+        h_box.addWidget(add_server_button)
 
-        # buttons_layout.addWidget(mode_label)
-        # buttons_layout.addWidget(client_button)
-        # buttons_layout.addWidget(host_button)
-        # center_column_layout.addLayout(buttons_layout)
-
-        # right_column_layout = QVBoxLayout()
+        content_layout.addWidget(page_label)
+        content_layout.addLayout(h_box)
+        content_layout.addWidget(scroll_area)
 
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
         version.clicked.connect(self.switch_to_update_page)
-        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        content_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
-        # mode_layout.setColumnStretch(0, 1)
-        # mode_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
-        # mode_layout.addLayout(right_column_layout, 0, 9)
-        # mode_layout.setColumnStretch(9, 1)
-
-        # mode_page = QWidget()
-        # mode_page.setLayout(mode_layout)
+        servers_page = QWidget()
+        servers_page.setLayout(content_layout)
 
         # Page 6: Download Update Page
         update_layout = QGridLayout()
@@ -645,7 +630,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(name_prompt_page)
         self.stacked_layout.addWidget(server_manager_page)
         self.stacked_layout.addWidget(download_page)
-        self.stacked_layout.addWidget(scroll_area)
+        self.stacked_layout.addWidget(servers_page)
         self.stacked_layout.addWidget(update_page)
 
         # Set the main layout to the stacked layout
@@ -664,11 +649,10 @@ class ServerManagerApp(QMainWindow):
         
         self.setStyleSheet(style_str)
 
-        server1.connect_to_server.connect(self.handle_connection)
-        server2.connect_to_server.connect(self.handle_connection)
-
-    def handle_connection(self, ip):
-        print(f"Connecting to {ip}.")
+        server1.connect_to_server.connect(lambda: self.stacked_layout.setCurrentIndex(0))
+        server1.connect_to_server.connect(self.start_connection_thread)
+        server2.connect_to_server.connect(lambda: self.stacked_layout.setCurrentIndex(0))
+        server2.connect_to_server.connect(self.start_connection_thread)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
@@ -692,13 +676,10 @@ class ServerManagerApp(QMainWindow):
         except:
             return ""
     
-    def start_connection_thread(self):
-        if self.host_ip_entry.text() == "":
-            return
-        
-        self.host_ip = self.host_ip_entry.text()
-        if self.default_ip_checkbox.isChecked():
-            self.save_ip()
+    def start_connection_thread(self, ip):
+        self.host_ip = ip
+        # if self.default_ip_checkbox.isChecked():
+        #     self.save_ip()
         
         self.connecting_label.setText("Connecting...")
         delay = 0.5
@@ -709,12 +690,12 @@ class ServerManagerApp(QMainWindow):
         self.connection_thread = QThread(self)
         connection_worker = ConnectionWorker(self.host_ip, self.port)
         connection_worker.moveToThread(self.connection_thread)
-        self.connection_thread.started.connect(connection_worker.attempt_connection)
 
         connection_worker.connection_success.connect(self.on_connection_success)
         connection_worker.connection_failure.connect(self.on_connection_failure)
 
         self.connection_thread.start()
+        connection_worker.attempt_connection()
     
     def close_connection_thread(self):
         if self.connection_thread and self.connection_thread.isRunning():
@@ -743,6 +724,7 @@ class ServerManagerApp(QMainWindow):
         self.close_connection_thread()
         self.connecting_label.setText("Connection Failure")
         self.display_delay_messages()
+        self.go_back_button.show()
     
     def on_message_entered(self):
         message = self.message_entry.text()
@@ -964,6 +946,7 @@ class ServerManagerApp(QMainWindow):
         self.set_worlds_list([{}, []])
         self.stacked_layout.setCurrentIndex(0)
         self.connecting_label.setText("Lost Connection")
+        self.go_back_button.show()
         self.close_threads.clear()
         self.log_box.clear()
         self.set_status(["pinging", "", ""])
@@ -976,7 +959,16 @@ class ServerManagerApp(QMainWindow):
         self.open_downloads_button.hide()
         self.stacked_layout.setCurrentIndex(3)
     
+    def refresh_saved_servers(self):
+        for server in self.saved_servers:
+            server.get_info_status()
+    
     def switch_to_mode_page(self):
+        self.connecting_label.setText("Connecting...")
+        self.go_back_button.hide()
+        for label in self.connection_delabels:
+            label.setText("")
+        self.refresh_saved_servers()
         self.stacked_layout.setCurrentIndex(4)
     
     def switch_to_update_page(self):
