@@ -186,7 +186,7 @@ class ServerManagerApp(QMainWindow):
                 return
 
 
-        self.host_ip, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.host_ip, self.ips, _, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         self.saved_ip = self.host_ip
         self.ip_button.setText(f"IP: {self.host_ip}")
         self.clear_log_queue()
@@ -1303,7 +1303,7 @@ class ServerManagerApp(QMainWindow):
     
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+            saved_ip, self.ips, _, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
@@ -2393,7 +2393,7 @@ class ServerManagerApp(QMainWindow):
                 self.world_order = []
                 self.dropdown.clear()
                 file_funcs.update_settings(self.file_lock, self.ips, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
-                saved_ip, self.ips, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+                saved_ip, self.ips, _, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
                 self.clear_log_queue()
             else:
                 self.server_path = path
