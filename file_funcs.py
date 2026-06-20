@@ -50,7 +50,7 @@ def load_settings(log_queue, file_lock):
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return "", {}, {}, "", {}, [], set(), {}
+        return "", {}, [], "", {}, [], set(), {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
