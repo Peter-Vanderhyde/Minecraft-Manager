@@ -1507,11 +1507,11 @@ class ServerManagerApp(QMainWindow):
                 time.sleep(1)
         
         t_stamp = self.timestamp()
-        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
+        self.log_queue.put(f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
         self.tell(client, f"{t_stamp} You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
-                self.tell(send_client, f"{t_stamp} <font color='blue'>{html.escape(self.clients[client])} has joined the room!</font>")
+                self.tell(send_client, f"{t_stamp} <font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
         
         self.delay(1)
 
@@ -1531,7 +1531,7 @@ class ServerManagerApp(QMainWindow):
                         continue
 
                     if not message.startswith("MANAGER-REQUEST"):
-                        self.log_queue.put(f'<font color="blue">{html.escape(self.clients[client])}: {message}</font>')
+                        self.log_queue.put(f'<font color="#5050de">{html.escape(self.clients[client])}: {message}</font>')
                         self.broadcast(message, client)
                     else:
                         data = message.split('~~>')[-1].split(',')
@@ -1610,8 +1610,8 @@ class ServerManagerApp(QMainWindow):
             time.sleep(0.5)
         
         client.close()
-        self.log_queue.put(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
-        self.broadcast(f"<font color='blue'>{html.escape(self.clients[client])} has left the room.</font>")
+        self.log_queue.put(f"<font color='#5050de'>{html.escape(self.clients[client])} has left the room.</font>")
+        self.broadcast(f"<font color='#5050de'>{html.escape(self.clients[client])} has left the room.</font>")
         self.clients.pop(client)
 
     def send_data(self, topic, data, client=None):
@@ -1629,7 +1629,7 @@ class ServerManagerApp(QMainWindow):
                     if client is owner:
                         self.tell(client, f'{self.timestamp()} <font color="green">You: {message}</font>')
                     else:
-                        self.tell(client, f'{self.timestamp()} <font color="blue">{self.clients[owner]}: {message}</font>')
+                        self.tell(client, f'{self.timestamp()} <font color="#5050de">{self.clients[owner]}: {message}</font>')
                 else:
                     if admin_message:
                         self.tell(client, f"{self.timestamp()} {message}")
@@ -1750,7 +1750,7 @@ class ServerManagerApp(QMainWindow):
             self.message_entry.clear()
             if self.chat_tabs.currentIndex() == 0:
                 self.log_queue.put(f'<font color="green">You: {message}</font>')
-                self.broadcast(f'<font color="blue">Admin: {message}</font>', admin_message=True)
+                self.broadcast(f'<font color="#5050de">Admin: {message}</font>', admin_message=True)
             else:
                 if not self.chat_toggle.isChecked():
                     self.supervisor_send_cmd(message)
@@ -3354,12 +3354,12 @@ class ServerManagerApp(QMainWindow):
                     chats.append(timestamp + message.strip('\n'))
                 else:
                     message = message.split("[INFO] ")[-1]
-                    chats.append(timestamp + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+                    chats.append(timestamp + f"<font color='#5050de'>{html_escape(message.strip('\n'))}</font>")
             elif "[INFO]: <" in message and message.find(">") != -1:
                 name = message[message.index("<") + 1:message.index(">")]
                 if queries.get_player_uuid(name):
                     timestamp, message = message.split("[INFO]: ")
-                    chats.append(timestamp + "[INFO]: " + f"<font color='blue'>{html_escape(message.strip('\n'))}</font>")
+                    chats.append(timestamp + "[INFO]: " + f"<font color='#5050de'>{html_escape(message.strip('\n'))}</font>")
             elif not chat_only:
                 chats.append(message.strip('\n'))
         
