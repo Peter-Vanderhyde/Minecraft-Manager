@@ -9,7 +9,6 @@ import winreg
 import subprocess
 import manager_host
 import file_funcs
-import mcstatus
 from queries import latest_app_info
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea
@@ -130,6 +129,7 @@ class ServerButton(QPushButton):
         main_layout.addLayout(right_layout)
         self.setMinimumHeight(65)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip(self.server_ip)
         self.setStyleSheet("""
             ServerButton {
                background-color: #5685b9;
@@ -189,6 +189,26 @@ class ServerButton(QPushButton):
     
     def set_players(self, current, max):
         self.player_label.setText(f"{str(current)} / {str(max)}")
+    
+    def schedule_deletion(self):
+        thread_running = False
+        
+        try:
+            if hasattr(self, 'status_thread') and self.status_thread.isRunning():
+                thread_running = True
+        except RuntimeError:
+            thread_running = False
+            
+        if thread_running:
+            try:
+                self.status_worker.manager_status_result.disconnect(self.set_manager_status)
+                self.status_worker.server_status_result.disconnect(self.set_server_status)
+            except (TypeError, RuntimeError):
+                pass
+            
+            self.status_thread.finished.connect(self.deleteLater)
+        else:
+            self.deleteLater()
 
 class DeleteServerButton(QPushButton):
     def __init__(self, server_button: ServerButton):
@@ -202,6 +222,7 @@ class DeleteServerButton(QPushButton):
         main_layout.addWidget(delete_label)
         self.setMinimumHeight(65)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Remove Server")
         self.setStyleSheet("""
             DeleteServerButton {
                 background-color: #8a3939;
@@ -252,6 +273,7 @@ class ServerManagerApp(QMainWindow):
         self.server_version = ""
         self.worlds = {}
         self.mods_download_path: Path | None = None
+        self.saved_servers: list = file_funcs.load_saved_servers(queue.Queue(), threading.Lock())
         self.last_page_index = 0
         self.log_queue = queue.Queue()
         self.world_transfer_location: str | None = None
@@ -564,31 +586,18 @@ class ServerManagerApp(QMainWindow):
         list_container.setStyleSheet("""#listContainer {
                                         background-color: #464444;
                                      }""")
-        list_layout = QVBoxLayout(list_container)
-        list_layout.setSpacing(10)
-        list_layout.setContentsMargins(10, 10, 10, 10)
+        self.server_list_layout = QVBoxLayout(list_container)
+        self.server_list_layout.setSpacing(10)
+        self.server_list_layout.setContentsMargins(10, 10, 10, 10)
 
-        self.saved_servers = []
+        self.create_server_buttons()
 
-        server1 = ServerButton("Test Server 1", "25.10.115.147", self.port)
-        server2 = ServerButton("Test Hermitcraft Server", "127.0.0.1", self.port)
-        # server3 = ServerButton("Example", "127.0.0.1", self.port)
-
-        self.saved_servers.append(server1)
-        self.saved_servers.append(server2)
-        # self.saved_servers.append(server3)
-
-        for server in self.saved_servers:
-            server_buttons = QHBoxLayout()
-            server_buttons.addWidget(server)
-            delete_button = DeleteServerButton(server)
-            delete_button.clicked.connect(lambda checked=False, db=delete_button : self.delete_server(db))
-            server_buttons.addWidget(delete_button)
-            list_layout.addLayout(server_buttons)
+        for server in self.saved_server_buttons:
+            self.server_list_layout.addLayout(self.create_server_button_layout(server))
 
         self.refresh_saved_servers()
 
-        list_layout.addStretch()
+        self.server_list_layout.addStretch()
 
         scroll_area = QScrollArea()
         scroll_area.setWidget(list_container)
@@ -610,17 +619,18 @@ class ServerManagerApp(QMainWindow):
         h_box.addStretch()
         add_server_button = QPushButton("Add Server")
         add_server_button.setObjectName("blueButton")
+        add_server_button.clicked.connect(self.switch_to_add_server_page)
         h_box.addWidget(add_server_button)
 
         content_layout.addWidget(page_label)
         content_layout.addLayout(h_box)
-        content_layout.addWidget(scroll_area)
+        content_layout.addWidget(scroll_area, 1)
 
         version = QPushButton(VERSION)
         version.setObjectName("version_num")
         version.setCursor(Qt.CursorShape.PointingHandCursor)
         version.clicked.connect(self.switch_to_update_page)
-        content_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        content_layout.addWidget(version, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         servers_page = QWidget()
         servers_page.setLayout(content_layout)
@@ -661,6 +671,54 @@ class ServerManagerApp(QMainWindow):
         update_page = QWidget()
         update_page.setLayout(update_layout)
 
+        # Page 7: IP Prompt Page
+
+        add_server_layout = QGridLayout()
+        center_column_layout = QVBoxLayout()
+        center_column_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label = QLabel("Add a New Server")
+        title_label.setObjectName("mediumText")
+        self.server_name_prompt = QLineEdit()
+        self.server_name_prompt.setMinimumWidth(self.width() // 2)
+        self.server_name_prompt.setMaximumWidth(self.width() // 2)
+        self.server_name_prompt.setFont(QFont(self.server_name_prompt.font().family(), int(self.server_name_prompt.font().pointSize() * 1.5)))
+        self.server_name_prompt.setPlaceholderText("Server Name")
+        self.ip_address_prompt = QLineEdit()
+        self.ip_address_prompt.setMinimumWidth(self.width() // 2)
+        self.ip_address_prompt.setMaximumWidth(self.width() // 2)
+        self.ip_address_prompt.setFont(QFont(self.ip_address_prompt.font().family(), int(self.ip_address_prompt.font().pointSize() * 1.5)))
+        self.ip_address_prompt.setPlaceholderText("IP Address")
+        button_layout = QHBoxLayout()
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("stopButton")
+        cancel_button.clicked.connect(self.switch_to_mode_page)
+        confirm_button = QPushButton("Confirm")
+        confirm_button.clicked.connect(self.add_server)
+
+        button_layout.addWidget(cancel_button)
+        button_layout.addWidget(confirm_button)
+
+        center_column_layout.addWidget(title_label)
+        center_column_layout.addWidget(self.server_name_prompt)
+        center_column_layout.addWidget(self.ip_address_prompt)
+        center_column_layout.addLayout(button_layout)
+
+        right_column_layout = QVBoxLayout()
+
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(self.switch_to_update_page)
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        add_server_layout.setColumnStretch(0, 1)
+        add_server_layout.addLayout(center_column_layout, 0, 1, 0, 8, Qt.AlignmentFlag.AlignCenter)
+        add_server_layout.addLayout(right_column_layout, 0, 9)
+        add_server_layout.setColumnStretch(9, 1)
+
+        add_server_page = QWidget()
+        add_server_page.setLayout(add_server_layout)
+
         #----------------------------------------------------
 
         # Add pages to the stacked layout
@@ -670,6 +728,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(download_page)
         self.stacked_layout.addWidget(servers_page)
         self.stacked_layout.addWidget(update_page)
+        self.stacked_layout.addWidget(add_server_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -686,11 +745,6 @@ class ServerManagerApp(QMainWindow):
             style_str = stylesheet.read()
         
         self.setStyleSheet(style_str)
-
-        server1.connect_to_server.connect(lambda: self.stacked_layout.setCurrentIndex(0))
-        server1.connect_to_server.connect(self.start_connection_thread)
-        server2.connect_to_server.connect(lambda: self.stacked_layout.setCurrentIndex(0))
-        server2.connect_to_server.connect(self.start_connection_thread)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
@@ -998,7 +1052,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(3)
     
     def refresh_saved_servers(self):
-        for server in self.saved_servers:
+        for server in self.saved_server_buttons:
             server.get_info_status()
     
     def switch_to_mode_page(self):
@@ -1007,12 +1061,18 @@ class ServerManagerApp(QMainWindow):
         for label in self.connection_delabels:
             label.setText("")
         self.refresh_saved_servers()
+        self.server_name_prompt.setText("")
+        self.ip_address_prompt.setText("")
         self.stacked_layout.setCurrentIndex(4)
     
     def switch_to_update_page(self):
         if self.stacked_layout.currentIndex() != 5:
             self.last_page_index = self.stacked_layout.currentIndex()
         self.stacked_layout.setCurrentIndex(5)
+    
+    def switch_to_add_server_page(self):
+        self.stacked_layout.setCurrentIndex(6)
+        self.server_name_prompt.setFocus()
 
     def check_messages(self):
         while not self.close_threads.is_set():
@@ -1259,10 +1319,67 @@ class ServerManagerApp(QMainWindow):
             min = f"0{t.tm_min}"
         timestamp = f"[{hour}:{min}]"
         return timestamp
+    
+    def delete_saved_server(self, name, ip):
+        obj = {"name": name, "ip": ip}
+        if self.saved_servers.count(obj) > 0:
+            self.saved_servers.remove(obj)
+        
+            file_funcs.update_saved_servers(self.saved_servers, queue.Queue(), threading.Lock())
+    
+    def create_server_buttons(self):
+        self.saved_server_buttons = []
+        for server in self.saved_servers:
+            button = ServerButton(server["name"], server["ip"], self.port)
+            self.saved_server_buttons.append(button)
+            button.connect_to_server.connect(lambda: self.stacked_layout.setCurrentIndex(0))
+            button.connect_to_server.connect(self.start_connection_thread)
 
-    def delete_server(self, delete_button: DeleteServerButton):
+    def create_server_button_layout(self, server_button: ServerButton):
+        server_button_pairs = QHBoxLayout()
+        server_button_pairs.addWidget(server_button)
+        delete_button = DeleteServerButton(server_button)
+        delete_button.clicked.connect(lambda checked=False : self.delete_server(delete_button, server_button_pairs))
+        server_button_pairs.addWidget(delete_button)
+        return server_button_pairs
+
+    def delete_server(self, delete_button: DeleteServerButton, row_layout: QHBoxLayout):
+        server_button = delete_button.server_button
+        server_button.hide()
         delete_button.hide()
-        delete_button.server_button.hide()
+        if server_button in self.saved_server_buttons:
+            self.saved_server_buttons.remove(server_button)
+        self.delete_saved_server(server_button.server_name, server_button.server_ip)
+        
+        
+        row_layout.removeWidget(server_button)
+        row_layout.removeWidget(delete_button)
+        self.server_list_layout.removeItem(row_layout)
+
+        delete_button.deleteLater()
+        row_layout.deleteLater()
+
+        server_button.schedule_deletion()
+    
+    def add_server(self):
+        name = self.server_name_prompt.text()
+        ip = self.ip_address_prompt.text()
+        if name == "" or ip == "":
+            return
+        
+        server = ServerButton(name, ip, self.port)
+        self.saved_server_buttons.append(server)
+
+        server.connect_to_server.connect(lambda: self.stacked_layout.setCurrentIndex(0))
+        server.connect_to_server.connect(self.start_connection_thread)
+
+        self.saved_servers.append({"name": name, "ip": ip})
+        file_funcs.update_saved_servers(self.saved_servers, queue.Queue(), threading.Lock())
+
+        self.server_list_layout.insertLayout(self.server_list_layout.count() - 1, self.create_server_button_layout(server))
+        self.switch_to_mode_page()
+        self.server_name_prompt.setText("")
+        self.ip_address_prompt.setText("")
     
     def closeEvent(self, event):
         try:

@@ -28,6 +28,7 @@ def load_settings(log_queue, file_lock):
     data = {
         "ip": f"",
         "names": {},
+        "servers": [],
         "server folder": {
             "path": "",
             "worlds": {},
@@ -49,10 +50,11 @@ def load_settings(log_queue, file_lock):
             json.dump(data, f, indent=4)
         log_queue.put("Settings file not found.")
         log_queue.put("Created new manager_settings.json file.")
-        return "", {}, "", {}, [], set(), {}
+        return "", {}, {}, "", {}, [], set(), {}
     
     host_ip = data.get("ip")
     ips = data.get("names")
+    servers = data.get("servers", [])
     server_path = data["server folder"].get("path")
     worlds = data["server folder"].get("worlds")
     world_order = data["server folder"].get("world order", [])
@@ -71,8 +73,16 @@ def load_settings(log_queue, file_lock):
             ips = {}
         if host_ip is None:
             host_ip = ""
-        update_settings(file_lock, ips, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=host_ip)
-    return host_ip, ips, server_path, worlds, world_order, set(disabled_download_worlds), universal_settings
+        update_settings(file_lock, ips, servers, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=host_ip)
+    return host_ip, ips, servers, server_path, worlds, world_order, set(disabled_download_worlds), universal_settings
+
+def load_saved_servers(log_queue, file_lock):
+    return load_settings(log_queue, file_lock)[2]
+
+def update_saved_servers(servers, log_queue, file_lock):
+    data = list(load_settings(log_queue, file_lock))
+    data[2] = servers
+    update_settings(file_lock, *data[1:], data[0])
 
 def load_worlds(server_path, worlds, log_queue):
     # Add worlds folder if not already present
@@ -106,13 +116,14 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_settings(file_lock, ips, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=""):
+def update_settings(file_lock, ips, servers, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=""):
     with file_lock:
         with open(MANAGER_SETTINGS, 'w') as f:
             json.dump(
                 {
                     "ip": ip,
                     "names": ips,
+                    "servers": servers,
                     "server folder": {
                         "path": server_path,
                         "worlds": worlds,
