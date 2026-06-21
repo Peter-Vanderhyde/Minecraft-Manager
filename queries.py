@@ -7,7 +7,7 @@ def status(ip, port):
     try:
         query = JavaServer.lookup(f"{ip}:{port}", 1).query()
         return "online", query.software.brand, query.software.version, query.map_name
-    except ConnectionResetError:
+    except (ConnectionResetError, TimeoutError):
         return "offline", "", "", ""
 
 def players(ip, port):
