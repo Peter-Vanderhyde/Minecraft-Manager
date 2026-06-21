@@ -1,0 +1,5 @@
+- Run the `package_manager.bat` batch file.
+- Open the Inno Setup Compiler.
+  - Create a new file with the wizard if necessary.
+  - Compile the existing script with an updated version number.
+- Copy the installer executable from Output to github.
