@@ -8,6 +8,7 @@ import queue
 import subprocess
 import glob
 import shutil
+import re
 from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
@@ -1654,6 +1655,20 @@ class ServerManagerApp(QMainWindow):
 
             for msg in messages:
                 self.server_chat.append(f'<p style="margin: 0;">{msg}</p>')
+
+                match = re.search(r"&lt;(.*?)&gt;\s+(.*?)</font>", msg)
+
+                if match:
+                    username = match.group(1)
+                    message = match.group(2)  # "!CustomCommand"
+                    
+                    if message.startswith("!"):
+                        # Split by spaces just in case they typed "!spawn please"
+                        command = message.split(" ")[0] 
+                        print(f"User {username} ran: {command}")
+                        
+                        if command == "!spawn":
+                            self.supervisor_send_cmd("weather thunder")
             scrollbar = self.server_chat.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
     

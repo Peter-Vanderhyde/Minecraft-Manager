@@ -235,7 +235,7 @@ class Supervisor:
                     elif "OutOfMemoryError" in line:
                         await self.send_to_client({"type": "out_of_memory"})
 
-                    
+                    # print(line)
                     await self.send_to_client({"type": "log", "msg": line})
             
             if not server_loaded:
@@ -597,6 +597,7 @@ class SupervisorConnector:
                     if not self.spooling_up.is_set() and not self.loading_complete.is_set() and not self.loading_chunks.is_set():
                         self.spooling_up.set()
                     self.log_output_queue.put([msg.get("msg")])
+                    # print(msg.get("msg"))
                 elif msg.get("type") == "logs_list":
                     self.log_output_queue.put(msg.get("logs"))
                 elif msg.get("type") == "closing_server" and self.closing_server.is_set():
