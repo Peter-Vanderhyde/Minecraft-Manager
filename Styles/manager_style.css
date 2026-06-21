@@ -25,6 +25,45 @@ QPushButton:disabled {
     background-color: #d3d3d3; /* Light gray */
 }
 
+#sageButton {
+    background-color: #6b8e78; /* Soft, earthy green */
+    color: white;
+}
+
+#sageButton:hover {
+    background-color: #5a7c66; /* Slightly darker sage */
+}
+
+#sageButton:pressed {
+    background-color: #4b6a55; /* Even darker sage */
+}
+
+#roseButton {
+    background-color: #a07474; /* Soft, muted reddish-pink */
+    color: white;
+}
+
+#roseButton:hover {
+    background-color: #8d6565; /* Slightly darker rose */
+}
+
+#roseButton:pressed {
+    background-color: #795656; /* Even darker rose */
+}
+
+#indigoButton {
+    background-color: #6a6c8a; /* Soft grayish-blue/purple */
+    color: white;
+}
+
+#indigoButton:hover {
+    background-color: #585a75; /* Slightly darker indigo */
+}
+
+#indigoButton:pressed {
+    background-color: #484a62; /* Even darker indigo */
+}
+
 #stopButton {
     color: lightcoral; /* Text color */
     background-color: darkred; /* Background color of the text outline */
@@ -45,7 +84,10 @@ QPushButton:disabled {
 
 #stopButton:disabled,
 #blueButton:disabled,
-#restartButton:disabled {
+#restartButton:disabled,
+#sageButton:disabled,
+#roseButton:disabled,
+#indigoButton:disabled {
     background-color: #a0a0a0; /* Slightly lighter gray for disabled */
     color: #d0d0d0; /* Lighter text color for disabled */
 }

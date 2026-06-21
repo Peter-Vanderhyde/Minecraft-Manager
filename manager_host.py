@@ -353,7 +353,7 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("redButton")
         self.stop_button.setEnabled(False)
-        self.enable_download_checkbox = QCheckBox("Downloadable")
+        self.enable_download_checkbox = QCheckBox("Allow  World Download")
         self.enable_download_checkbox.setObjectName("chatCheckBox")
         self.enable_download_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
         self.enable_download_checkbox.setChecked(True)
