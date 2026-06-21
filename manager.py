@@ -904,7 +904,7 @@ class ServerManagerApp(QMainWindow):
                             if file_bytes_needed == 0:
                                 self.file.close()
                                 self.file = None
-                                self.log_message_signal.emit(f"Downloaded '{self.file_name}'.")
+                                self.log_message_signal.emit(f"{self.timestamp()} Downloaded '{self.file_name}'.")
                                 expecting_file = False
                             else:
                                 expecting_file = True
@@ -974,7 +974,7 @@ class ServerManagerApp(QMainWindow):
                                 if world == self.dropdown.currentText():
                                     self.world_download_button.setEnabled(download_enabled)
                     else:
-                        self.log_message_signal.emit(text)
+                        self.log_message_signal.emit(f"{self.timestamp()} {text}")
                         
             except socket.error as e:
                 if e.errno == 10035:
