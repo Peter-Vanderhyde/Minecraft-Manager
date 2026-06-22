@@ -23,6 +23,44 @@ def get_appdata_path():
 
 APPDATA_PATH = get_appdata_path()
 MANAGER_SETTINGS = os.path.join(APPDATA_PATH, "manager_settings.json")
+SAVED_DATA = os.path.join(APPDATA_PATH, "saved_data.json")
+
+def load_saved_data(file_lock):
+    data = {
+        "commands": {},
+        "players": {}
+    }
+    try:
+        with file_lock:
+            with open(SAVED_DATA, 'r') as f:
+                data = json.load(f)
+    except:
+        with file_lock:
+            with open(SAVED_DATA, 'w') as f:
+                json.dump(data, f, indent=4)
+    
+    return data
+
+def save_player_data(player: str, key: str, value, file_lock):
+    with file_lock:
+        with open(SAVED_DATA, 'r') as f:
+            data: dict = json.load(f)
+        
+        players: dict = data.get("players", {})
+        player_data: dict = players.setdefault(player, {})
+        player_data[key] = value
+
+        with open(SAVED_DATA, 'w') as f:
+            json.dump(data, f, indent=4)
+
+def save_custom_commands(custom_commands: dict, file_lock):
+    with file_lock:
+        with open(SAVED_DATA, 'r') as f:
+            data: dict = json.load(f)
+        
+        data["commands"] = custom_commands
+        with open(SAVED_DATA, 'w') as f:
+            json.dump(data, f, indent=4)
 
 def load_settings(log_queue, file_lock):
     data = {
@@ -43,14 +81,16 @@ def load_settings(log_queue, file_lock):
         }
     }
     try:
-        with open(MANAGER_SETTINGS, 'r') as f:
-            data = json.load(f)
+        with file_lock:
+            with open(MANAGER_SETTINGS, 'r') as f:
+                data = json.load(f)
     except:
-        with open(MANAGER_SETTINGS, 'w') as f:
-            json.dump(data, f, indent=4)
-        log_queue.put("Settings file not found.")
-        log_queue.put("Created new manager_settings.json file.")
-        return "", {}, [], "", {}, [], set(), {}
+        with file_lock:
+            with open(MANAGER_SETTINGS, 'w') as f:
+                json.dump(data, f, indent=4)
+            log_queue.put("Settings file not found.")
+            log_queue.put("Created new manager_settings.json file.")
+            return "", {}, [], "", {}, [], set(), {}
     
     host_ip = data.get("ip")
     ips = data.get("names")

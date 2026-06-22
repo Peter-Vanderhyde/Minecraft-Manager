@@ -1,5 +1,6 @@
 /.vscode
 /Server
+/Worlds
 manager_settings.json
 package_host.bat
 /__pycache__

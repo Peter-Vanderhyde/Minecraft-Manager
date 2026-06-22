@@ -24,7 +24,7 @@ import html
 import supervisor
 
 VERSION = "v2.10.6"
-DEBUG_LOGS = False
+DEBUG_LOGS = True
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -1655,20 +1655,6 @@ class ServerManagerApp(QMainWindow):
 
             for msg in messages:
                 self.server_chat.append(f'<p style="margin: 0;">{msg}</p>')
-
-                match = re.search(r"&lt;(.*?)&gt;\s+(.*?)</font>", msg)
-
-                if match:
-                    username = match.group(1)
-                    message = match.group(2)  # "!CustomCommand"
-                    
-                    if message.startswith("!"):
-                        # Split by spaces just in case they typed "!spawn please"
-                        command = message.split(" ")[0] 
-                        print(f"User {username} ran: {command}")
-                        
-                        if command == "!spawn":
-                            self.supervisor_send_cmd("weather thunder")
             scrollbar = self.server_chat.verticalScrollBar()
             scrollbar.setValue(scrollbar.maximum())
     

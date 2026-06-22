@@ -9,9 +9,11 @@ import psutil
 import pystray
 import mcstatus
 from queries import version_comparison, players
+from file_funcs import load_saved_data, save_custom_commands, save_player_data
 
 CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
 DONE_RE = re.compile(r"Done \(\d+(?:\.\d+)?s\)!")
+CUSTOM_COMMAND_PATTER = r"^\[\d{2}:\d{2}:\d{2}\]\s+\[Server thread/INFO\]:\s+<(?P<player>[^>]+)>\s+!(?P<command>\S+)(?P<args>.*)$"
 
 class Supervisor:
     def __init__(self, host: str, port: int, token: str, manager_process_args, tray_icon, debug_logs=False):
@@ -37,6 +39,11 @@ class Supervisor:
         self._feedback_value = False
         self._logs = []
         self._log_lock = asyncio.Lock()
+
+        self._data_lock = threading.Lock()
+        data: dict = load_saved_data(self._data_lock)
+        self.custom_commands: dict = data.get("commands", {})
+        self.players_data: dict = data.get("players", {})
 
         self.icon = pystray.Icon(
             "mc_supervisor",
@@ -235,7 +242,16 @@ class Supervisor:
                     elif "OutOfMemoryError" in line:
                         await self.send_to_client({"type": "out_of_memory"})
 
-                    # print(line)
+                    match = re.match(CUSTOM_COMMAND_PATTER, line)
+
+                    if match:
+                        player = match.group("player")
+                        command = match.group("command")
+                        args = match.group("args")
+                        args = args.strip() if args else None
+
+                        self.run_custom_command(player, command, args)
+                    
                     await self.send_to_client({"type": "log", "msg": line})
             
             if not server_loaded:
@@ -275,6 +291,16 @@ class Supervisor:
         except Exception:
             self._client = None
     
+    def run_custom_command(self, player, command, args):
+        print(player, command, args)
+        print(self.custom_commands)
+        commands = self.custom_commands.get(command, [])
+        print(commands)
+        for c in commands:
+            c = c.replace("PLAYER", player)
+            print(c)
+            self.send_server_cmd(f"{c}{f' {args}' if args else ''}")
+
     async def turn_off_feedback(self, turn_back_on=None):
         if turn_back_on:
             cmd = "gamerule send_command_feedback"

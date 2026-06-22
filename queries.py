@@ -3,6 +3,9 @@ import requests
 import uuid
 from mcstatus import JavaServer
 
+mc_versions: list = []
+snapshot_versions: list = []
+
 def status(ip, port):
     try:
         query = JavaServer.lookup(f"{ip}:{port}", 1).query()
@@ -187,7 +190,7 @@ def get_mc_versions(include_snapshots=False):
         return None
 
 def version_comparison(version, test_version, before=False, after=False, equal=False):
-    versions = get_mc_versions(include_snapshots=True)
+    versions = snapshot_versions
     if versions[0] == test_version and after and not equal:
         return False
     
@@ -232,3 +235,6 @@ def latest_app_info():
         return content["name"], content["tag_name"], link
         
     return False, "", ""
+
+mc_versions = get_mc_versions()
+snapshot_versions = get_mc_versions(include_snapshots=True)
