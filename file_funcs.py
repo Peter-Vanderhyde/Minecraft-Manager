@@ -23,43 +23,31 @@ def get_appdata_path():
 
 APPDATA_PATH = get_appdata_path()
 MANAGER_SETTINGS = os.path.join(APPDATA_PATH, "manager_settings.json")
-SAVED_DATA = os.path.join(APPDATA_PATH, "saved_data.json")
+COMMANDS = os.path.join(APPDATA_PATH, "commands.json")
 
-def load_saved_data(file_lock):
+def load_commands(file_lock):
     data = {
-        "commands": {},
-        "players": {}
+        "commands": {}
     }
     try:
         with file_lock:
-            with open(SAVED_DATA, 'r') as f:
+            with open(COMMANDS, 'r') as f:
                 data = json.load(f)
     except:
         with file_lock:
-            with open(SAVED_DATA, 'w') as f:
+            with open(COMMANDS, 'w') as f:
                 json.dump(data, f, indent=4)
     
-    return data
-
-def save_player_data(player: str, key: str, value, file_lock):
-    with file_lock:
-        with open(SAVED_DATA, 'r') as f:
-            data: dict = json.load(f)
-        
-        players: dict = data.get("players", {})
-        player_data: dict = players.setdefault(player, {})
-        player_data[key] = value
-
-        with open(SAVED_DATA, 'w') as f:
-            json.dump(data, f, indent=4)
+    print(data["commands"])
+    return data["commands"]
 
 def save_custom_commands(custom_commands: dict, file_lock):
     with file_lock:
-        with open(SAVED_DATA, 'r') as f:
+        with open(COMMANDS, 'r') as f:
             data: dict = json.load(f)
         
         data["commands"] = custom_commands
-        with open(SAVED_DATA, 'w') as f:
+        with open(COMMANDS, 'w') as f:
             json.dump(data, f, indent=4)
 
 def load_settings(log_queue, file_lock):

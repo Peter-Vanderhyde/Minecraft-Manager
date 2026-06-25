@@ -9,7 +9,7 @@ import psutil
 import pystray
 import mcstatus
 from queries import version_comparison, players
-from file_funcs import load_saved_data, save_custom_commands, save_player_data
+from file_funcs import load_commands, save_custom_commands
 
 CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
 DONE_RE = re.compile(r"Done \(\d+(?:\.\d+)?s\)!")
@@ -41,9 +41,7 @@ class Supervisor:
         self._log_lock = asyncio.Lock()
 
         self._data_lock = threading.Lock()
-        data: dict = load_saved_data(self._data_lock)
-        self.custom_commands: dict = data.get("commands", {})
-        self.players_data: dict = data.get("players", {})
+        self.custom_commands: dict = load_commands(self._data_lock)
 
         self.icon = pystray.Icon(
             "mc_supervisor",
@@ -250,7 +248,19 @@ class Supervisor:
                         args = match.group("args")
                         args = args.strip() if args else None
 
-                        self.run_custom_command(player, command, args)
+                        print(player, command, args)
+
+                        if command == "help":
+                            if len(self.custom_commands) > 0:
+                                self.send_server_cmd("tellraw " + player + ' {"text": "Custom Commands:", "color": "yellow"}')
+                                self.send_server_cmd("tellraw " + player + ' {"text": "!help", "color": "yellow"}')
+                                for name in self.custom_commands:
+                                    self.send_server_cmd("tellraw " + player + ' {"text": "!' + name + '", "color": "yellow"}')
+                            else:
+                                self.send_server_cmd("tellraw " + player + ' {"text": "There are no custom commands saved.", "color":"yellow"}')
+
+                        else:
+                            self.run_custom_command(player, command, args)
                     
                     await self.send_to_client({"type": "log", "msg": line})
             
@@ -292,13 +302,11 @@ class Supervisor:
             self._client = None
     
     def run_custom_command(self, player, command, args):
-        print(player, command, args)
-        print(self.custom_commands)
+        print("running", player, command)
         commands = self.custom_commands.get(command, [])
-        print(commands)
         for c in commands:
             c = c.replace("PLAYER", player)
-            print(c)
+            print(c, args)
             self.send_server_cmd(f"{c}{f' {args}' if args else ''}")
 
     async def turn_off_feedback(self, turn_back_on=None):
