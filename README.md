@@ -20,7 +20,7 @@ Clients have the ability to
 - Download worlds directly from the host, if the host has chosen to allow it.
 - Save a list of host IPs for quickly connecting and seeing the status of servers and manager apps.
 
-
+![Server List Image](Images/server_list.png)
   
 The host has the ability to
 - Add a list of worlds that can be run by the clients (including worlds running Fabric.)
