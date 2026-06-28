@@ -375,7 +375,11 @@ class ServerManagerApp(QMainWindow):
         self.name_entry.setPlaceholderText("Display Name")
         self.name_entry.returnPressed.connect(self.send_name)
 
+        name_entry_confirm = QPushButton("Confirm")
+        name_entry_confirm.clicked.connect(self.send_name)
+
         center_column_layout.addWidget(self.name_entry, Qt.AlignmentFlag.AlignHCenter)
+        center_column_layout.addWidget(name_entry_confirm, Qt.AlignmentFlag.AlignHCenter)
 
         right_column_layout = QVBoxLayout()
         version = QPushButton(VERSION)

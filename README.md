@@ -18,15 +18,18 @@ Through this manager, both the host and clients have the ability to
 Clients have the ability to
 - Download mods directly from the host. The host can select mods for each Fabric world that can be downloaded from them.
 - Download worlds directly from the host, if the host has chosen to allow it.
+- Save a list of host IPs for quickly connecting and seeing the status of servers and manager apps.
+
+
   
 The host has the ability to
-- Choose what worlds they would like the clients to be able to choose from (including worlds running Fabric.)
+- Add a list of worlds that can be run by the clients (including worlds running Fabric.)
 - Add existing Minecraft worlds to the world list, or remove/delete worlds.
 - Create new worlds from scratch to be directly added to the list. Use any version/snapshot, gamemode, difficulty, world preset, and optionally set a seed. A world can also be signified as a Fabric world that will run any mods in the world's mod folder.
   > **Note**:  
   Newly created worlds do not generate any world files until their first time being run.
-- Easily backup server worlds.
-- Close the manager, but leave the server running.
+- Easily backup server worlds as ZIP folders.
+- Close the manager, but leave the server running in the background.
 - Update worlds to newer versions.
 - Quickly access each world's mods folder.
 - Download mods and designate them as recommended for playing on a world. Clients can download these mods directly from the host.
@@ -42,7 +45,7 @@ The host has the ability to
 - See all player chat messages.
 - See basic memory percentage statistics about the server.
 - The host and clients automatically receive updates when players join and leave the server without having to refresh.
-- The host can click player's names in the list to perform specific actions on them such as whitelisting, kicking, etc.
+- The host can click player's names in the list to perform specific actions on them such as whitelisting, kicking, banning, or op-ing.
 
 
 ### Extra Features
@@ -54,6 +57,7 @@ For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to
 If you are hosting the server on your computer, you must have your `Minecraft Manager` program running for others to be able to control the server. You will need the latest Java Runtime (JRE) in order to run the server, so download one if you do not already have it. Different versions require different minimum JRE versions. You can download the latest JRE from [Adoptium Temurin](https://www.adoptium.net/temurin/releases/).  
 >**MAKE SURE** you are downloading the **JRE** MSI version, not the **JDK !!**
 
+![JRE Download Instructions Image](Images/JRE_download_help.png)
 
 ### Initial Startup
 Run the `Minecraft Manager.exe` file.  

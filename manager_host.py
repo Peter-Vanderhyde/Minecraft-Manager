@@ -24,7 +24,7 @@ import html
 import supervisor
 
 VERSION = "v2.10.6"
-DEBUG_LOGS = True
+DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -1045,6 +1045,12 @@ class ServerManagerApp(QMainWindow):
         self.simulation_distance_textbox.textChanged.connect(lambda: self.simulation_distance_textbox.setText(
             self.simulation_distance_textbox.text() if self.simulation_distance_textbox.text().isdigit() else self.simulation_distance_textbox.text()[:-1]
         ))
+
+        # edit_commands_label = QLabel("Custom Server Commands: ")
+        # edit_commands_label.setObjectName("optionText")
+        # edit_commands_button = QPushButton("Edit")
+        # edit_commands_button.clicked.connect(self.switch_to_edit_commands_page)
+
         self.commands_back_button = QPushButton("Save")
         self.commands_back_button.clicked.connect(self.leave_commands_page)
 
@@ -1069,6 +1075,10 @@ class ServerManagerApp(QMainWindow):
         hor_box = QHBoxLayout()
         hor_box.addWidget(self.simulation_distance_label)
         hor_box.addWidget(self.simulation_distance_textbox)
+        # center_layout.addLayout(hor_box)
+        # hor_box = QHBoxLayout()
+        # hor_box.addWidget(edit_commands_label)
+        # hor_box.addWidget(edit_commands_button)
         center_layout.addLayout(hor_box)
         center_layout.addWidget(self.commands_warning_label, alignment=Qt.AlignmentFlag.AlignCenter)
         hor_box = QHBoxLayout()
@@ -1174,6 +1184,10 @@ class ServerManagerApp(QMainWindow):
 
         update_page = QWidget()
         update_page.setLayout(update_layout)
+
+        # Page 13: Custom Commands List
+
+        page_layout = QVBoxLayout()
 
         #----------------------------------------------------
 
@@ -1507,12 +1521,11 @@ class ServerManagerApp(QMainWindow):
                 
                 time.sleep(1)
         
-        t_stamp = self.timestamp()
         self.log_queue.put(f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
-        self.tell(client, f"{t_stamp} You have joined the room!")
+        self.tell(client, f"You have joined the room!")
         for send_client, _ in self.clients.items():
             if send_client is not client:
-                self.tell(send_client, f"{t_stamp} <font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
+                self.tell(send_client, f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
         
         self.delay(1)
 
@@ -1628,12 +1641,12 @@ class ServerManagerApp(QMainWindow):
             try:
                 if owner:
                     if client is owner:
-                        self.tell(client, f'{self.timestamp()} <font color="green">You: {message}</font>')
+                        self.tell(client, f'<font color="green">You: {message}</font>')
                     else:
-                        self.tell(client, f'{self.timestamp()} <font color="#5050de">{self.clients[owner]}: {message}</font>')
+                        self.tell(client, f'<font color="#5050de">{self.clients[owner]}: {message}</font>')
                 else:
                     if admin_message:
-                        self.tell(client, f"{self.timestamp()} {message}")
+                        self.tell(client, message)
                     else:
                         self.tell(client, message)
             except Exception as e:
@@ -1781,7 +1794,7 @@ class ServerManagerApp(QMainWindow):
                 waited += 1
             self.get_status_signal.emit()
             self.log_queue.put(f"Server world '{self.world}' has been started.")
-            self.broadcast(f"{self.timestamp()} Server world '{self.world}' has been started.")
+            self.broadcast(f"Server world '{self.world}' has been started.")
             self.send_data("start", "refresh")
         else:
             self.shutdown_bus()
@@ -1793,7 +1806,7 @@ class ServerManagerApp(QMainWindow):
         self.shutdown_bus()
         self.get_status_signal.emit()
         self.log_queue.put(f"Server has been stopped.")
-        self.broadcast(f"{self.timestamp()} Server has been stopped.")
+        self.broadcast(f"Server has been stopped.")
         self.send_data("stop", "refresh")
         if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
             try:
@@ -2014,7 +2027,7 @@ class ServerManagerApp(QMainWindow):
                             if self.supervisor_connector.loading_complete.is_set():
                                 self._poll_timer.stop()
                                 self.log_queue.put(f"Server world '{world}' has been started.")
-                                self.broadcast(f"{self.timestamp()} Server world '{world}' has been started.")
+                                self.broadcast(f"Server world '{world}' has been started.")
                                 self.send_data("start", "refresh")
                                 self.get_status_signal.emit()
                                 self._state = ""
@@ -2127,7 +2140,7 @@ class ServerManagerApp(QMainWindow):
             self.get_status_signal.emit()
         
         self.log_queue.put(f"Server has been stopped.")
-        self.broadcast(f"{self.timestamp()} Server has been stopped.")
+        self.broadcast(f"Server has been stopped.")
         self.send_data("stop", "refresh")
         self.waiting_for_server_shutdown.clear()
 
