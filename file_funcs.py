@@ -38,7 +38,6 @@ def load_commands(file_lock):
             with open(COMMANDS, 'w') as f:
                 json.dump(data, f, indent=4)
     
-    print(data["commands"])
     return data["commands"]
 
 def save_custom_commands(custom_commands: dict, file_lock):

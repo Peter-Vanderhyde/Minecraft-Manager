@@ -248,8 +248,6 @@ class Supervisor:
                         args = match.group("args")
                         args = args.strip() if args else None
 
-                        print(player, command, args)
-
                         if command == "help":
                             if len(self.custom_commands) > 0:
                                 self.send_server_cmd("tellraw " + player + ' {"text": "Custom Commands:", "color": "yellow"}')
@@ -302,11 +300,9 @@ class Supervisor:
             self._client = None
     
     def run_custom_command(self, player, command, args):
-        print("running", player, command)
         commands = self.custom_commands.get(command, [])
         for c in commands:
             c = c.replace("PLAYER", player)
-            print(c, args)
             self.send_server_cmd(f"{c}{f' {args}' if args else ''}")
 
     async def turn_off_feedback(self, turn_back_on=None):
@@ -631,7 +627,6 @@ class SupervisorConnector:
                     if not self.spooling_up.is_set() and not self.loading_complete.is_set() and not self.loading_chunks.is_set():
                         self.spooling_up.set()
                     self.log_output_queue.put([msg.get("msg")])
-                    # print(msg.get("msg"))
                 elif msg.get("type") == "logs_list":
                     self.log_output_queue.put(msg.get("logs"))
                 elif msg.get("type") == "closing_server" and self.closing_server.is_set():
