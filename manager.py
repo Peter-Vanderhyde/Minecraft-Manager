@@ -13,9 +13,9 @@ from queries import latest_app_info
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
-from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl
+from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl, QCoreApplication
 
-VERSION = "v2.10.6"
+VERSION = "v2.10.7"
 DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"
@@ -645,10 +645,10 @@ class ServerManagerApp(QMainWindow):
         buttons_layout = QVBoxLayout()
         buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
-        download_button = QPushButton("Download Latest Version")
-        download_button.setObjectName("blueButton")
-        download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(latest_app_info()[2])))
+        download_button = QPushButton("Download and Install Latest Version")
+        download_button.clicked.connect(self.download_and_install)
         open_url_button = QPushButton("View Github Releases Page")
+        open_url_button.setObjectName("blueButton")
         open_url_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         back_button = QPushButton("Back")
         back_button.setObjectName("stopButton")
@@ -1384,6 +1384,67 @@ class ServerManagerApp(QMainWindow):
         self.switch_to_mode_page()
         self.server_name_prompt.setText("")
         self.ip_address_prompt.setText("")
+    
+    def download_and_install(self):
+        """Downloads the latest installer from GitHub and executes it with elevated privileges."""
+        QApplication.processEvents()
+        
+        try:
+            # 1. Fetch release info from your existing queries module
+            self.stacked_layout.setCurrentIndex(self.last_page_index)
+            version_name, tag_version, link = latest_app_info()
+            
+            if not link or tag_version == VERSION:
+                return
+
+            QApplication.processEvents()
+
+            import urllib.request
+            import ctypes
+            
+            # Determine extension types and map paths explicitly
+            installer_ext = ".msi" if link.lower().endswith(".msi") else ".exe"
+            temp_installer = Path(os.environ.get("TEMP", BASE_DIR)) / f"manager_upgrade{installer_ext}"
+
+            # 2. Download the installation asset to the system temporary directory
+            urllib.request.urlretrieve(link, temp_installer)
+            QMessageBox(QMessageBox.Icon.NoIcon, "Restarting", "Restarting the application...").exec()
+            QApplication.processEvents()
+            self.delay(1)
+
+            # 3. Configure runtime execution parameters based on file types
+            if installer_ext == ".msi":
+                cmd = "msiexec.exe"
+                # /i = install, /qb = basic passive UI, /l*v = absolute log layout path
+                params = f'/i "{temp_installer}" /qb'
+            else:
+                cmd = str(temp_installer)
+                # Standard silent parameters and explicit absolute log writing path
+                params = f'/SILENT'
+
+            QApplication.processEvents()
+
+            # 4. Prompt for Administrator authorization using the Win32 API
+            # Forcing str(BASE_DIR) here prevents the System32 directory workspace override bug.
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None,           
+                "runas",        # Triggers the Windows Administrator UAC prompt
+                cmd,            
+                params,         
+                str(BASE_DIR),  # FORCED Working Directory (Fixes path and logging failure)
+                1               # SW_SHOWNORMAL display flag
+            )
+
+            # Return handles above 32 confirm execution success
+            if result > 32:
+                # Shutdown GUI context cleanly to clear file locks instantly
+                QCoreApplication.quit()
+                sys.exit(0)
+            else:
+                return
+
+        except Exception as e:
+            QMessageBox.critical(self, "Failed to Update", f"Failed to update and restart the application: {str(e)}", QMessageBox.StandardButton.Ok)
     
     def closeEvent(self, event):
         try:

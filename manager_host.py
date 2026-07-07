@@ -15,7 +15,7 @@ from pyperclip import copy
 from PIL import Image
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent
-from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint
+from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint, QCoreApplication
 
 import queries
 import file_funcs
@@ -23,7 +23,7 @@ import websock_mgmt
 import html
 import supervisor
 
-VERSION = "v2.10.6"
+VERSION = "v2.10.7"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -1155,10 +1155,10 @@ class ServerManagerApp(QMainWindow):
         buttons_layout = QVBoxLayout()
         buttons_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom)
 
-        download_button = QPushButton("Download Latest Version")
-        download_button.setObjectName("blueButton")
-        download_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(queries.latest_app_info()[2])))
+        download_button = QPushButton("Download and Install Latest Version")
+        download_button.clicked.connect(self.download_and_install)
         open_url_button = QPushButton("View Github Releases Page")
+        open_url_button.setObjectName("blueButton")
         open_url_button.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases/")))
         back_button = QPushButton("Back")
         back_button.setObjectName("redButton")
@@ -3456,7 +3456,82 @@ class ServerManagerApp(QMainWindow):
     def update_stats(self, stats: dict):
         self.total_mem_label.setText("Total RAM being used: " + str(round(stats.get("used_percent"), 1)) + "%")
         self.server_mem_label.setText("Server memory usage: " + str(round(stats.get("server_percent"), 1)) + "%")
+    
+    def download_and_install(self):
+        """Downloads the latest installer from GitHub and executes it with elevated privileges."""
+        QApplication.processEvents()
+        
+        try:
+            # 1. Fetch release info from your existing queries module
+            self.stacked_layout.setCurrentIndex(self.last_page_index)
+            version_name, tag_version, link = queries.latest_app_info()
+            
+            if not link:
+                self.log_queue.put("<font color='red'>Error: No download link found for the update.</font>")
+                return
+                
+            if tag_version == VERSION:
+                self.log_queue.put("You are already running the latest version.")
+                return
 
+            self.log_queue.put(f"Downloading update: {version_name}...")
+            QApplication.processEvents()
+
+            import urllib.request
+            import ctypes
+            
+            # Determine extension types and map paths explicitly
+            installer_ext = ".msi" if link.lower().endswith(".msi") else ".exe"
+            temp_installer = Path(os.environ.get("TEMP", BASE_DIR)) / f"manager_upgrade{installer_ext}"
+            log_file_path = BASE_DIR / "log.txt"
+
+            # 2. Download the installation asset to the system temporary directory
+            urllib.request.urlretrieve(link, temp_installer)
+            self.log_queue.put("Download complete.<br>")
+            self.log_queue.put("RESTARTING...")
+            QApplication.processEvents()
+            self.delay(1)
+
+            # 3. Configure runtime execution parameters based on file types
+            if installer_ext == ".msi":
+                cmd = "msiexec.exe"
+                # /i = install, /qb = basic passive UI, /l*v = absolute log layout path
+                params = f'/i "{temp_installer}" /qb'
+            else:
+                cmd = str(temp_installer)
+                # Standard silent parameters and explicit absolute log writing path
+                params = f'/SILENT'
+
+            QApplication.processEvents()
+
+            # Clean up running dependencies to release file locks
+            try:
+                self.close_supervisor_server("immediate")
+            except Exception:
+                pass
+
+            # 4. Prompt for Administrator authorization using the Win32 API
+            # Forcing str(BASE_DIR) here prevents the System32 directory workspace override bug.
+            result = ctypes.windll.shell32.ShellExecuteW(
+                None,           
+                "runas",        # Triggers the Windows Administrator UAC prompt
+                cmd,            
+                params,         
+                str(BASE_DIR),  # FORCED Working Directory (Fixes path and logging failure)
+                1               # SW_SHOWNORMAL display flag
+            )
+
+            # Return handles above 32 confirm execution success
+            if result > 32:
+                # Shutdown GUI context cleanly to clear file locks instantly
+                QCoreApplication.quit()
+                sys.exit(0)
+            else:
+                self.log_queue.put(f"<font color='red'>UAC elevation denied. (Error Code: {result})</font>")
+
+        except Exception as e:
+            self.log_queue.put(f"<font color='red'>Auto-update failed: {str(e)}</font>")
+    
     def close_manager(self):
         if self.query_status()[0] == "online":
             self.status = "bypass"
