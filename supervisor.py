@@ -142,6 +142,7 @@ class Supervisor:
             )
         
         self.icon.menu = self.menu()
+        self.custom_commands = load_commands(self._data_lock)
     
     def _mc_is_alive(self):
         return self._mc_server and self._mc_server.poll() is None
@@ -252,11 +253,14 @@ class Supervisor:
                             if len(self.custom_commands) > 0:
                                 self.send_server_cmd("tellraw " + player + ' {"text": "Custom Commands:", "color": "yellow"}')
                                 self.send_server_cmd("tellraw " + player + ' {"text": "!help", "color": "yellow"}')
+                                self.send_server_cmd("tellraw " + player + ' {"text": "!reload_commands", "color": "yellow"}')
                                 for name in self.custom_commands:
                                     self.send_server_cmd("tellraw " + player + ' {"text": "!' + name + '", "color": "yellow"}')
                             else:
                                 self.send_server_cmd("tellraw " + player + ' {"text": "There are no custom commands saved.", "color":"yellow"}')
-
+                        elif command == "reload_commands":
+                            self.custom_commands = load_commands(self._data_lock)
+                            self.send_server_cmd("tellraw " + player + ' {"text": "Reloaded ' + str(len(self.custom_commands)) + ' custom commands.", "color": "yellow"}')
                         else:
                             self.run_custom_command(player, command, args)
                     

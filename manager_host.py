@@ -2596,57 +2596,68 @@ class ServerManagerApp(QMainWindow):
     def transfer_world(self, world, client: socket.socket):
         try:
             self.log_queue.put(f"{self.clients.get(client)} initiated a world transfer for {world}.")
-            world_path = self.path(self.server_path, "worlds", world)
-            total_files = 0
-            for _, _, names in os.walk(world_path):
-                total_files += len(names)
-
-            def progress_func(progress: int, file: str):
-                self.send_data("transfer-progress", [progress, file], client)
             
+            # 1. Zip the world to a temporary location first (Extremely fast)
+            self.log_queue.put("Archiving world files...")
+            world_path = Path(self.server_path) / "worlds" / world
+            temp_zip_dir = Path(os.environ.get("TEMP", "."))
+            archive_path = shutil.make_archive(str(temp_zip_dir / f"tmp_{world}"), 'zip', world_path)
+
+            # Using stat().st_size forces 64-bit precision tracking on modern operating systems
+            total_bytes = int(Path(archive_path).stat().st_size)
+
             class TransferSocket:
                 def __init__(self, host_ip):
-                    self.host_ip = host_ip
-                    self.transfer_client = None
                     self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     self.sock.bind((host_ip, 0))
                     self.port = self.sock.getsockname()[1]
+                    self.transfer_client = None
                 
                 def waitfor(self, client_ip):
                     self.sock.listen(1)
                     while True:
                         client, address = self.sock.accept()
-                        if address[0] != client_ip:
-                            client.close()
-                            continue
+                        if address[0] == client_ip:
+                            self.transfer_client = client
+                            break
+                        client.close()
 
-                        self.transfer_client = client
-                        break
-                
-                def write(self, data):
-                    try:
-                        self.transfer_client.sendall(data)
-                        return len(data)
-                    except:
-                        raise RuntimeError("Transfer cancelled")
-                
-                def flush(self):
-                    pass
-                
-                def end_transfer(self):
-                    self.transfer_client.shutdown(socket.SHUT_WR)
-            
             transfer_sock = TransferSocket(self.host_ip)
-            self.send_data("starting-transfer", [total_files, world, transfer_sock.port], client)
+            # Pass total_bytes instead of total_files
+            self.send_data("starting-transfer", [total_bytes, world, transfer_sock.port], client)
             transfer_sock.waitfor(client.getpeername()[0])
 
-            saved_as = self.backup_world(world_path, progress_function=progress_func, socket_writer=transfer_sock)
-            if not saved_as:
-                transfer_sock.end_transfer()
-                self.send_data("cancelled-transfer", world, client)
-            else:
-                self.send_data("transfer-complete", world, client)
+            # 2. Stream the single zip file in large chunks (64KB - 256KB)
+            bytes_sent = 0
+            last_progress_time = 0
+            
+            with open(archive_path, 'rb') as f:
+                while True:
+                    chunk = f.read(128 * 1024) # 128KB chunks
+                    if not chunk:
+                        break
+                    transfer_sock.transfer_client.sendall(chunk)
+                    bytes_sent += len(chunk)
+
+                    # 3. Throttle progress updates so we don't spam the network
+                    import time
+                    current_time = time.time()
+                    if current_time - last_progress_time > 0.2: # Max 5 updates per second
+                        self.send_data("transfer-progress", [bytes_sent, world], client)
+                        last_progress_time = current_time
+
+            # Clean up the temporary zip archive
+            try:
+                os.remove(archive_path)
+            except:
+                pass
+
+            self.send_data("transfer-complete", world, client)
+            transfer_sock.transfer_client.close()
+
         except Exception as e:
+            if 'archive_path' in locals() and os.path.exists(archive_path):
+                os.remove(archive_path)
             raise e
         
     

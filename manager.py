@@ -932,9 +932,9 @@ class ServerManagerApp(QMainWindow):
                                 size, world = args
                                 self.download_query_signal.emit(size, world)
                             elif key == "starting-transfer":
-                                total_files, world, transfer_port = args
+                                total_bytes, world, transfer_port = args
                                 self.setup_world_transfer_signal.emit()
-                                self.progress_range_signal.emit(0, total_files)
+                                self.progress_range_signal.emit(0, total_bytes)
                                 self.progress_set_signal.emit(0)
 
                                 def write_zip(client: socket.socket):
