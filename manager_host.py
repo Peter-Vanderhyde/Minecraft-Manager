@@ -2612,6 +2612,7 @@ class ServerManagerApp(QMainWindow):
             success = file_funcs.backup_world(world_path, archive_path, self, prog_update)
             if not success:
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
+                self.send_data("cancelled-transfer", world, client)
                 return False
 
             # Using stat().st_size forces 64-bit precision tracking on modern operating systems
