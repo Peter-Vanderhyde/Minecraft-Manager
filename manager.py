@@ -62,6 +62,8 @@ class ConnectionWorker(QObject):
                 time.sleep(0.1)
             else:
                 self.connection_failure.emit()
+        except:
+            self.connection_failure.emit()
 
 class StatusWorker(QObject):
     manager_status_result = pyqtSignal(bool)
