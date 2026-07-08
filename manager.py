@@ -254,7 +254,7 @@ class ServerManagerApp(QMainWindow):
     download_complete_signal = pyqtSignal()
     log_message_signal = pyqtSignal(str)
     download_query_signal = pyqtSignal(int, str)
-    setup_world_transfer_signal = pyqtSignal()
+    setup_world_transfer_signal = pyqtSignal(str)
     download_cancelled_signal = pyqtSignal()
 
     def __init__(self):
@@ -933,15 +933,12 @@ class ServerManagerApp(QMainWindow):
                                 self.download_query_signal.emit(size, world)
                             elif key == "zipping-world":
                                 total_files = args[0]
-                                self.setup_world_transfer_signal.emit()
-                                self.downloads_message.setText("Zipping world folder...")
-                                self.cancel_download_button.hide()
+                                self.setup_world_transfer_signal.emit("zipping")
                                 self.progress_range_signal.emit(0, total_files)
                                 self.progress_set_signal.emit(0)
-                                self.download_message_signal.emit("")
                             elif key == "starting-transfer":
                                 total_bytes, world, transfer_port = args
-                                self.setup_world_transfer_signal.emit()
+                                self.setup_world_transfer_signal.emit("downloading")
                                 self.progress_range_signal.emit(0, total_bytes)
                                 self.progress_set_signal.emit(0)
 
@@ -1218,14 +1215,20 @@ class ServerManagerApp(QMainWindow):
             self.download_file_label.setText("")
             self.send_request(f"download-mods,{self.dropdown.currentText()}")
     
-    def download_world_setup(self):
+    def download_world_setup(self, mode="downloading"):
         self.cancelled_download.clear()
         self.switch_to_download_page()
-        self.downloads_message.setText("Downloading World...")
+        if mode == "zipping":
+            self.downloads_message.setText("Zipping world folder...")
+        else:
+            self.downloads_message.setText("Downloading World...")
         self.download_file_label.setText("")
         self.mods_download_path = None
         self.download_button.hide()
-        self.cancel_download_button.show()
+        if mode == "zipping":
+            self.cancel_download_button.hide()
+        else:
+            self.cancel_download_button.show()
         self.download_progress.show()
     
     def download_complete(self):
