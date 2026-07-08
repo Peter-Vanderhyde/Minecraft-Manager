@@ -787,13 +787,13 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
         total_files += len(files)
     
     dialog_box = QProgressDialog(
-        ("Backing up world..." if not socket_writer else "Transferring world..."),
+        ("Backing up world..." if not progress_function else "Transferring world..."),
         "Cancel",
         0,
         total_files,
         parent
     )
-    dialog_box.setWindowTitle("World Backup" if not socket_writer else "World Transfer")
+    dialog_box.setWindowTitle("World Backup" if not progress_function else "Preparing World Transfer")
     dialog_box.setMinimumDuration(500)
     dialog_box.setStyleSheet("""
                              QLabel {

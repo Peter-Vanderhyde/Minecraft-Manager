@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
 from PIL import Image
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox, QProgressDialog
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint, QCoreApplication
 
@@ -2639,6 +2639,21 @@ class ServerManagerApp(QMainWindow):
             self.send_data("starting-transfer", [total_bytes, world, transfer_sock.port], client)
             transfer_sock.waitfor(client.getpeername()[0])
 
+            dialog_box = QProgressDialog(
+                f"Transferring {world}...",
+                "Cancel",
+                0,
+                total_bytes,
+                self  # Assuming 'self' is the parent QWidget. 
+            )
+            dialog_box.setWindowTitle("World Transfer")
+            dialog_box.setMinimumDuration(500)
+            dialog_box.setStyleSheet("""
+                QLabel { color: green; }
+                QPushButton { color: lightcoral; background-color: darkred; }
+            """)
+            dialog_box.setModal(True)
+
             # 2. Stream the single zip file in large chunks (64KB - 256KB)
             bytes_sent = 0
             last_progress_time = 0
@@ -2646,11 +2661,18 @@ class ServerManagerApp(QMainWindow):
             try:
                 with open(archive_path, 'rb') as f:
                     while True:
+                        if dialog_box.wasCanceled():
+                            dialog_box.setCancelButton(None)
+                            dialog_box.setLabelText("Cancelling...")
+                            raise InterruptedError("Transfer cancelled by host")
+                        
                         chunk = f.read(128 * 1024) # 128KB chunks
                         if not chunk:
                             break
                         transfer_sock.transfer_client.sendall(chunk)
                         bytes_sent += len(chunk)
+                        
+                        dialog_box.setValue(bytes_sent)
                         QApplication.processEvents()
 
                         # 3. Throttle progress updates so we don't spam the network
@@ -2662,7 +2684,11 @@ class ServerManagerApp(QMainWindow):
                 self.send_data("transfer-complete", world, client)
                 self.log_queue.put("<font color='green'>Transfer complete!</font>")
             
-            except (ConnectionResetError, BrokenPipeError) as e:
+            except InterruptedError:
+                self.send_data("cancelled-transfer", world, client)
+                self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
+            except (ConnectionResetError, BrokenPipeError):
+                dialog_box.cancel()
                 self.send_data("cancelled-transfer", world, client)
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
             finally:

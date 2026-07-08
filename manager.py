@@ -953,7 +953,8 @@ class ServerManagerApp(QMainWindow):
                                                     break
                                                 zf.write(data)
                                         success = True
-                                    except:
+                                    except Exception as e:
+                                        print(e)
                                         if os.path.exists(save_path):
                                             os.remove(save_path)
                                     finally:
