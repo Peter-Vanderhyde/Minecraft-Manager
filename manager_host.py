@@ -2598,10 +2598,16 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"{self.clients.get(client)} initiated a world transfer for {world}.")
             
             # 1. Zip the world to a temporary location first (Extremely fast)
-            self.log_queue.put("Archiving world files...")
+            self.log_queue.put("Zipping world files...")
+            self.send_data("zipping-world", [])
             world_path = Path(self.server_path) / "worlds" / world
             temp_zip_dir = Path(os.environ.get("TEMP", "."))
-            archive_path = shutil.make_archive(str(temp_zip_dir / f"tmp_{world}"), 'zip', world_path)
+            # archive_path = shutil.make_archive(str(temp_zip_dir / f"tmp_{world}"), 'zip', world_path)
+            archive_path = str(temp_zip_dir / f"tmp_{world}.zip")
+            success = file_funcs.backup_world(world_path, archive_path, self)
+            if not success:
+                self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
+                return False
 
             # Using stat().st_size forces 64-bit precision tracking on modern operating systems
             total_bytes = int(Path(archive_path).stat().st_size)
@@ -2631,29 +2637,34 @@ class ServerManagerApp(QMainWindow):
             bytes_sent = 0
             last_progress_time = 0
             
-            with open(archive_path, 'rb') as f:
-                while True:
-                    chunk = f.read(128 * 1024) # 128KB chunks
-                    if not chunk:
-                        break
-                    transfer_sock.transfer_client.sendall(chunk)
-                    bytes_sent += len(chunk)
-
-                    # 3. Throttle progress updates so we don't spam the network
-                    import time
-                    current_time = time.time()
-                    if current_time - last_progress_time > 0.2: # Max 5 updates per second
-                        self.send_data("transfer-progress", [bytes_sent, world], client)
-                        last_progress_time = current_time
-
-            # Clean up the temporary zip archive
             try:
-                os.remove(archive_path)
-            except:
-                pass
+                with open(archive_path, 'rb') as f:
+                    while True:
+                        chunk = f.read(128 * 1024) # 128KB chunks
+                        if not chunk:
+                            break
+                        transfer_sock.transfer_client.sendall(chunk)
+                        bytes_sent += len(chunk)
+
+                        # 3. Throttle progress updates so we don't spam the network
+                        import time
+                        current_time = time.time()
+                        if current_time - last_progress_time > 0.2: # Max 5 updates per second
+                            self.send_data("transfer-progress", [bytes_sent, world], client)
+                            last_progress_time = current_time
+            
+            except (ConnectionResetError, BrokenPipeError):
+                self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
+            finally:
+            # Clean up the temporary zip archive
+                try:
+                    os.remove(archive_path)
+                except:
+                    pass
+                transfer_sock.transfer_client.close()
+
 
             self.send_data("transfer-complete", world, client)
-            transfer_sock.transfer_client.close()
 
         except Exception as e:
             if 'archive_path' in locals() and os.path.exists(archive_path):
