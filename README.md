@@ -47,6 +47,15 @@ The host has the ability to
 - The host and clients automatically receive updates when players join and leave the server without having to refresh.
 - The host can click player's names in the list to perform specific actions on them such as whitelisting, kicking, banning, or op-ing.
 
+### Custom Commands
+The host also has the ability to create custom commands that can be run on the server. The manager has a `Custom Commands` button. This opens a new page that allows setting commands that will execute any specified Minecraft commands on the server.  
+
+![Custom Commands](Images/custom_commands.png)
+
+Commands are run in the Minecraft chat by preceeding the command with `!`. Any chat message preceeded by an exclamation mark is checked to see if it is a saved custom command (such as typing `!my_command` in chat). Typing `PLAYER` in a command will replace that word in the command with the name of the player who typed the command.  
+There are a couple default commands:
+- `!help` - This will list all of the custom commands available in the player's chat.
+- `!reload_commands` - This will reload the commands file to update any changes immediately.
 
 ### Extra Features
 For all versions starting at snapshot 25w35a (1.21.9), servers provide an API to receive notifications from the server, and also to send commands to the server. This means there are more features available for those worlds.

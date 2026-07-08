@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl, QCoreApplication
 
-VERSION = "v2.10.7"
+VERSION = "v2.10.8"
 DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"

@@ -765,22 +765,21 @@ def get_disk_space(path):
     usage = shutil.disk_usage(os.path.dirname(path))
     return usage.free
 
-def backup_world(world_folder_path, backup_zip_path, parent, progress_function=None, socket_writer=None):
-    if not socket_writer:
-        os.makedirs(os.path.dirname(backup_zip_path), exist_ok=True)
-        # World folder size
-        total_size = get_total_size(world_folder_path)
-        free_bytes = get_disk_space(backup_zip_path)
+def backup_world(world_folder_path, backup_zip_path, parent, progress_function=None):
+    os.makedirs(os.path.dirname(backup_zip_path), exist_ok=True)
+    # World folder size
+    total_size = get_total_size(world_folder_path)
+    free_bytes = get_disk_space(backup_zip_path)
 
-        if total_size >= free_bytes:
-            box = QMessageBox(parent)
-            box.setWindowTitle("Low Disk Space")
-            box.setText(f"Not enough disk space!<br>{os.path.basename(world_folder_path)} folder is {format_size(total_size)}.")
-            box.setIcon(QMessageBox.Icon.Critical)
-            box.setStandardButtons(QMessageBox.StandardButton.Close)
-            box.setStyleSheet("QLabel { color: red; }")
-            box.exec()
-            return False
+    if total_size >= free_bytes:
+        box = QMessageBox(parent)
+        box.setWindowTitle("Low Disk Space")
+        box.setText(f"Not enough disk space!<br>{os.path.basename(world_folder_path)} folder is {format_size(total_size)}.")
+        box.setIcon(QMessageBox.Icon.Critical)
+        box.setStandardButtons(QMessageBox.StandardButton.Close)
+        box.setStyleSheet("QLabel { color: red; }")
+        box.exec()
+        return False
 
     total_files = 0
     for _, _, files in os.walk(world_folder_path):
@@ -808,7 +807,7 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
     processed = 0
     last_updated = time.time()
     try:
-        with zipfile.ZipFile((socket_writer if socket_writer else backup_zip_path), "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        with zipfile.ZipFile(backup_zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
             for root, _, files in os.walk(world_folder_path):
                 for name in files:
                     dialog_box.setLabelText("Copying files...<br>" + name)
@@ -831,11 +830,9 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
                         last_updated = time.time()
                         progress_function(processed, name)
         
-        if socket_writer:
-            socket_writer.end_transfer()
         return True
     except RuntimeError:
-        if not socket_writer and os.path.exists(backup_zip_path):
+        if os.path.exists(backup_zip_path):
             os.remove(backup_zip_path)
         
         return False
