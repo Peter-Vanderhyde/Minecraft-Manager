@@ -805,7 +805,15 @@ class ServerManagerApp(QMainWindow):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client.connect((self.host_ip, self.port))
         self.client.sendall("connection request".encode("utf-8"))
-        accepted = self.client.recv(1024).decode("utf-8")
+        try:
+            accepted = self.client.recv(1024).decode("utf-8")
+        except:
+            try:
+                self.client.close()
+            except:
+                pass
+            self.on_connection_failure()
+            accepted = None
         if accepted == "accept" or accepted == "identify":
             self.client.setblocking(False)
             self.receive_thread = threading.Thread(target=self.receive)
