@@ -2599,12 +2599,14 @@ class ServerManagerApp(QMainWindow):
             
             # 1. Zip the world to a temporary location first (Extremely fast)
             self.log_queue.put("Zipping world files...")
-            self.send_data("zipping-world", [])
+            self.send_data("zipping-world", [], client)
             world_path = Path(self.server_path) / "worlds" / world
             temp_zip_dir = Path(os.environ.get("TEMP", "."))
             # archive_path = shutil.make_archive(str(temp_zip_dir / f"tmp_{world}"), 'zip', world_path)
             archive_path = str(temp_zip_dir / f"tmp_{world}.zip")
-            success = file_funcs.backup_world(world_path, archive_path, self)
+            def prog_update(progress, total_files, name):
+                self.send_data("zipping-world", [progress, total_files], client)
+            success = file_funcs.backup_world(world_path, archive_path, self, prog_update)
             if not success:
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
                 return False
@@ -2630,6 +2632,7 @@ class ServerManagerApp(QMainWindow):
 
             transfer_sock = TransferSocket(self.host_ip)
             # Pass total_bytes instead of total_files
+            self.log_queue.put("Transferring world...")
             self.send_data("starting-transfer", [total_bytes, world, transfer_sock.port], client)
             transfer_sock.waitfor(client.getpeername()[0])
 
@@ -2645,15 +2648,18 @@ class ServerManagerApp(QMainWindow):
                             break
                         transfer_sock.transfer_client.sendall(chunk)
                         bytes_sent += len(chunk)
+                        QApplication.processEvents()
 
                         # 3. Throttle progress updates so we don't spam the network
-                        import time
                         current_time = time.time()
                         if current_time - last_progress_time > 0.2: # Max 5 updates per second
                             self.send_data("transfer-progress", [bytes_sent, world], client)
                             last_progress_time = current_time
+                
+                self.send_data("transfer-complete", world, client)
             
             except (ConnectionResetError, BrokenPipeError):
+                self.send_data("cancelled-transfer", world, client)
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
             finally:
             # Clean up the temporary zip archive
@@ -2662,9 +2668,6 @@ class ServerManagerApp(QMainWindow):
                 except:
                     pass
                 transfer_sock.transfer_client.close()
-
-
-            self.send_data("transfer-complete", world, client)
 
         except Exception as e:
             if 'archive_path' in locals() and os.path.exists(archive_path):

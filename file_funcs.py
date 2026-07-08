@@ -829,7 +829,7 @@ def backup_world(world_folder_path, backup_zip_path, parent, progress_function=N
                     dialog_box.setValue(processed)
                     if progress_function and time.time() - last_updated >= 0.1:
                         last_updated = time.time()
-                        progress_function(processed, name)
+                        progress_function(processed, total_files, name)
         
         if socket_writer:
             socket_writer.end_transfer()

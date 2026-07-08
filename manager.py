@@ -932,8 +932,9 @@ class ServerManagerApp(QMainWindow):
                                 size, world = args
                                 self.download_query_signal.emit(size, world)
                             elif key == "zipping-world":
+                                progress, total_files = args
                                 self.setup_world_transfer_signal.emit()
-                                self.progress_range_signal.emit(0, 100)
+                                self.progress_range_signal.emit(progress, total_files)
                                 self.progress_set_signal.emit(0)
                                 self.download_message_signal.emit("Zipping world folder...")
                             elif key == "starting-transfer":
