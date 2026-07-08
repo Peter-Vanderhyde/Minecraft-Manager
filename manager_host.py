@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
 from PIL import Image
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox, QProgressDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox, QProgressDialog, QInputDialog
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint, QCoreApplication
 
@@ -129,6 +129,8 @@ class ServerManagerApp(QMainWindow):
         self.no_clients = True
         self.stop_threads = threading.Event()
         self.file_lock = threading.Lock()
+
+        self.custom_commands = file_funcs.load_commands(self.file_lock)
 
         # Signals
         self.get_status_signal.connect(self.get_status)
@@ -380,6 +382,8 @@ class ServerManagerApp(QMainWindow):
         self.world_manager_button.clicked.connect(self.show_world_manager_page)
         self.commands_button = QPushButton("Admin Settings")
         self.commands_button.clicked.connect(self.show_commands_page)
+        self.custom_commands_button = QPushButton("Custom Commands")
+        self.custom_commands_button.clicked.connect(self.show_custom_commands_page)
         self.open_folder_button = QPushButton("Server Folder")
         self.open_folder_button.clicked.connect(self.open_server_folder)
         self.change_folder = QPushButton("Change Folder")
@@ -409,8 +413,9 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(separator2, 6, 0, 1, 2)
         functions_layout.addWidget(self.world_manager_button, 7, 0, 1, 2)
         functions_layout.addWidget(self.commands_button, 8, 0, 1, 2)
-        functions_layout.addWidget(self.open_folder_button, 9, 0, 1, 2)
-        functions_layout.addWidget(self.change_folder, 10, 0, 1, 2)
+        functions_layout.addWidget(self.custom_commands_button, 9, 0, 1, 2)
+        functions_layout.addWidget(self.open_folder_button, 10, 0, 1, 2)
+        functions_layout.addWidget(self.change_folder, 11, 0, 1, 2)
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
 
         right_column_layout.addLayout(functions_layout)
@@ -1186,8 +1191,98 @@ class ServerManagerApp(QMainWindow):
         update_page.setLayout(update_layout)
 
         # Page 13: Custom Commands List
+        custom_commands_layout = QVBoxLayout()
+        
+        cc_title = QLabel("Custom Commands")
+        cc_title.setObjectName("largeText")
+        cc_title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        custom_commands_layout.addWidget(cc_title)
 
-        page_layout = QVBoxLayout()
+        cc_content_layout = QHBoxLayout()
+
+        # --- Shared Stylesheet for Custom Command Lists ---
+        list_stylesheet = """
+            QListWidget {
+                font-size: 14px; /* Makes the text easier to read */
+                border: 1px solid #555; /* Gives the box a distinct edge */
+                border-radius: 4px;
+            }
+            QListWidget::item {
+                padding: 10px 5px; /* Adds vertical space, making them taller and easier to click */
+                border-bottom: 1px solid #333; /* Adds a line between each item */
+            }
+            QListWidget::item:selected {
+                background-color: #0078d7; /* Gives a clear, strong color when selected */
+                color: white;
+            }
+        """
+
+        # --- Left Side: Commands List ---
+        cc_left_layout = QVBoxLayout()
+        cc_left_layout.addWidget(QLabel("Commands:"))
+        self.cc_cmd_list = QListWidget()
+        # self.cc_cmd_list.setAlternatingRowColors(True) # Adds zebra-striping
+        self.cc_cmd_list.setStyleSheet(list_stylesheet)
+        self.cc_cmd_list.currentItemChanged.connect(self.on_custom_command_selected)
+        cc_left_layout.addWidget(self.cc_cmd_list)
+
+        cc_left_btns = QHBoxLayout()
+        self.cc_add_cmd_btn = QPushButton("Add")
+        self.cc_add_cmd_btn.clicked.connect(self.add_custom_command)
+        self.cc_ren_cmd_btn = QPushButton("Rename")
+        self.cc_ren_cmd_btn.clicked.connect(self.rename_custom_command)
+        self.cc_del_cmd_btn = QPushButton("Delete")
+        self.cc_del_cmd_btn.setObjectName("redButton")
+        self.cc_del_cmd_btn.clicked.connect(self.delete_custom_command)
+        
+        cc_left_btns.addWidget(self.cc_add_cmd_btn)
+        cc_left_btns.addWidget(self.cc_ren_cmd_btn)
+        cc_left_btns.addWidget(self.cc_del_cmd_btn)
+        cc_left_layout.addLayout(cc_left_btns)
+
+        # --- Right Side: Executed Commands List ---
+        cc_right_layout = QVBoxLayout()
+        cc_right_layout.addWidget(QLabel("Executed Commands:"))
+        self.cc_step_list = QListWidget()
+        # self.cc_step_list.setAlternatingRowColors(True) # Adds zebra-striping
+        self.cc_step_list.setStyleSheet(list_stylesheet)
+        cc_right_layout.addWidget(self.cc_step_list)
+
+        cc_right_btns = QHBoxLayout()
+        self.cc_add_step_btn = QPushButton("Add Line")
+        self.cc_add_step_btn.clicked.connect(self.add_custom_command_step)
+        self.cc_edit_step_btn = QPushButton("Edit Line")
+        self.cc_edit_step_btn.clicked.connect(self.edit_custom_command_step)
+        self.cc_del_step_btn = QPushButton("Delete Line")
+        self.cc_del_step_btn.setObjectName("redButton")
+        self.cc_del_step_btn.clicked.connect(self.delete_custom_command_step)
+        
+        cc_right_btns.addWidget(self.cc_add_step_btn)
+        cc_right_btns.addWidget(self.cc_edit_step_btn)
+        cc_right_btns.addWidget(self.cc_del_step_btn)
+        cc_right_layout.addLayout(cc_right_btns)
+
+        cc_content_layout.addLayout(cc_left_layout, 1)
+        cc_content_layout.addLayout(cc_right_layout, 2)
+        custom_commands_layout.addLayout(cc_content_layout, 1)
+
+        # --- Bottom: Save/Cancel ---
+        cc_bottom_btns = QHBoxLayout()
+        self.cc_save_btn = QPushButton("Save")
+        self.cc_save_btn.clicked.connect(self.save_custom_commands)
+        self.cc_cancel_btn = QPushButton("Cancel")
+        self.cc_cancel_btn.setObjectName("redButton")
+        self.cc_cancel_btn.clicked.connect(self.cancel_custom_commands)
+        
+        cc_bottom_btns.addStretch(1)
+        cc_bottom_btns.addWidget(self.cc_save_btn)
+        cc_bottom_btns.addWidget(self.cc_cancel_btn)
+        cc_bottom_btns.addStretch(1)
+        
+        custom_commands_layout.addLayout(cc_bottom_btns)
+
+        custom_commands_page = QWidget()
+        custom_commands_page.setLayout(custom_commands_layout)
 
         #----------------------------------------------------
 
@@ -1203,6 +1298,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(commands_page_layout)
         self.stacked_layout.addWidget(mods_page)
         self.stacked_layout.addWidget(update_page)
+        self.stacked_layout.addWidget(custom_commands_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1428,6 +1524,22 @@ class ServerManagerApp(QMainWindow):
         if self.stacked_layout.currentIndex() != 11:
             self.last_page_index = self.stacked_layout.currentIndex()
         self.stacked_layout.setCurrentIndex(11)
+    
+    def show_custom_commands_page(self):
+        self.custom_commands = file_funcs.load_commands(self.file_lock)
+        
+        self.cc_cmd_list.clear()
+        self.cc_step_list.clear()
+        
+        for cmd in self.custom_commands.keys():
+            if cmd not in ["help", "reload_commands"]:
+                self.cc_cmd_list.addItem(cmd)
+        
+        if self.cc_cmd_list.count() > 0:
+            self.cc_cmd_list.setCurrentRow(0)
+        
+        # Set index to the Custom Commands page (ensure 12 matches the order added to stacked_layout)
+        self.stacked_layout.setCurrentIndex(12)
     
     def save_properties_edit(self):
         world = self.dropdown.currentText()
@@ -3594,6 +3706,112 @@ class ServerManagerApp(QMainWindow):
 
         except Exception as e:
             self.log_queue.put(f"<font color='red'>Auto-update failed: {str(e)}</font>")
+    
+    def on_custom_command_selected(self, current, previous):
+        self.cc_step_list.clear()
+        if current is not None:
+            cmd_name = current.text()
+            steps = self.custom_commands.get(cmd_name, [])
+            self.cc_step_list.addItems(steps)
+    
+    def add_custom_command(self):
+        name, ok = QInputDialog.getText(self, "Add Command", "Enter new custom command name:")
+        if ok and name:
+            name = name.strip()
+            if name in self.custom_commands or name in ["help", "reload_commands"]:
+                QMessageBox.warning(self, "Error", "Command already exists or is reserved.")
+                return
+            self.custom_commands[name] = []
+            self.cc_cmd_list.addItem(name)
+            self.cc_cmd_list.setCurrentRow(self.cc_cmd_list.count() - 1)
+    
+    def rename_custom_command(self):
+        current_item = self.cc_cmd_list.currentItem()
+        if current_item:
+            old_name = current_item.text()
+            new_name, ok = QInputDialog.getText(self, "Rename Command", "Enter new name:", text=old_name)
+            if ok and new_name and new_name != old_name:
+                new_name = new_name.strip()
+                if new_name in self.custom_commands or new_name in ["help", "reload_commands"]:
+                    QMessageBox.warning(self, "Error", "Command name already exists or is reserved.")
+                    return
+                # Transfer data and update UI
+                self.custom_commands[new_name] = self.custom_commands.pop(old_name)
+                current_item.setText(new_name)
+    
+    def delete_custom_command(self):
+        current_item = self.cc_cmd_list.currentItem()
+        if current_item:
+            name = current_item.text()
+            confirm = QMessageBox.question(self, "Confirm Delete", f"Delete command '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if confirm == QMessageBox.StandardButton.Yes:
+                self.custom_commands.pop(name, None)
+                self.cc_cmd_list.takeItem(self.cc_cmd_list.row(current_item))
+                self.cc_step_list.clear()
+
+    def add_custom_command_step(self):
+        current_cmd = self.cc_cmd_list.currentItem()
+        if current_cmd:
+            cmd_name = current_cmd.text()
+            
+            # Create the dialog object manually instead of using getText()
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Add Executed Command")
+            dialog.setLabelText("Enter the command to execute:")
+            dialog.resize(600, 150) # <-- Makes the dialog significantly wider
+            
+            # Show the dialog and check if the user clicked "OK"
+            if dialog.exec():
+                step = dialog.textValue()
+                if step:
+                    self.custom_commands[cmd_name].append(step)
+                    self.cc_step_list.addItem(step)
+
+    def edit_custom_command_step(self):
+        current_cmd = self.cc_cmd_list.currentItem()
+        current_step_item = self.cc_step_list.currentItem()
+        
+        if current_cmd and current_step_item:
+            cmd_name = current_cmd.text()
+            row = self.cc_step_list.row(current_step_item)
+            old_step = current_step_item.text()
+            
+            # Create the dialog object manually
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Edit Executed Command")
+            dialog.setLabelText("Edit the command:")
+            dialog.setTextValue(old_step) # Pre-fill the existing command
+            dialog.resize(600, 150) # <-- Makes the dialog significantly wider
+            
+            # Show the dialog and check if the user clicked "OK"
+            if dialog.exec():
+                new_step = dialog.textValue()
+                if new_step:
+                    self.custom_commands[cmd_name][row] = new_step
+                    current_step_item.setText(new_step)
+
+    def delete_custom_command_step(self):
+        current_cmd = self.cc_cmd_list.currentItem()
+        current_step_item = self.cc_step_list.currentItem()
+        
+        if current_cmd and current_step_item:
+            cmd_name = current_cmd.text()
+            row = self.cc_step_list.row(current_step_item)
+            
+            self.custom_commands[cmd_name].pop(row)
+            self.cc_step_list.takeItem(row)
+
+    def save_custom_commands(self):
+        file_funcs.save_custom_commands(self.custom_commands, self.file_lock)
+        self.log_queue.put("<font color='green'>Custom commands saved.</font>")
+            
+        # Tell supervisor to reload commands
+        self.supervisor_send({"type": "reload_commands"})
+        self.show_main_page(True)
+    
+    def cancel_custom_commands(self):
+        self.custom_commands = file_funcs.load_commands(self.file_lock)
+        self.show_main_page(True)
     
     def close_manager(self):
         if self.query_status()[0] == "online":

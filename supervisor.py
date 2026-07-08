@@ -437,6 +437,9 @@ class Supervisor:
                 elif msg.get("type") == "get_logs":
                     async with self._log_lock:
                         await self.send_to_client({"type": "logs_list", "logs": self._logs})
+                elif msg.get("type") == "reload_commands":
+                    self.custom_commands = load_commands(self._data_lock)
+                    self.send_server_cmd('tellraw @a {"text": "Reloaded ' + str(len(self.custom_commands)) + ' custom commands.", "color": "yellow"}')
         except (websockets.ConnectionClosedOK, websockets.ConnectionClosedError, websockets.ConnectionClosed) as e:
             return
 
