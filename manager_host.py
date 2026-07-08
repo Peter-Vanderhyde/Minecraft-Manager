@@ -2655,32 +2655,40 @@ class ServerManagerApp(QMainWindow):
             """)
             dialog_box.setModal(True)
 
-            # 2. Stream the single zip file in large chunks (64KB - 256KB)
+            # 2. Stream using OS-level zero-copy (sendfile) in 2MB chunks
             bytes_sent = 0
             last_progress_time = 0
+            chunk_size = 2 * 1024 * 1024  # 2 MB chunks for optimal network pipeline
             
             try:
                 with open(archive_path, 'rb') as f:
-                    while True:
+                    while bytes_sent < total_bytes:
                         if dialog_box.wasCanceled():
                             dialog_box.setCancelButton(None)
                             dialog_box.setLabelText("Cancelling...")
                             raise InterruptedError("Transfer cancelled by host")
                         
-                        chunk = f.read(1024 * 1024) # 1MB chunks
-                        if not chunk:
-                            break
-                        transfer_sock.transfer_client.sendall(chunk)
-                        bytes_sent += len(chunk)
+                        # sendfile() passes the file descriptor directly to the OS kernel.
+                        # It returns the actual number of bytes sent.
+                        sent = transfer_sock.transfer_client.sendfile(f, offset=bytes_sent, count=chunk_size)
                         
-
-                        # 3. Throttle progress updates so we don't spam the network
+                        if sent == 0:
+                            break  # EOF or connection closed abruptly
+                        
+                        bytes_sent += sent
+                        
+                        # Throttle UI and Network updates to keep the event loop fast
                         current_time = time.time()
-                        if current_time - last_progress_time > 0.2: # Max 5 updates per second
-                            self.send_data("transfer-progress", [bytes_sent, world], client)
-                            last_progress_time = current_time
+                        if current_time - last_progress_time > 0.2:  # Max 10 updates per second
                             dialog_box.setValue(bytes_sent)
                             QApplication.processEvents()
+                            
+                            self.send_data("transfer-progress", [bytes_sent, world], client)
+                            last_progress_time = current_time
+                    
+                    # Ensure the progress bar hits exactly 100% at the end
+                    dialog_box.setValue(total_bytes)
+                    QApplication.processEvents()
                 
                 self.send_data("transfer-complete", world, client)
                 self.log_queue.put("<font color='green'>Transfer complete!</font>")
