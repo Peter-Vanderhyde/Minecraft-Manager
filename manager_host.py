@@ -1605,6 +1605,7 @@ class ServerManagerApp(QMainWindow):
                                 continue
 
                             size = file_funcs.get_total_size(os.path.join(self.server_path, "worlds", args[0]))
+                            size_mb = size // (1024 * 1024)
                             self.send_data("world-size", [size, args[0]], client)
                         elif request == "begin-world-transfer":
                             world = args[0]

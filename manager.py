@@ -954,7 +954,6 @@ class ServerManagerApp(QMainWindow):
                                                 zf.write(data)
                                         success = True
                                     except Exception as e:
-                                        print(e)
                                         if os.path.exists(save_path):
                                             os.remove(save_path)
                                     finally:
@@ -1288,6 +1287,7 @@ class ServerManagerApp(QMainWindow):
             self.close()
     
     def download_question_dialog(self, size, world):
+        size = size * 1024 * 1024
         box = QMessageBox(self)
         box.setWindowTitle("World Download")
         box.setText(f"The uncompressed {world} world is {file_funcs.format_size(size)}.<br>Are you sure you want to download it?")
