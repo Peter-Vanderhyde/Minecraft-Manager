@@ -2667,20 +2667,20 @@ class ServerManagerApp(QMainWindow):
                             dialog_box.setLabelText("Cancelling...")
                             raise InterruptedError("Transfer cancelled by host")
                         
-                        chunk = f.read(128 * 1024) # 128KB chunks
+                        chunk = f.read(1024 * 1024) # 1MB chunks
                         if not chunk:
                             break
                         transfer_sock.transfer_client.sendall(chunk)
                         bytes_sent += len(chunk)
                         
-                        dialog_box.setValue(bytes_sent)
-                        QApplication.processEvents()
 
                         # 3. Throttle progress updates so we don't spam the network
                         current_time = time.time()
                         if current_time - last_progress_time > 0.2: # Max 5 updates per second
                             self.send_data("transfer-progress", [bytes_sent, world], client)
                             last_progress_time = current_time
+                            dialog_box.setValue(bytes_sent)
+                            QApplication.processEvents()
                 
                 self.send_data("transfer-complete", world, client)
                 self.log_queue.put("<font color='green'>Transfer complete!</font>")
@@ -2701,7 +2701,7 @@ class ServerManagerApp(QMainWindow):
         except Exception as e:
             if 'archive_path' in locals() and os.path.exists(archive_path):
                 os.remove(archive_path)
-            raise e
+            self.log_queue.put(f"<font color='red'>Transfer error: {str(e)}</font>")
         
     
     def add_existing_world(self, update=False):
