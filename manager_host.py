@@ -2599,13 +2599,16 @@ class ServerManagerApp(QMainWindow):
             
             # 1. Zip the world to a temporary location first (Extremely fast)
             self.log_queue.put("Zipping world files...")
-            self.send_data("zipping-world", [], client)
             world_path = Path(self.server_path) / "worlds" / world
             temp_zip_dir = Path(os.environ.get("TEMP", "."))
             # archive_path = shutil.make_archive(str(temp_zip_dir / f"tmp_{world}"), 'zip', world_path)
             archive_path = str(temp_zip_dir / f"tmp_{world}.zip")
+            total_files = 0
+            for _, _, files in os.walk(world_path):
+                total_files += len(files)
+            self.send_data("zipping-world", [total_files], client)
             def prog_update(progress, total_files, name):
-                self.send_data("zipping-world", [progress, total_files], client)
+                self.send_data("transfer-progress", [progress, "Zipping world folder..."], client)
             success = file_funcs.backup_world(world_path, archive_path, self, prog_update)
             if not success:
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
@@ -2658,15 +2661,13 @@ class ServerManagerApp(QMainWindow):
                 
                 self.send_data("transfer-complete", world, client)
             
-            except (ConnectionResetError, BrokenPipeError):
+            except (ConnectionResetError, BrokenPipeError) as e:
                 self.send_data("cancelled-transfer", world, client)
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
             finally:
             # Clean up the temporary zip archive
-                try:
+                if 'archive_path' in locals() and os.path.exists(archive_path):
                     os.remove(archive_path)
-                except:
-                    pass
                 transfer_sock.transfer_client.close()
 
         except Exception as e:
