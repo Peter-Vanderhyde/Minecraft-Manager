@@ -934,9 +934,11 @@ class ServerManagerApp(QMainWindow):
                             elif key == "zipping-world":
                                 total_files = args[0]
                                 self.setup_world_transfer_signal.emit()
+                                self.downloads_message.setText("Zipping world folder...")
+                                self.cancel_download_button.hide()
                                 self.progress_range_signal.emit(0, total_files)
                                 self.progress_set_signal.emit(0)
-                                self.download_message_signal.emit("Zipping world folder...")
+                                self.download_message_signal.emit("")
                             elif key == "starting-transfer":
                                 total_bytes, world, transfer_port = args
                                 self.setup_world_transfer_signal.emit()
@@ -979,6 +981,8 @@ class ServerManagerApp(QMainWindow):
                                 world = args[0]
                                 self.download_cancelled_signal.emit()
                                 self.log_queue.put(f"{self.timestamp()} <font color='red'>Transfer of {world} was cancelled.</font>")
+                                if os.path.exists(str(self.world_transfer_location) + f"/{world}.zip"):
+                                    os.remove(str(self.world_transfer_location) + f"/{world}.zip")
                             elif key == "downloadable-world":
                                 world, download_enabled = args
                                 if world == self.dropdown.currentText():

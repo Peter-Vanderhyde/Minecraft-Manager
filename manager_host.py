@@ -2607,8 +2607,8 @@ class ServerManagerApp(QMainWindow):
             for _, _, files in os.walk(world_path):
                 total_files += len(files)
             self.send_data("zipping-world", [total_files], client)
-            def prog_update(progress, total_files, name):
-                self.send_data("transfer-progress", [progress, "Zipping world folder..."], client)
+            def prog_update(progress, name):
+                self.send_data("transfer-progress", [progress, name], client)
             success = file_funcs.backup_world(world_path, archive_path, self, prog_update)
             if not success:
                 self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
@@ -2660,6 +2660,7 @@ class ServerManagerApp(QMainWindow):
                             last_progress_time = current_time
                 
                 self.send_data("transfer-complete", world, client)
+                self.log_queue.put("<font color='green'>Transfer complete!</font>")
             
             except (ConnectionResetError, BrokenPipeError) as e:
                 self.send_data("cancelled-transfer", world, client)
