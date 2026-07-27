@@ -2686,20 +2686,21 @@ class ServerManagerApp(QMainWindow):
                     self.show_main_page()
                     self.delay(0.5)
                     new_path = f"{new_path}({str(index)}).zip"
-                    if not file_funcs.backup_world(world_path, new_path, self, progress_function, socket_writer):
+                    if not file_funcs.backup_world(world_path, new_path, self, progress_function):
                         self.log_queue.put(f"<font color='red'>Cancelled {"transfer" if streaming else "backup"} of '{os.path.basename(world_path)}'.</font>")
                         return False
                 else:
                     self.log_queue.put(f"<font color='green'>Copying files. Please wait...</font>")
                     self.show_main_page()
                     self.delay(0.5)
-                    if not file_funcs.backup_world(world_path, new_path, self, progress_function, socket_writer):
+                    if not file_funcs.backup_world(world_path, new_path, self, progress_function):
                         self.log_queue.put(f"<font color='red'>Cancelled {"transfer" if streaming else "backup"} of '{os.path.basename(world_path)}'.</font>")
                         return False
                 
                 self.log_queue.put(f"<font color='green'>{"Completed transfer of" if streaming else "Saved backup of"} '{os.path.basename(world_path)}'.</font>")
                 return new_path
             except Exception as e:
+                print(e)
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to {"transfer" if streaming else "backup"} world folder.</font>")
                 if streaming:
                     return False
