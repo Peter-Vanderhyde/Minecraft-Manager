@@ -695,6 +695,7 @@ class ServerManagerApp(QMainWindow):
 
         self.add_world_label = QLabel("")
         self.add_world_label.setObjectName("largeTitle")
+        self.add_world_label.setFont(self.title_font)
         self.new_world_name_edit = QLineEdit("")
         self.new_world_name_edit.setObjectName("lineEdit")
         self.new_world_name_edit.setPlaceholderText("World Name")
@@ -854,6 +855,7 @@ class ServerManagerApp(QMainWindow):
 
         remove_world_label = QLabel("Remove World")
         remove_world_label.setObjectName("largeText")
+        remove_world_label.setFont(self.title_font)
         temp_box1 = QHBoxLayout()
         world_label = QLabel("World Name: ")
         world_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -906,6 +908,7 @@ class ServerManagerApp(QMainWindow):
 
         self.title_label = QLabel("Example Properties")
         self.title_label.setObjectName("largeText")
+        self.title_label.setFont(self.title_font)
         self.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         self.edit_box = QPlainTextEdit("This is placeholder.")
         font = self.edit_box.font()
@@ -996,6 +999,7 @@ class ServerManagerApp(QMainWindow):
 
         self.commands_label = QLabel("Admin Settings")
         self.commands_label.setObjectName("largeText")
+        self.commands_label.setFont(self.title_font)
         # stretch here
         self.commands_warning_label = QLabel("Any changes will require a<br>server restart to take effect.")
         self.commands_warning_label.setObjectName("details")
@@ -1051,11 +1055,6 @@ class ServerManagerApp(QMainWindow):
             self.simulation_distance_textbox.text() if self.simulation_distance_textbox.text().isdigit() else self.simulation_distance_textbox.text()[:-1]
         ))
 
-        # edit_commands_label = QLabel("Custom Server Commands: ")
-        # edit_commands_label.setObjectName("optionText")
-        # edit_commands_button = QPushButton("Edit")
-        # edit_commands_button.clicked.connect(self.switch_to_edit_commands_page)
-
         self.commands_back_button = QPushButton("Save")
         self.commands_back_button.clicked.connect(self.leave_commands_page)
 
@@ -1080,10 +1079,6 @@ class ServerManagerApp(QMainWindow):
         hor_box = QHBoxLayout()
         hor_box.addWidget(self.simulation_distance_label)
         hor_box.addWidget(self.simulation_distance_textbox)
-        # center_layout.addLayout(hor_box)
-        # hor_box = QHBoxLayout()
-        # hor_box.addWidget(edit_commands_label)
-        # hor_box.addWidget(edit_commands_button)
         center_layout.addLayout(hor_box)
         center_layout.addWidget(self.commands_warning_label, alignment=Qt.AlignmentFlag.AlignCenter)
         hor_box = QHBoxLayout()
@@ -1195,6 +1190,7 @@ class ServerManagerApp(QMainWindow):
         
         cc_title = QLabel("Custom Commands")
         cc_title.setObjectName("largeText")
+        cc_title.setFont(self.title_font)
         cc_title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         custom_commands_layout.addWidget(cc_title)
 
@@ -1584,7 +1580,6 @@ class ServerManagerApp(QMainWindow):
                 client, address = self.server.accept()
                 intention = client.recv(1024).decode("utf-8")
                 if intention == "connection request":
-                    print("ACCEPTING")
                     client_thread = threading.Thread(target=self.handle_client, args=(client, address))
                     handlers.append(client_thread)
                     client_thread.start()
@@ -1605,7 +1600,6 @@ class ServerManagerApp(QMainWindow):
         if self.ips.get(ip) is not None:
             self.clients[client] = self.ips.get(ip)
             client.sendall("accept".encode("utf-8"))
-            print("ACCEPTED")
         else:
             # Get display name
             client.sendall("identify".encode("utf-8"))
@@ -1637,29 +1631,23 @@ class ServerManagerApp(QMainWindow):
         
         self.log_queue.put(f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
         self.tell(client, f"You have joined the room!")
-        print("TOLD")
         for send_client, _ in self.clients.items():
             if send_client is not client:
                 self.tell(send_client, f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
-                print("TELLING")
         
         self.delay(1)
 
         while not self.stop_threads.is_set() and not skip_receive:
-            print("ENTERED")
             try:
                 new_message = client.recv(1024).decode('utf-8')
                 if not new_message:
-                    print("BREAKING")
                     break
-                print(new_message)
 
                 messages += new_message.split("CLIENT-MESSAGE~~>")[1:]
 
                 if "CLOSING" in messages:
                     break
                 while len(messages) != 0:
-                    print(message)
                     message = messages.pop(0)
                     if message == "":
                         continue
@@ -1699,22 +1687,18 @@ class ServerManagerApp(QMainWindow):
                             self.tell(client, "You are using an outdated client version. You can find the latest release at https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases.")
                         elif request == "check-resources":
                             resource_path = self.path(self.server_path, "worlds", args[0], "client resources")
-                            print(1)
-                            if os.path.isdir(self.path(self.server_path, "worlds", args[0], "client mods")):
+                            if os.path.exists(self.path(self.server_path, "worlds", args[0], "client mods")):
                                 old_path = self.path(self.server_path, "worlds", args[0], "client mods")
                                 shutil.copytree(old_path, resource_path)
                                 shutil.rmtree(old_path, ignore_errors=True)
                             
-                            print(2)
-                            if os.path.isdir(resource_path):
-                                    valid_extensions = [".jar", ".zip"]
+                            if os.path.exists(resource_path):
+                                    valid_extensions = (".jar", ".zip")
                                     files = [f for f in glob.glob(self.path(resource_path, "*")) if os.path.isfile(f) and f.endswith(valid_extensions)]
                                     available = len(files) > 0
-                                    print("AVAILABLE RESOURCES:", available)
                                     self.send_data("available-resources", [args[0], available], client)
                             else:
                                 self.send_data("available-resources", [args[0], False], client)
-                            print(3)
                         elif request == "download-resources":
                             world = args[0]
                             resource_path = self.path(self.server_path, "worlds", args[0], "client resources")
@@ -1724,7 +1708,7 @@ class ServerManagerApp(QMainWindow):
                                 shutil.rmtree(old_path, ignore_errors=True)
                             
                             if os.path.isdir(resource_path):
-                                valid_extensions = [".jar", ".zip"]
+                                valid_extensions = (".jar", ".zip")
                                 files = [f for f in glob.glob(self.path(resource_path, "*")) if os.path.isfile(f) and f.endswith(valid_extensions)]
                                 total_size = sum(os.path.getsize(file) for file in files)
                                 for i, file in enumerate(files):
@@ -1754,8 +1738,10 @@ class ServerManagerApp(QMainWindow):
                 if e.errno == 10035: # Non blocking socket error
                     pass
                 else:
+                    print(e)
                     break
             except Exception as e:
+                print(e)
                 break
 
             time.sleep(0.5)
@@ -3160,6 +3146,7 @@ class ServerManagerApp(QMainWindow):
                         if os.path.exists(self.path(world_folder, "client mods")):
                             shutil.copytree(self.path(world_folder, "client mods"), self.path(world_folder, "client resources"))
                             shutil.rmtree(self.path(world_folder, "client mods"))
+                        os.mkdir(self.path(world_folder, "client resources"))
                 else:
                     if not os.path.exists(self.path(world_folder, "mods")):
                         os.mkdir(self.path(world_folder, "mods"))
@@ -3170,7 +3157,8 @@ class ServerManagerApp(QMainWindow):
                 else:
                     os.mkdir(self.path(world_folder, "mods"))
 
-            file_funcs.open_folder_explorer(self.path(world_folder, "client resources" if client_folder else "mods"))
+            folder_path = self.path(world_folder, "client resources" if client_folder else "mods")
+            file_funcs.open_folder_explorer(folder_path)
             self.show_main_page(ignore_load=True)
     
     def toggle_whitelist(self):

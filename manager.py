@@ -612,6 +612,11 @@ class ServerManagerApp(QMainWindow):
 
         page_label = QLabel("Server Selection")
         page_label.setObjectName("mediumText")
+        self.title_font = page_label.font()
+        self.title_font.setFamily("Courier New")
+        self.title_font.setPointSize(int(self.title_font.pointSize() * 2.5))
+        self.title_font.setBold(True)
+        page_label.setFont(self.title_font)
 
         h_box = QHBoxLayout()
         host_button = QPushButton("Host")
@@ -858,7 +863,6 @@ class ServerManagerApp(QMainWindow):
                     chunk = self.client.recv(4096)
                 if not chunk:
                     self.close_threads.set()
-                    print("B")
                     break
                 buf.extend(chunk)
 
@@ -902,7 +906,6 @@ class ServerManagerApp(QMainWindow):
                     if text.startswith("DATA-RETURN"):
                         data = text.split('~~>')
                         key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
-                        print(key, args)
                         
                         if key == "sending-file":
                             filename, filesize, current_index, num_of_resources, total_file_sizes = args
@@ -936,7 +939,6 @@ class ServerManagerApp(QMainWindow):
                             elif key in ["start", "stop"] and args == ["refresh"]:
                                 self.get_status_signal.emit()
                             elif key == "available-resources":
-                                print(args[0], args[1])
                                 if args[0] == self.selected_dropdown_text and args[1] == True:
                                     self.enable_resources_button_signal.emit()
                             elif key == "file-transfer-complete":
@@ -1007,10 +1009,8 @@ class ServerManagerApp(QMainWindow):
                     time.sleep(0.1)
                 else:
                     self.close_threads.set()
-                    print("C")
                     break
             except Exception as e:
-                print(e)
                 if self.file:
                     try:
                         self.file.close()
@@ -1018,7 +1018,6 @@ class ServerManagerApp(QMainWindow):
                         pass
                     self.file = None
                 self.close_threads.set()
-                print("D")
                 break
         
         if expecting_file and self.file:
@@ -1086,6 +1085,7 @@ class ServerManagerApp(QMainWindow):
     
     def switch_to_mode_page(self):
         self.connecting_label.setText("Connecting...")
+        self.connecting_label.setObjectName("ConnectingText")
         self.go_back_button.hide()
         for label in self.connection_delabels:
             label.setText("")

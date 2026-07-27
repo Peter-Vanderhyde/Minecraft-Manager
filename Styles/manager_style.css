@@ -129,7 +129,10 @@ QCheckBox {
 }
                
 #connectingText {
-    color: #ffffff;
+    color: #4285f4;
+    background-color: rgba(25, 25, 25, 150);
+    border-radius: 5%;
+    padding: 2;
     font-size: 28px;
 }
 
