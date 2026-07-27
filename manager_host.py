@@ -23,7 +23,7 @@ import websock_mgmt
 import html
 import supervisor
 
-VERSION = "v2.10.8"
+VERSION = "v2.10.9"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -368,7 +368,7 @@ class ServerManagerApp(QMainWindow):
 
         self.world_properties_button = QPushButton("Properties")
         self.world_properties_button.clicked.connect(self.show_edit_properties_page)
-        self.world_mods_button = QPushButton("Mods")
+        self.world_mods_button = QPushButton("Resources")
         self.world_mods_button.clicked.connect(self.show_mods_page)
         self.modrinth_button = QPushButton("Modrinth")
         self.modrinth_button.setObjectName("blueButton")
@@ -1116,12 +1116,12 @@ class ServerManagerApp(QMainWindow):
 
         server_mods_button = HoverButton("Server Mods")
         server_mods_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        server_mods_button.clicked.connect(self.open_mods_folder)
+        server_mods_button.clicked.connect(self.open_resources_folder)
         server_mods_button.changeHovering.connect(lambda hovering: hover_label.setText("Server-side mods being run by the server" if hovering else ""))
-        client_mods_button = HoverButton("Client Mods")
-        client_mods_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
-        client_mods_button.clicked.connect(lambda: self.open_mods_folder(client_folder=True))
-        client_mods_button.changeHovering.connect(lambda hovering: hover_label.setText("Mods in this folder can be downloaded by clients to use" if hovering else ""))
+        client_resources_button = HoverButton("Client Resources")
+        client_resources_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        client_resources_button.clicked.connect(lambda: self.open_resources_folder(client_folder=True))
+        client_resources_button.changeHovering.connect(lambda hovering: hover_label.setText("Resources in this folder can be downloaded by clients to use" if hovering else ""))
         cancel_mods_button = QPushButton("Back")
         cancel_mods_button.setObjectName("smallRedButton")
         cancel_mods_button.clicked.connect(self.show_main_page)
@@ -1131,7 +1131,7 @@ class ServerManagerApp(QMainWindow):
         hover_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         center_layout.addWidget(server_mods_button, alignment=Qt.AlignmentFlag.AlignHCenter)
-        center_layout.addWidget(client_mods_button, alignment=Qt.AlignmentFlag.AlignHCenter)
+        center_layout.addWidget(client_resources_button, alignment=Qt.AlignmentFlag.AlignHCenter)
         center_layout.addWidget(hover_label)
         back_layout = QHBoxLayout()
         back_layout.addStretch(1)
@@ -1584,6 +1584,7 @@ class ServerManagerApp(QMainWindow):
                 client, address = self.server.accept()
                 intention = client.recv(1024).decode("utf-8")
                 if intention == "connection request":
+                    print("ACCEPTING")
                     client_thread = threading.Thread(target=self.handle_client, args=(client, address))
                     handlers.append(client_thread)
                     client_thread.start()
@@ -1597,13 +1598,14 @@ class ServerManagerApp(QMainWindow):
         for thread in handlers:
             thread.join()
     
-    def handle_client(self, client, address):
+    def handle_client(self, client: socket.socket, address):
         skip_receive = False
         messages = []
         ip, port = address
         if self.ips.get(ip) is not None:
             self.clients[client] = self.ips.get(ip)
             client.sendall("accept".encode("utf-8"))
+            print("ACCEPTED")
         else:
             # Get display name
             client.sendall("identify".encode("utf-8"))
@@ -1635,23 +1637,29 @@ class ServerManagerApp(QMainWindow):
         
         self.log_queue.put(f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
         self.tell(client, f"You have joined the room!")
+        print("TOLD")
         for send_client, _ in self.clients.items():
             if send_client is not client:
                 self.tell(send_client, f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
+                print("TELLING")
         
         self.delay(1)
 
         while not self.stop_threads.is_set() and not skip_receive:
+            print("ENTERED")
             try:
                 new_message = client.recv(1024).decode('utf-8')
                 if not new_message:
+                    print("BREAKING")
                     break
+                print(new_message)
 
                 messages += new_message.split("CLIENT-MESSAGE~~>")[1:]
 
                 if "CLOSING" in messages:
                     break
                 while len(messages) != 0:
+                    print(message)
                     message = messages.pop(0)
                     if message == "":
                         continue
@@ -1689,20 +1697,36 @@ class ServerManagerApp(QMainWindow):
                         elif request == "restart-server":
                             self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds in the current version.</font>")
                             self.tell(client, "You are using an outdated client version. You can find the latest release at https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases.")
-                        elif request == "check-mods":
-                            folder_path = self.path(self.server_path, "worlds", args[0], "client mods")
-                            if os.path.isdir(folder_path) and len(glob.glob(self.path(folder_path, "*.jar"))) > 0:
-                                    self.send_data("available-mods", [args[0], True], client)
+                        elif request == "check-resources":
+                            resource_path = self.path(self.server_path, "worlds", args[0], "client resources")
+                            print(1)
+                            if os.path.isdir(self.path(self.server_path, "worlds", args[0], "client mods")):
+                                old_path = self.path(self.server_path, "worlds", args[0], "client mods")
+                                shutil.copytree(old_path, resource_path)
+                                shutil.rmtree(old_path, ignore_errors=True)
+                            
+                            print(2)
+                            if os.path.isdir(resource_path):
+                                    valid_extensions = [".jar", ".zip"]
+                                    files = [f for f in glob.glob(self.path(resource_path, "*")) if os.path.isfile(f) and f.endswith(valid_extensions)]
+                                    available = len(files) > 0
+                                    print("AVAILABLE RESOURCES:", available)
+                                    self.send_data("available-resources", [args[0], available], client)
                             else:
-                                self.send_data("available-mods", [args[0], False], client)
-                        elif request == "download-mods":
+                                self.send_data("available-resources", [args[0], False], client)
+                            print(3)
+                        elif request == "download-resources":
                             world = args[0]
-                            folder_path = self.path(self.server_path, "worlds", world, "client mods")
-                            if os.path.isdir(folder_path):
-                                files = glob.glob(self.path(folder_path, "*.jar"))
-                                total_size = 0
-                                for file in files:
-                                    total_size += os.path.getsize(file)
+                            resource_path = self.path(self.server_path, "worlds", args[0], "client resources")
+                            if os.path.isdir(self.path(self.server_path, "worlds", args[0], "client mods")):
+                                old_path = self.path(self.server_path, "worlds", args[0], "client mods")
+                                shutil.copytree(old_path, resource_path)
+                                shutil.rmtree(old_path, ignore_errors=True)
+                            
+                            if os.path.isdir(resource_path):
+                                valid_extensions = [".jar", ".zip"]
+                                files = [f for f in glob.glob(self.path(resource_path, "*")) if os.path.isfile(f) and f.endswith(valid_extensions)]
+                                total_size = sum(os.path.getsize(file) for file in files)
                                 for i, file in enumerate(files):
                                     filesize = os.path.getsize(file)
                                     filename = os.path.basename(file)
@@ -3126,25 +3150,27 @@ class ServerManagerApp(QMainWindow):
         
         file_funcs.open_file(self.path(self.server_path, "worlds", world, "saved_properties.properties"))
     
-    def open_mods_folder(self, client_folder=False):
+    def open_resources_folder(self, client_folder=False):
         world = self.dropdown.currentText()
         if world and self.worlds[world].get("fabric"):
             world_folder = self.path(self.server_path, "worlds", world)
             if os.path.exists(world_folder):
                 if client_folder:
-                    if not os.path.exists(self.path(world_folder, "client mods")):
-                        os.mkdir(self.path(world_folder, "client mods"))
+                    if not os.path.exists(self.path(world_folder, "client resources")):
+                        if os.path.exists(self.path(world_folder, "client mods")):
+                            shutil.copytree(self.path(world_folder, "client mods"), self.path(world_folder, "client resources"))
+                            shutil.rmtree(self.path(world_folder, "client mods"))
                 else:
                     if not os.path.exists(self.path(world_folder, "mods")):
                         os.mkdir(self.path(world_folder, "mods"))
             else:
                 os.mkdir(world_folder)
                 if client_folder:
-                    os.mkdir(self.path(world_folder, "client mods"))
+                    os.mkdir(self.path(world_folder, "client resources"))
                 else:
                     os.mkdir(self.path(world_folder, "mods"))
 
-            file_funcs.open_folder_explorer(self.path(world_folder, "client mods" if client_folder else "mods"))
+            file_funcs.open_folder_explorer(self.path(world_folder, "client resources" if client_folder else "mods"))
             self.show_main_page(ignore_load=True)
     
     def toggle_whitelist(self):

@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl, QCoreApplication
 
-VERSION = "v2.10.8"
+VERSION = "v2.10.9"
 DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"
@@ -252,7 +252,7 @@ class ServerManagerApp(QMainWindow):
     progress_set_signal = pyqtSignal(int)
     progress_range_signal = pyqtSignal(int, int)
     download_message_signal = pyqtSignal(str)
-    enable_mods_button_signal = pyqtSignal()
+    enable_resources_button_signal = pyqtSignal()
     download_complete_signal = pyqtSignal()
     log_message_signal = pyqtSignal(str)
     download_query_signal = pyqtSignal(int, str)
@@ -274,7 +274,7 @@ class ServerManagerApp(QMainWindow):
         self.status = ""
         self.server_version = ""
         self.worlds = {}
-        self.mods_download_path: Path | None = None
+        self.resources_download_path: Path | None = None
         self.saved_servers: list = file_funcs.load_saved_servers(queue.Queue(), threading.Lock())
         self.last_page_index = 0
         self.log_queue = queue.Queue()
@@ -295,7 +295,7 @@ class ServerManagerApp(QMainWindow):
         self.progress_set_signal.connect(self.set_progress_value)
         self.progress_range_signal.connect(self.set_progress_range)
         self.download_message_signal.connect(self.set_download_message_text)
-        self.enable_mods_button_signal.connect(self.enable_mods_button)
+        self.enable_resources_button_signal.connect(self.enable_resources_button)
         self.download_complete_signal.connect(self.download_complete)
         self.log_message_signal.connect(self.log_queue.put)
         self.download_query_signal.connect(self.download_question_dialog)
@@ -492,11 +492,11 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.clicked.connect(self.stop_server)
         self.stop_button.setObjectName("stopButton")
 
-        self.mods_download_button = QPushButton("Download\nMods")
-        self.mods_download_button.setObjectName("blueButton")
-        self.mods_download_button.clicked.connect(self.switch_to_download_page)
-        self.mods_download_button.hide()
-        self.mods_download_button.setDisabled(True)
+        self.resources_download_button = QPushButton("Download\nResources")
+        self.resources_download_button.setObjectName("blueButton")
+        self.resources_download_button.clicked.connect(self.switch_to_download_page)
+        self.resources_download_button.hide()
+        self.resources_download_button.setDisabled(True)
 
         self.world_download_button = QPushButton("Download World")
         self.world_download_button.setObjectName("blueButton")
@@ -509,7 +509,7 @@ class ServerManagerApp(QMainWindow):
         functions_layout.addWidget(self.world_version_label, 2, 0, 1, 2)
         functions_layout.addWidget(self.start_button, 3, 0, 1, 2)
         functions_layout.addWidget(self.stop_button, 4, 0, 1, 2)
-        functions_layout.addWidget(self.mods_download_button, 5, 0, 1, 2)
+        functions_layout.addWidget(self.resources_download_button, 5, 0, 1, 2)
         functions_layout.addWidget(self.world_download_button, 6, 0, 1, 2)
 
         functions_layout.setColumnStretch(1, 1)  # Stretch the second column
@@ -529,7 +529,7 @@ class ServerManagerApp(QMainWindow):
         server_manager_page = QWidget()
         server_manager_page.setLayout(server_manager_layout)
 
-        # Page 4: Download mods page
+        # Page 4: Download resources page
 
         page_layout = QHBoxLayout()
 
@@ -547,12 +547,12 @@ class ServerManagerApp(QMainWindow):
         self.download_progress.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.download_progress.hide()
         self.download_button = QPushButton("Download")
-        self.download_button.clicked.connect(self.download_mods)
+        self.download_button.clicked.connect(self.download_resources)
         self.finish_button = QPushButton("Finish")
         self.finish_button.clicked.connect(self.switch_to_server_manager)
         self.open_downloads_button = QPushButton("View Download Folder")
         self.open_downloads_button.setObjectName("blueButton")
-        self.open_downloads_button.clicked.connect(lambda: self.open_folder_explorer(self.mods_download_path or Path.home() / "Downloads"))
+        self.open_downloads_button.clicked.connect(lambda: self.open_folder_explorer(self.resources_download_path or Path.home() / "Downloads"))
         self.cancel_download_button = QPushButton("Cancel")
         self.cancel_download_button.setObjectName("stopButton")
         self.cancel_download_button.clicked.connect(self.cancel_download)
@@ -786,14 +786,16 @@ class ServerManagerApp(QMainWindow):
             QApplication.processEvents()
         
         self.connection_thread = QThread(self)
-        connection_worker = ConnectionWorker(self.host_ip, self.port)
-        connection_worker.moveToThread(self.connection_thread)
+        
+        self.connection_worker = ConnectionWorker(self.host_ip, self.port)
+        self.connection_worker.moveToThread(self.connection_thread)
 
-        connection_worker.connection_success.connect(self.on_connection_success)
-        connection_worker.connection_failure.connect(self.on_connection_failure)
+        self.connection_worker.connection_success.connect(self.on_connection_success)
+        self.connection_worker.connection_failure.connect(self.on_connection_failure)
 
+        self.connection_thread.started.connect(self.connection_worker.attempt_connection)
+        
         self.connection_thread.start()
-        connection_worker.attempt_connection()
     
     def close_connection_thread(self):
         if self.connection_thread and self.connection_thread.isRunning():
@@ -856,6 +858,7 @@ class ServerManagerApp(QMainWindow):
                     chunk = self.client.recv(4096)
                 if not chunk:
                     self.close_threads.set()
+                    print("B")
                     break
                 buf.extend(chunk)
 
@@ -899,14 +902,15 @@ class ServerManagerApp(QMainWindow):
                     if text.startswith("DATA-RETURN"):
                         data = text.split('~~>')
                         key, args = data[0][data[0].find('(')+1:data[0].find(')')], json.loads(data[1])
+                        print(key, args)
                         
                         if key == "sending-file":
-                            filename, filesize, current_index, num_of_mods, total_file_sizes = args
+                            filename, filesize, current_index, num_of_resources, total_file_sizes = args
                             self.progress_range_signal.emit(0, total_file_sizes)
                             self.file_name = filename
                             file_bytes_needed = int(filesize)
-                            self.download_message_signal.emit(f"{current_index}/{num_of_mods}\n{filename}")
-                            self.file = open(self.mods_download_path / self.file_name, "wb")
+                            self.download_message_signal.emit(f"{current_index}/{num_of_resources}\n{filename}")
+                            self.file = open(self.resources_download_path / self.file_name, "wb")
                             to_take = min(len(buf), file_bytes_needed)
                             if to_take:
                                 self.file.write(buf[:to_take])
@@ -931,9 +935,10 @@ class ServerManagerApp(QMainWindow):
                                 self.set_worlds_list_signal.emit(args)
                             elif key in ["start", "stop"] and args == ["refresh"]:
                                 self.get_status_signal.emit()
-                            elif key == "available-mods":
+                            elif key == "available-resources":
+                                print(args[0], args[1])
                                 if args[0] == self.selected_dropdown_text and args[1] == True:
-                                    self.enable_mods_button_signal.emit()
+                                    self.enable_resources_button_signal.emit()
                             elif key == "file-transfer-complete":
                                 self.download_complete_signal.emit()
                                 total_file_sizes = 0
@@ -981,7 +986,7 @@ class ServerManagerApp(QMainWindow):
                                 self.download_message_signal.emit(file)
                             elif key == "transfer-complete":
                                 world = args[0]
-                                self.mods_download_path = self.world_transfer_location
+                                self.resources_download_path = self.world_transfer_location
                                 self.download_complete_signal.emit()
                                 self.log_queue.put(f"{self.timestamp()} <font color='green'>Transfer of {world} completed.</font>")
                             elif key == "cancelled-transfer":
@@ -1002,8 +1007,10 @@ class ServerManagerApp(QMainWindow):
                     time.sleep(0.1)
                 else:
                     self.close_threads.set()
+                    print("C")
                     break
-            except Exception:
+            except Exception as e:
+                print(e)
                 if self.file:
                     try:
                         self.file.close()
@@ -1011,6 +1018,7 @@ class ServerManagerApp(QMainWindow):
                         pass
                     self.file = None
                 self.close_threads.set()
+                print("D")
                 break
         
         if expecting_file and self.file:
@@ -1065,7 +1073,7 @@ class ServerManagerApp(QMainWindow):
         self.set_status(["pinging", "", ""])
     
     def switch_to_download_page(self):
-        self.downloads_message.setText(f"Are you sure you want to download<br>recommended client mods for '{self.selected_dropdown_text}'?")
+        self.downloads_message.setText(f"Are you sure you want to download<br>recommended client resources for '{self.selected_dropdown_text}'?")
         self.download_button.show()
         self.cancel_download_button.show()
         self.finish_button.hide()
@@ -1132,8 +1140,8 @@ class ServerManagerApp(QMainWindow):
         self.send_request("stop-server")
         self.stop_button.setEnabled(False)
     
-    def check_available_mods(self, world):
-        self.send_request("check-mods", world)
+    def check_available_resources(self, world):
+        self.send_request("check-resources", world)
     
     def set_status(self, info):
         status, version, world = info
@@ -1202,28 +1210,28 @@ class ServerManagerApp(QMainWindow):
             self.selected_dropdown_text = world
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {"Fabric" * self.worlds[world]["fabric"]}')
             if self.worlds[world]["fabric"]:
-                self.mods_download_button.show()
-                self.mods_download_button.setDisabled(True)
-                self.check_available_mods(world)
+                self.resources_download_button.show()
+                self.resources_download_button.setDisabled(True)
+                self.check_available_resources(world)
             else:
-                self.mods_download_button.hide()
+                self.resources_download_button.hide()
             self.send_request("check-download-enabled", world)
         else:
             self.world_version_label.setText("")
     
-    def download_mods(self):
+    def download_resources(self):
         downloads_folder = Path.home() / "Downloads"
-        self.mods_download_path = Path(file_funcs.pick_folder(self, downloads_folder, "Select Download Location"))
-        if self.mods_download_path is None:
+        self.resources_download_path = Path(file_funcs.pick_folder(self, downloads_folder, "Select Download Location"))
+        if self.resources_download_path is None:
             return
         
         if self.dropdown.currentText():
             self.download_button.hide()
             self.cancel_download_button.hide()
             self.download_progress.show()
-            self.downloads_message.setText("Downloading Mods...")
+            self.downloads_message.setText("Downloading Resources...")
             self.download_file_label.setText("")
-            self.send_request(f"download-mods,{self.dropdown.currentText()}")
+            self.send_request(f"download-resources,{self.dropdown.currentText()}")
     
     def download_world_setup(self, mode="downloading"):
         self.cancelled_download.clear()
@@ -1233,7 +1241,7 @@ class ServerManagerApp(QMainWindow):
         else:
             self.downloads_message.setText("Downloading World...")
         self.download_file_label.setText("")
-        self.mods_download_path = None
+        self.resources_download_path = None
         self.download_button.hide()
         if mode == "zipping":
             self.cancel_download_button.hide()
@@ -1263,8 +1271,8 @@ class ServerManagerApp(QMainWindow):
     def set_download_message_text(self, msg):
         self.download_file_label.setText(msg)
     
-    def enable_mods_button(self):
-        self.mods_download_button.setEnabled(True)
+    def enable_resources_button(self):
+        self.resources_download_button.setEnabled(True)
     
     def update_log(self, message):
         self.log_box.append(message)
@@ -1477,6 +1485,7 @@ class ServerManagerApp(QMainWindow):
         except:
             pass
         self.close_threads.set()
+        print("A")
         if self.receive_thread:
             self.receive_thread.join()
         if self.message_thread:
