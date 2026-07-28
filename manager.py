@@ -1485,7 +1485,6 @@ class ServerManagerApp(QMainWindow):
         except:
             pass
         self.close_threads.set()
-        print("A")
         if self.receive_thread:
             self.receive_thread.join()
         if self.message_thread:

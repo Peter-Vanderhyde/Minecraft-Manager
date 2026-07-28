@@ -9,7 +9,9 @@ import psutil
 import pystray
 import mcstatus
 from queries import version_comparison, players
-from file_funcs import load_commands, save_custom_commands
+from file_funcs import load_commands
+
+import logging
 
 CHUNK_RE = re.compile(r"Loading [0-9]+ persistent chunks")
 DONE_RE = re.compile(r"Done \(\d+(?:\.\d+)?s\)!")
@@ -17,6 +19,12 @@ CUSTOM_COMMAND_PATTER = r"^\[\d{2}:\d{2}:\d{2}\]\s+\[Server thread/INFO\]:\s+<(?
 
 class Supervisor:
     def __init__(self, host: str, port: int, token: str, manager_process_args, tray_icon, debug_logs=False):
+        if debug_logs:
+            logging.basicConfig(
+                filename='supervisor_debug.log',
+                level=logging.DEBUG,
+                format='%(asctime)s [%(levelname)s] %(message)s'
+            )
         self.host = host
         self.port = port
         self.token = token
@@ -39,6 +47,7 @@ class Supervisor:
         self._feedback_value = False
         self._logs = []
         self._log_lock = asyncio.Lock()
+        self._has_received_connection = False
 
         self._data_lock = threading.Lock()
         self.custom_commands: dict = load_commands(self._data_lock)
@@ -402,6 +411,7 @@ class Supervisor:
             return
 
         self._client = wsocket
+        self._has_received_connection = True
         await self.send_to_client({"type": "handshake_ok"})
         self.icon.menu = self.menu()
 
@@ -485,13 +495,25 @@ class Supervisor:
                 await server.serve_forever()
         except asyncio.CancelledError:
             pass
+
+    async def startup_timer(self):
+        logging.info("10-second startup timer started.")
+        await asyncio.sleep(10)
+        
+        if not self._has_received_connection:
+            logging.info("Timer finished: No connection detected. Triggering shutdown event.")
+            self._shutdown_event.set()
+        else:
+            logging.info("Timer finished: Connection was established. Ignoring.")
     
     async def startup(self):
-        self._status_server_task = asyncio.create_task(self.start_status_server())
+        logging.info("Supervisor startup() initiated.")
+        self._status_server_task = asyncio.create_task(self.start_status_server()) #
+        asyncio.create_task(self.startup_timer())
 
         try:
-            async with websockets.serve(self.handler, self.host, self.port):
-                # print(f"Supervisor listening on ws://{self.host}:{self.port}")
+            async with websockets.serve(self.handler, self.host, self.port): #
+                logging.info(f"Websocket serving on {self.host}:{self.port}. Waiting for shutdown event...")
                 await self._shutdown_event.wait()
             
             if self._mc_is_alive():

@@ -8,7 +8,6 @@ import queue
 import subprocess
 import glob
 import shutil
-import re
 from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
@@ -131,6 +130,7 @@ class ServerManagerApp(QMainWindow):
         self.file_lock = threading.Lock()
 
         self.custom_commands = file_funcs.load_commands(self.file_lock)
+        self.startup_buffer_active = True
 
         # Signals
         self.get_status_signal.connect(self.get_status)
@@ -1835,6 +1835,13 @@ class ServerManagerApp(QMainWindow):
         self.get_status()
     
     def first_load(self):
+        self.startup_buffer_active = True
+        def flip_buffer():
+            self.startup_buffer_active = False
+        buffer_timer = QTimer(self)
+        buffer_timer.setSingleShot(True)
+        buffer_timer.timeout.connect(flip_buffer)
+        buffer_timer.start(5000)
         self.verify_world_formatting() # Update outdated formatting from previous versions
         self.set_worlds_list()
         timer = QTimer(self)
@@ -3845,6 +3852,10 @@ class ServerManagerApp(QMainWindow):
     def stop_server_threads(self, close_server=True):
         self.stop_threads.set()
         self.shutdown_bus()
+        if self.startup_buffer_active and not self.supervisor_connector.connected():
+            self.async_runner.submit(self.supervisor_connector.connect())
+            self.delay(5)
+
         if self.supervisor_connector.connected():
             if close_server:
                 self.close_supervisor_server("auto")
