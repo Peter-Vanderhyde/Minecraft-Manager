@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl, QCoreApplication
 
-VERSION = "v2.10.9"
+VERSION = "v2.10.10"
 DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"
@@ -965,7 +965,7 @@ class ServerManagerApp(QMainWindow):
                                     try:
                                         with open(save_path, 'wb') as zf:
                                             while not self.close_threads.is_set() and not self.cancelled_download.is_set():
-                                                data = client.recv(64 * 1024)
+                                                data = client.recv(64 * 1024 * 1024)
                                                 if not data:
                                                     break
                                                 zf.write(data)

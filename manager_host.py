@@ -22,7 +22,7 @@ import websock_mgmt
 import html
 import supervisor
 
-VERSION = "v2.10.9"
+VERSION = "v2.10.10"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -2732,7 +2732,6 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("Zipping world files...")
             world_path = Path(self.server_path) / "worlds" / world
             temp_zip_dir = Path(os.environ.get("TEMP", "."))
-            # archive_path = shutil.make_archive(str(temp_zip_dir / f"tmp_{world}"), 'zip', world_path)
             archive_path = str(temp_zip_dir / f"tmp_{world}.zip")
             total_files = 0
             for _, _, files in os.walk(world_path):
@@ -2760,6 +2759,8 @@ class ServerManagerApp(QMainWindow):
                     self.sock.listen(1)
                     while True:
                         client, address = self.sock.accept()
+                        client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                        client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
                         if address[0] == client_ip:
                             self.transfer_client = client
                             break
@@ -2801,7 +2802,10 @@ class ServerManagerApp(QMainWindow):
                         
                         # sendfile() passes the file descriptor directly to the OS kernel.
                         # It returns the actual number of bytes sent.
-                        sent = transfer_sock.transfer_client.sendfile(f, offset=bytes_sent, count=chunk_size)
+                        # sent = transfer_sock.transfer_client.sendfile(f, offset=bytes_sent, count=chunk_size)
+                        sent = transfer_sock.transfer_client.sendfile(
+                            f, offset=bytes_sent, count=65536*100
+                        )
                         
                         if sent == 0:
                             break  # EOF or connection closed abruptly
@@ -2810,7 +2814,7 @@ class ServerManagerApp(QMainWindow):
                         
                         # Throttle UI and Network updates to keep the event loop fast
                         current_time = time.time()
-                        if current_time - last_progress_time > 0.2:  # Max 10 updates per second
+                        if current_time - last_progress_time > 1:  # Max 10 updates per second
                             dialog_box.setValue(bytes_sent)
                             QApplication.processEvents()
                             
