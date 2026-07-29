@@ -12,8 +12,8 @@ from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
 from PIL import Image
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox, QProgressDialog, QInputDialog
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QCheckBox, QFrame, QSizePolicy, QPlainTextEdit, QListWidget, QMenu, QListWidgetItem, QTabWidget, QMessageBox, QProgressDialog, QInputDialog, QStyle
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor, QCursor, QCloseEvent, QIntValidator
 from PyQt6.QtCore import Qt, QRect, pyqtSignal, QTimer, pyqtSlot, QUrl, QPoint, QCoreApplication
 
 import queries
@@ -21,6 +21,7 @@ import file_funcs
 import websock_mgmt
 import html
 import supervisor
+import nbt_funcs
 
 VERSION = "v2.10.10"
 DEBUG_LOGS = False
@@ -647,6 +648,9 @@ class ServerManagerApp(QMainWindow):
         add_world_button.clicked.connect(self.show_new_world_type_page)
         update_world_button = QPushButton("Update World")
         update_world_button.clicked.connect(lambda: self.add_existing_world(update=True))
+        self.prune_world_button = QPushButton("Prune World Chunks")
+        self.prune_world_button.clicked.connect(self.show_pruning_page)
+        self.prune_world_button.setDisabled(True)
         remove_world_button = QPushButton("Remove World")
         remove_world_button.clicked.connect(self.prepare_remove_world_page)
         remove_world_button.setObjectName("redButton")
@@ -659,6 +663,7 @@ class ServerManagerApp(QMainWindow):
 
         top_box.addWidget(add_world_button)
         top_box.addWidget(update_world_button)
+        top_box.addWidget(self.prune_world_button)
         top_box.addWidget(remove_world_button)
         top_box.addWidget(backup_button)
         bot_box.addWidget(cancel_button)
@@ -851,10 +856,10 @@ class ServerManagerApp(QMainWindow):
         remove_world_layout = QGridLayout()
 
         center_layout = QVBoxLayout()
-        center_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
         remove_world_label = QLabel("Remove World")
-        remove_world_label.setObjectName("largeText")
+        remove_world_label.setObjectName("largeTitle")
         remove_world_label.setFont(self.title_font)
         temp_box1 = QHBoxLayout()
         world_label = QLabel("World Name: ")
@@ -878,9 +883,11 @@ class ServerManagerApp(QMainWindow):
         temp_box2.addWidget(remove_world_cancel_button)
 
         center_layout.addWidget(remove_world_label)
+        center_layout.addStretch(1)
         center_layout.addLayout(temp_box1)
         center_layout.addWidget(self.delete_world_checkbox)
         center_layout.addLayout(temp_box2)
+        center_layout.addStretch(2)
 
         right_layout = QVBoxLayout()
 
@@ -1280,6 +1287,120 @@ class ServerManagerApp(QMainWindow):
         custom_commands_page = QWidget()
         custom_commands_page.setLayout(custom_commands_layout)
 
+
+        # Page 14: Prune Chunks page
+        
+        page_layout = QHBoxLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        prune_label = QLabel("Prune World Chunks")
+        prune_label.setObjectName("largeTitle")
+        prune_label.setFont(self.title_font)
+
+        t_box1 = QHBoxLayout()
+        world_label = QLabel("World Name: ")
+        world_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        world_label.setObjectName("details")
+        self.prune_worlds_dropdown = QComboBox()
+        self.prune_worlds_dropdown.currentTextChanged.connect(self.update_prune_file_size)
+
+        t_box1.addStretch(1)
+        t_box1.addWidget(world_label)
+        t_box1.addWidget(self.prune_worlds_dropdown, 1)
+        t_box1.addStretch(1)
+
+        self.prune_file_size = QLabel("")
+        self.prune_file_size.setObjectName("details")
+        self.prune_file_size.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        t_box2 = QHBoxLayout()
+        backup_button = QPushButton("Backup World (Recommended!)")
+        backup_button.setObjectName("yellowButton")
+        backup_button.clicked.connect(lambda: self.backup_world(world_path=(
+            self.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
+        )))
+
+        t_box2.addStretch()
+        t_box2.addWidget(backup_button)
+        t_box2.addStretch()
+
+        t_box3 = QHBoxLayout()
+        dimension_label = QLabel("Dimension: ")
+        dimension_label.setObjectName("details")
+        self.dimension_dropdown = QComboBox()
+        self.dimension_dropdown.addItems(["Overworld", "The Nether", "The End"])
+
+        t_box3.addStretch()
+        t_box3.addWidget(dimension_label)
+        t_box3.addWidget(self.dimension_dropdown)
+        t_box3.addStretch()
+
+        t_box4 = QHBoxLayout()
+        minute_label = QLabel("Inhabited Time: ")
+        minute_label.setObjectName("details")
+        self.minute_box = QLineEdit()
+        self.minute_box.setObjectName("lineEdit")
+        self.minute_box.setValidator(QIntValidator(1, 10000))
+        self.minute_box.setPlaceholderText("Minutes")
+        self.minute_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        info_icon = QLabel()
+        icon_pixmap = self.style().standardIcon(
+            QStyle.StandardPixmap.SP_MessageBoxQuestion
+        ).pixmap(16, 16)
+        info_icon.setPixmap(icon_pixmap)
+        info_icon.setToolTip("Any chunks inhabited for longer than the specified time are not deleted.")
+
+        t_box4.addStretch()
+        t_box4.addWidget(minute_label)
+        t_box4.addWidget(self.minute_box)
+        t_box4.addWidget(info_icon)
+        t_box4.addStretch()
+        
+        t_box5 = QHBoxLayout()
+        prune_world_back_button = QPushButton("Back")
+        prune_world_back_button.setObjectName("redButton")
+        prune_world_back_button.clicked.connect(self.show_world_manager_page)
+        prune_world_confirm_button = QPushButton("Prune Chunks")
+        prune_world_confirm_button.clicked.connect(self.prune_chunks)
+
+        t_box5.addStretch()
+        t_box5.addWidget(prune_world_confirm_button)
+        t_box5.addWidget(prune_world_back_button)
+        t_box5.addStretch()
+
+        mca_label = QLabel("For more control and visual context,<br>use MCA Selector and filter chunks by inhabited time.")
+        mca_label.setObjectName("details")
+        mca_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        center_layout.addWidget(prune_label)
+        center_layout.addStretch(2)
+        center_layout.addLayout(t_box1)
+        center_layout.addWidget(self.prune_file_size)
+        center_layout.addLayout(t_box2)
+        center_layout.addLayout(t_box3)
+        center_layout.addLayout(t_box4)
+        center_layout.addStretch(1)
+        center_layout.addLayout(t_box5)
+        center_layout.addWidget(mca_label)
+        center_layout.addStretch(3)
+
+        right_layout = QVBoxLayout()
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(self.show_update_page)
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(center_layout)
+        page_layout.addLayout(right_layout)
+        page_layout.setStretch(2, 1)
+
+        prune_page = QWidget()
+        prune_page.setLayout(page_layout)
+
         #----------------------------------------------------
 
         self.stacked_layout.addWidget(server_manager_page)
@@ -1295,6 +1416,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(mods_page)
         self.stacked_layout.addWidget(update_page)
         self.stacked_layout.addWidget(custom_commands_page)
+        self.stacked_layout.addWidget(prune_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1534,8 +1656,20 @@ class ServerManagerApp(QMainWindow):
         if self.cc_cmd_list.count() > 0:
             self.cc_cmd_list.setCurrentRow(0)
         
-        # Set index to the Custom Commands page (ensure 12 matches the order added to stacked_layout)
         self.stacked_layout.setCurrentIndex(12)
+
+    def update_prune_file_size(self):
+        file_size = file_funcs.get_total_size(self.path(self.server_path, "worlds", self.prune_worlds_dropdown.currentText()))
+        self.prune_file_size.setText("World File Size: " + file_funcs.format_size(file_size))
+
+    def show_pruning_page(self):
+        self.prune_worlds_dropdown.clear()
+        self.prune_worlds_dropdown.addItems(self.worlds.keys())
+        self.dimension_dropdown.setCurrentIndex(0)
+        self.update_prune_file_size()
+        self.minute_box.setText("")
+        self.minute_box.setStyleSheet("border: 4px solid #4CAF50")
+        self.stacked_layout.setCurrentIndex(13)
     
     def save_properties_edit(self):
         world = self.dropdown.currentText()
@@ -2502,6 +2636,7 @@ class ServerManagerApp(QMainWindow):
     
     def set_selected_world_version(self, world):
         if world:
+            self.prune_world_button.setEnabled(True)
             self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
             if os.path.isfile(self.path(self.server_path, "worlds", world, "saved_properties.properties")):
                 self.world_properties_button.setEnabled(True)
@@ -2519,6 +2654,7 @@ class ServerManagerApp(QMainWindow):
             self.enable_download_checkbox.setChecked(downloadable)
             self.enable_download_checkbox.setEnabled(True)
         else:
+            self.prune_world_button.setDisabled(True)
             self.world_version_label.setText("")
             self.world_properties_button.setEnabled(False)
             self.world_mods_button.setEnabled(False)
@@ -3350,15 +3486,6 @@ class ServerManagerApp(QMainWindow):
     
     #TODO Change all these to direct commands instead of using the API so old versions can use it too
     #TODO Detect players joining and leaving through logs
-    #TODO Check when title and stuff were added also
-    #TODO later, add commands for players that trigger when they type them in chat?
-    #TODO Fix title in supervisor to show for all players in early versions
-
-    """
-    Title:
-    1.8 - title player title|subtitle json_text
-    1.9 - actionbar
-    """
 
     def op_player(self, player, remove):
         # Can always op and deop
@@ -3663,7 +3790,6 @@ class ServerManagerApp(QMainWindow):
         QApplication.processEvents()
         
         try:
-            # 1. Fetch release info from your existing queries module
             self.stacked_layout.setCurrentIndex(self.last_page_index)
             version_name, tag_version, link = queries.latest_app_info()
             
@@ -3681,50 +3807,40 @@ class ServerManagerApp(QMainWindow):
             import urllib.request
             import ctypes
             
-            # Determine extension types and map paths explicitly
             installer_ext = ".msi" if link.lower().endswith(".msi") else ".exe"
             temp_installer = Path(os.environ.get("TEMP", BASE_DIR)) / f"manager_upgrade{installer_ext}"
-            log_file_path = BASE_DIR / "log.txt"
 
-            # 2. Download the installation asset to the system temporary directory
             urllib.request.urlretrieve(link, temp_installer)
             self.log_queue.put("Download complete.<br>")
             self.log_queue.put("RESTARTING...")
             QApplication.processEvents()
             self.delay(1)
 
-            # 3. Configure runtime execution parameters based on file types
             if installer_ext == ".msi":
                 cmd = "msiexec.exe"
-                # /i = install, /qb = basic passive UI, /l*v = absolute log layout path
                 params = f'/i "{temp_installer}" /qb'
             else:
                 cmd = str(temp_installer)
-                # Standard silent parameters and explicit absolute log writing path
                 params = f'/SILENT'
 
             QApplication.processEvents()
 
-            # Clean up running dependencies to release file locks
             try:
                 self.close_supervisor_server("immediate")
             except Exception:
                 pass
 
-            # 4. Prompt for Administrator authorization using the Win32 API
-            # Forcing str(BASE_DIR) here prevents the System32 directory workspace override bug.
+            # Prompt for Administrator authorization using the Win32 API
             result = ctypes.windll.shell32.ShellExecuteW(
                 None,           
                 "runas",        # Triggers the Windows Administrator UAC prompt
                 cmd,            
                 params,         
-                str(BASE_DIR),  # FORCED Working Directory (Fixes path and logging failure)
-                1               # SW_SHOWNORMAL display flag
+                str(BASE_DIR),
+                1
             )
 
-            # Return handles above 32 confirm execution success
             if result > 32:
-                # Shutdown GUI context cleanly to clear file locks instantly
                 QCoreApplication.quit()
                 sys.exit(0)
             else:
@@ -3780,13 +3896,11 @@ class ServerManagerApp(QMainWindow):
         if current_cmd:
             cmd_name = current_cmd.text()
             
-            # Create the dialog object manually instead of using getText()
             dialog = QInputDialog(self)
             dialog.setWindowTitle("Add Executed Command")
             dialog.setLabelText("Enter the command to execute:")
-            dialog.resize(600, 150) # <-- Makes the dialog significantly wider
+            dialog.resize(600, 150)
             
-            # Show the dialog and check if the user clicked "OK"
             if dialog.exec():
                 step = dialog.textValue()
                 if step:
@@ -3802,14 +3916,12 @@ class ServerManagerApp(QMainWindow):
             row = self.cc_step_list.row(current_step_item)
             old_step = current_step_item.text()
             
-            # Create the dialog object manually
             dialog = QInputDialog(self)
             dialog.setWindowTitle("Edit Executed Command")
             dialog.setLabelText("Edit the command:")
-            dialog.setTextValue(old_step) # Pre-fill the existing command
-            dialog.resize(600, 150) # <-- Makes the dialog significantly wider
+            dialog.setTextValue(old_step)
+            dialog.resize(600, 150)
             
-            # Show the dialog and check if the user clicked "OK"
             if dialog.exec():
                 new_step = dialog.textValue()
                 if new_step:
@@ -3830,14 +3942,102 @@ class ServerManagerApp(QMainWindow):
     def save_custom_commands(self):
         file_funcs.save_custom_commands(self.custom_commands, self.file_lock)
         self.log_queue.put("<font color='green'>Custom commands saved.</font>")
-            
-        # Tell supervisor to reload commands
+        
         self.supervisor_send({"type": "reload_commands"})
         self.show_main_page(True)
     
     def cancel_custom_commands(self):
         self.custom_commands = file_funcs.load_commands(self.file_lock)
         self.show_main_page(True)
+
+    def prune_chunks(self):
+        if not self.prune_worlds_dropdown.currentText():
+            self.show_main_page(True)
+
+        minutes = self.minute_box.text()
+        if not minutes or int(minutes) == 0:
+            self.minute_box.setStyleSheet("border: 4px solid red")
+            return
+
+        minutes = int(minutes)
+        world_folder = self.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
+        up_to_date_layout = os.path.exists(self.path(world_folder, "dimensions", "minecraft"))
+
+        dimension = self.dimension_dropdown.currentText().lower().replace(" ", "_")
+        region_path = ""
+
+        if up_to_date_layout:
+            region_path = self.path(world_folder, "dimensions", "minecraft", dimension, "region")
+        else:
+            if dimension == "overworld":
+                region_path = self.path(world_folder, "region")
+            elif dimension == "the_nether":
+                region_path = self.path(world_folder, "DIM-1", "region")
+            elif dimension == "the_end":
+                region_path = self.path(world_folder, "DIM1", "region")
+
+        if not os.path.exists(region_path):
+            self.show_main_page(True)
+            self.log_queue.put("<font color='red'>ERROR: Unable to find world/dimension region files.</font>")
+            return
+
+        files = glob.glob(self.path(region_path, "*.mca"))
+        deleted_chunks = 0
+        previous_size = 0
+        new_size = 0
+
+        self.show_main_page(True)
+        self.log_queue.put("Pruning Chunks...")
+        self.delay(1)
+
+        dialog_box = QProgressDialog(
+            "Pruning Chunks...",
+            "Cancel",
+            0,
+            len(files),
+            self
+        )
+        dialog_box.setWindowTitle("Pruning World")
+        dialog_box.setMinimumDuration(500)
+        dialog_box.setStyleSheet("""
+                                    QLabel {
+                                    color: green;
+                                    }
+                                    QPushButton {
+                                    color: lightcoral;
+                                    background-color: darkred;
+                                    }""")
+        dialog_box.setModal(True)
+
+        try:
+            start = time.time()
+            processed = 0
+            for file in files:
+                dialog_box.setLabelText(f"Pruning regions...<br>{os.path.basename(file)}")
+                deleted, previous, new = nbt_funcs.prune_and_defrag_mca(file, minutes * 1200)
+                deleted_chunks += deleted
+                previous_size += previous
+                new_size += new
+                processed += 1
+                dialog_box.setValue(processed)
+                if time.time() - start >= 0.25:
+                    start = time.time()
+                    QApplication.processEvents()
+                
+                if dialog_box.wasCanceled():
+                    dialog_box.setCancelButton(None)
+                    break
+        except:
+            dialog_box.cancel()
+
+        if dialog_box.wasCanceled():
+            self.log_queue.put("<font color='red'>Pruning Cancelled.</font>")
+        else:
+            self.log_queue.put("<font color='green'>Pruning Complete!</font>")
+        
+        self.log_queue.put(f"Total Chunks Deleted: {deleted_chunks}")
+        self.log_queue.put(f"New World Size: {file_funcs.format_size(file_funcs.get_total_size(world_folder))}")
+        self.log_queue.put(f"Total Space Freed: {file_funcs.format_size(previous_size - new_size)}")
     
     def close_manager(self):
         if self.query_status()[0] == "online":

@@ -31,6 +31,7 @@ The host has the ability to
 - Easily backup server worlds as ZIP folders.
 - Close the manager, but leave the server running in the background.
 - Update worlds to newer versions.
+- Prune world chunks based on each chunk's inhabited time to free up space.
 - Quickly access each world's mods folder.
 - Download mods and designate them as recommended for playing on a world. Clients can download these mods directly from the host.
 - Directly edit each world's properties in the GUI.
