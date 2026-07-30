@@ -1173,7 +1173,7 @@ class ServerManagerApp(QMainWindow):
         box1.addStretch()
         box2 = QHBoxLayout()
         back_button = QPushButton("Back")
-        back_button.setObjectName("stopButton")
+        back_button.setObjectName("redButton")
         back_button.clicked.connect(lambda: self.stacked_layout.setCurrentIndex(self.last_page_index))
         box2.addStretch()
         box2.addWidget(back_button)
