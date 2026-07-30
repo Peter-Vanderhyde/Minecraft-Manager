@@ -23,7 +23,7 @@ import html
 import supervisor
 import nbt_funcs
 
-VERSION = "v2.10.10"
+VERSION = "v2.10.11"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -1357,6 +1357,28 @@ class ServerManagerApp(QMainWindow):
         t_box4.addWidget(self.minute_box)
         t_box4.addWidget(info_icon)
         t_box4.addStretch()
+
+        t_box6 = QHBoxLayout()
+        radius_label = QLabel("Chunk Radius")
+        radius_label.setObjectName("details")
+        self.chunk_radius = QLineEdit()
+        self.chunk_radius.setObjectName("lineEdit")
+        self.chunk_radius.setValidator(QIntValidator(1, 10))
+        self.chunk_radius.setPlaceholderText("10 Recommended")
+        self.chunk_radius.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chunk_radius.setText("10")
+        info_icon = QLabel()
+        icon_pixmap = self.style().standardIcon(
+            QStyle.StandardPixmap.SP_MessageBoxQuestion
+        ).pixmap(16, 16)
+        info_icon.setPixmap(icon_pixmap)
+        info_icon.setToolTip("All chunks marked to be saved will also save the chunks around them\nin the specified radius to avoid random chunk holes.")
+
+        t_box6.addStretch()
+        t_box6.addWidget(radius_label)
+        t_box6.addWidget(self.chunk_radius)
+        t_box6.addWidget(info_icon)
+        t_box6.addStretch()
         
         t_box5 = QHBoxLayout()
         prune_world_back_button = QPushButton("Back")
@@ -1370,7 +1392,8 @@ class ServerManagerApp(QMainWindow):
         t_box5.addWidget(prune_world_back_button)
         t_box5.addStretch()
 
-        mca_label = QLabel("For more control and visual context,<br>use MCA Selector and filter chunks by inhabited time.")
+        mca_label = QLabel("For more control and visual context,<br>use <a href='https://github.com/Querz/mcaselector'>MCA Selector</a> and filter chunks by inhabited time.")
+        mca_label.setOpenExternalLinks(True)
         mca_label.setObjectName("details")
         mca_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
 
@@ -1381,6 +1404,7 @@ class ServerManagerApp(QMainWindow):
         center_layout.addLayout(t_box2)
         center_layout.addLayout(t_box3)
         center_layout.addLayout(t_box4)
+        center_layout.addLayout(t_box6)
         center_layout.addStretch(1)
         center_layout.addLayout(t_box5)
         center_layout.addWidget(mca_label)
@@ -1669,6 +1693,8 @@ class ServerManagerApp(QMainWindow):
         self.update_prune_file_size()
         self.minute_box.setText("")
         self.minute_box.setStyleSheet("border: 4px solid #4CAF50")
+        self.chunk_radius.setText("10")
+        self.chunk_radius.setStyleSheet("border: 4px solid #4CAF50")
         self.stacked_layout.setCurrentIndex(13)
     
     def save_properties_edit(self):
@@ -3955,11 +3981,18 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page(True)
 
         minutes = self.minute_box.text()
+        chunk_radius = self.chunk_radius.text()
         if not minutes or int(minutes) == 0:
             self.minute_box.setStyleSheet("border: 4px solid red")
+            self.minute_box.setFocus()
             return
-
+        elif not chunk_radius:
+            self.chunk_radius.setStyleSheet("border: 4px solid red")
+            self.chunk_radius.setFocus()
+            return
+        
         minutes = int(minutes)
+        chunk_radius = int(chunk_radius)
         world_folder = self.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
         up_to_date_layout = os.path.exists(self.path(world_folder, "dimensions", "minecraft"))
 
@@ -3994,7 +4027,7 @@ class ServerManagerApp(QMainWindow):
             "Pruning Chunks...",
             "Cancel",
             0,
-            len(files),
+            len(files) * 2,
             self
         )
         dialog_box.setWindowTitle("Pruning World")
@@ -4011,23 +4044,54 @@ class ServerManagerApp(QMainWindow):
 
         try:
             start = time.time()
+            surviving_chunks = set()
+            
             processed = 0
             for file in files:
-                dialog_box.setLabelText(f"Pruning regions...<br>{os.path.basename(file)}")
-                deleted, previous, new = nbt_funcs.prune_and_defrag_mca(file, minutes * 1200)
-                deleted_chunks += deleted
-                previous_size += previous
-                new_size += new
+                dialog_box.setLabelText(f"Scanning regions...<br>{os.path.basename(file)}")
+                surviving_chunks.update(nbt_funcs.scan_mca_for_inhabited_chunks(file, minutes * 1200))
+                
                 processed += 1
                 dialog_box.setValue(processed)
+                
                 if time.time() - start >= 0.25:
                     start = time.time()
                     QApplication.processEvents()
                 
                 if dialog_box.wasCanceled():
-                    dialog_box.setCancelButton(None)
                     break
-        except:
+            
+            if not dialog_box.wasCanceled():
+                dialog_box.setLabelText(f"Applying chunk chunk_radius buffer of {chunk_radius}...")
+                keep_set = set()
+                for cx, cz in surviving_chunks:
+                    for dx in range(-chunk_radius, chunk_radius + 1):
+                        for dz in range(-chunk_radius, chunk_radius + 1):
+                            keep_set.add((cx + dx, cz + dz))
+                            
+                QApplication.processEvents()
+
+                for file in files:
+                    dialog_box.setLabelText(f"Pruning regions...<br>{os.path.basename(file)}")
+                    
+                    deleted, previous, new = nbt_funcs.prune_and_defrag_mca_by_set(file, keep_set)
+                    
+                    deleted_chunks += deleted
+                    previous_size += previous
+                    new_size += new
+                    
+                    processed += 1
+                    dialog_box.setValue(processed)
+                    
+                    if time.time() - start >= 0.25:
+                        start = time.time()
+                        QApplication.processEvents()
+                    
+                    if dialog_box.wasCanceled():
+                        dialog_box.setCancelButton(None)
+                        break
+
+        except Exception as e:
             dialog_box.cancel()
 
         if dialog_box.wasCanceled():
