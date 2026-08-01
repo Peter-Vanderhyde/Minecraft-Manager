@@ -11,11 +11,11 @@ import manager_host
 import file_funcs
 from queries import latest_app_info
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea
-from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea, QListWidget, QAbstractItemView, QListWidgetItem
+from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices, QColor
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl, QCoreApplication
 
-VERSION = "v2.10.11"
+VERSION = "v2.10.12"
 DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"
@@ -494,7 +494,7 @@ class ServerManagerApp(QMainWindow):
 
         self.resources_download_button = QPushButton("Download\nResources")
         self.resources_download_button.setObjectName("blueButton")
-        self.resources_download_button.clicked.connect(self.switch_to_download_page)
+        self.resources_download_button.clicked.connect(self.switch_to_resource_selection_page)
         self.resources_download_button.hide()
         self.resources_download_button.setDisabled(True)
 
@@ -738,6 +738,78 @@ class ServerManagerApp(QMainWindow):
         add_server_page = QWidget()
         add_server_page.setLayout(add_server_layout)
 
+
+        # Page 8: Resource Download Selection Page
+        resource_layout = QHBoxLayout()
+
+        # --- Shared Stylesheet for Custom Command Lists ---
+        list_stylesheet = """
+            QListWidget {
+                font-size: 14px; /* Makes the text easier to read */
+                border: 1px solid #555; /* Gives the box a distinct edge */
+                border-radius: 4px;
+            }
+            QListWidget::item {
+                border-bottom: 1px solid #333; /* Adds a line between each item */
+            }
+            QListWidget::item:selected {
+                background-color: #0078d7; /* Gives a clear, strong color when selected */
+                color: white;
+            }
+        """
+
+        # --- Left Side: Commands List ---
+        list_layout = QVBoxLayout()
+
+        resource_title = QLabel("Available Resources")
+        resource_title.setObjectName("largeTitle")
+        resource_title.setFont(self.title_font)
+        resource_title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        list_layout.addWidget(resource_title)
+
+        self.resource_list = QListWidget()
+        self.resource_list.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
+        self.resource_list.setStyleSheet(list_stylesheet)
+        self.resource_list.itemSelectionChanged.connect(self.on_resource_selected)
+
+        box = QHBoxLayout()
+        select_all = QPushButton("Select All")
+        select_all.clicked.connect(self.select_all_resources)
+        box.addWidget(select_all)
+        box.addStretch()
+        list_layout.addLayout(box)
+        list_layout.addWidget(self.resource_list)
+
+        but_box = QHBoxLayout()
+        self.resource_confirm_button = QPushButton("Download")
+        self.resource_confirm_button.setDisabled(True)
+        self.resource_confirm_button.clicked.connect(self.confirm_resource_download)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.setObjectName("stopButton")
+        cancel_button.clicked.connect(self.switch_to_server_manager)
+
+        but_box.addStretch()
+        but_box.addWidget(self.resource_confirm_button)
+        but_box.addStretch()
+        but_box.addWidget(cancel_button)
+        but_box.addStretch()
+        list_layout.addLayout(but_box)
+
+        right_column_layout = QVBoxLayout()
+        
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(self.switch_to_update_page)
+        right_column_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        resource_layout.addStretch(1)
+        resource_layout.addLayout(list_layout, 9)
+        resource_layout.addLayout(right_column_layout, 1)
+
+        resources_page = QWidget()
+        resources_page.setLayout(resource_layout)
+
         #----------------------------------------------------
 
         # Add pages to the stacked layout
@@ -748,6 +820,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(servers_page)
         self.stacked_layout.addWidget(update_page)
         self.stacked_layout.addWidget(add_server_page)
+        self.stacked_layout.addWidget(resources_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1009,6 +1082,33 @@ class ServerManagerApp(QMainWindow):
                                 world, download_enabled = args
                                 if world == self.dropdown.currentText():
                                     self.world_download_button.setEnabled(download_enabled)
+                            elif key == "resource-names":
+                                jars = [name for name in args if name.endswith(".jar")]
+                                zips = [name for name in args if name.endswith(".zip")]
+
+                                font = QFont()
+                                font.setBold(True)
+                                font.setPointSize(20)
+
+                                if len(jars) > 0:
+                                    item = QListWidgetItem("--- Mods ---")
+                                    item.setFlags(Qt.ItemFlag.NoItemFlags)
+                                    item.setFont(font)
+                                    self.resource_list.addItem(item)
+                                    self.resource_list.addItems(jars)
+                                    if len(zips) > 0:
+                                        space = QListWidgetItem(" ")
+                                        space.setFlags(Qt.ItemFlag.NoItemFlags)
+                                        space.setFont(font)
+                                        self.resource_list.addItem(space)
+
+                                if len(zips) > 0:
+                                    item = QListWidgetItem("--- Resources ---")
+                                    item.setFlags(Qt.ItemFlag.NoItemFlags)
+                                    item.setFont(font)
+                                    self.resource_list.addItem(item)
+                                    self.resource_list.addItems(zips)
+                                self.resource_list.setCurrentItem(None)
                     else:
                         self.log_message_signal.emit(f"{self.timestamp()} {text}")
                         
@@ -1079,8 +1179,8 @@ class ServerManagerApp(QMainWindow):
         self.log_box.clear()
         self.set_status(["pinging", "", ""])
     
-    def switch_to_download_page(self):
-        self.downloads_message.setText(f"Are you sure you want to download<br>recommended client resources for '{self.selected_dropdown_text}'?")
+    def switch_to_download_page(self, msg):
+        self.downloads_message.setText(msg)
         self.download_button.show()
         self.cancel_download_button.show()
         self.finish_button.hide()
@@ -1111,11 +1211,16 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(6)
         self.server_name_prompt.setFocus()
 
+    def switch_to_resource_selection_page(self):
+        self.send_request("get-resource-names", self.dropdown.currentText())
+        self.resource_list.clear()
+        self.stacked_layout.setCurrentIndex(7)
+
     def check_messages(self):
         while not self.close_threads.is_set():
             while not self.log_queue.empty():
                 message = self.log_queue.get()
-                if message == "CLOSING":
+                if message.endswith("CLOSING"):
                     continue
 
                 self.update_log_signal.emit(message)
@@ -1227,27 +1332,28 @@ class ServerManagerApp(QMainWindow):
         else:
             self.world_version_label.setText("")
     
-    def download_resources(self):
+    def download_resources(self, resources):
         downloads_folder = Path.home() / "Downloads"
-        self.resources_download_path = Path(file_funcs.pick_folder(self, downloads_folder, "Select Download Location"))
+        self.resources_download_path = file_funcs.pick_folder(self, downloads_folder, "Select Download Location")
         if self.resources_download_path is None:
+            self.switch_to_resource_selection_page()
             return
-        
+
+        self.resources_download_path = Path(self.resources_download_path)
         if self.dropdown.currentText():
             self.download_button.hide()
             self.cancel_download_button.hide()
             self.download_progress.show()
             self.downloads_message.setText("Downloading Resources...")
             self.download_file_label.setText("")
-            self.send_request(f"download-resources,{self.dropdown.currentText()}")
+            self.send_request("download-resources", self.dropdown.currentText(), *resources)
     
     def download_world_setup(self, mode="downloading"):
         self.cancelled_download.clear()
-        self.switch_to_download_page()
         if mode == "zipping":
-            self.downloads_message.setText("Zipping world folder...")
+            self.switch_to_download_page("Zipping World Folder...")
         else:
-            self.downloads_message.setText("Downloading World...")
+            self.switch_to_download_page("Downloading World...")
         self.download_file_label.setText("")
         self.resources_download_path = None
         self.download_button.hide()
@@ -1485,6 +1591,25 @@ class ServerManagerApp(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Failed to Update", f"Failed to update and restart the application: {str(e)}", QMessageBox.StandardButton.Ok)
+
+    def on_resource_selected(self):
+        if len(self.resource_list.selectedItems()) == 0:
+            self.resource_confirm_button.setDisabled(True)
+        else:
+            self.resource_confirm_button.setEnabled(True)
+
+    def select_all_resources(self):
+        self.resource_list.selectAll()
+        self.resource_confirm_button.setEnabled(True)
+
+    def confirm_resource_download(self):
+        resources = [item.text() for item in self.resource_list.selectedItems()]
+        self.switch_to_download_page("Pick Download Location")
+        self.download_file_label.setText("")
+        self.resources_download_path = None
+        self.download_button.hide()
+        self.cancel_download_button.show()
+        self.download_resources(resources)
     
     def closeEvent(self, event):
         try:

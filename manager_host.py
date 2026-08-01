@@ -23,7 +23,7 @@ import html
 import supervisor
 import nbt_funcs
 
-VERSION = "v2.10.11"
+VERSION = "v2.10.12"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -1723,6 +1723,7 @@ class ServerManagerApp(QMainWindow):
 
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.settimeout(0.1)
         if self.host_ip == "":
             self.show_ip_entry_page()
             self.default_ip_check.setChecked(False)
@@ -1730,7 +1731,6 @@ class ServerManagerApp(QMainWindow):
         try:
             self.server.bind((self.host_ip, self.port))
             self.server.listen()
-            self.server.setblocking(False)
         except:
             self.prepare_ip_page(failed=True)
             return
@@ -1746,17 +1746,16 @@ class ServerManagerApp(QMainWindow):
         while not self.stop_threads.is_set():
             try:
                 client, address = self.server.accept()
+                client.settimeout(None)
                 intention = client.recv(1024).decode("utf-8")
                 if intention == "connection request":
                     client_thread = threading.Thread(target=self.handle_client, args=(client, address))
                     handlers.append(client_thread)
                     client_thread.start()
+            except socket.timeout as e:
+                pass
             except socket.error as e:
-                if e.errno == 10035: # Non blocking socket error
-                    pass
-                else:
-                    break
-            time.sleep(3) # Avoid CPU usage
+                break
         
         for thread in handlers:
             thread.join()
@@ -1854,39 +1853,26 @@ class ServerManagerApp(QMainWindow):
                             self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds in the current version.</font>")
                             self.tell(client, "You are using an outdated client version. You can find the latest release at https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases.")
                         elif request == "check-resources":
-                            resource_path = self.path(self.server_path, "worlds", args[0], "client resources")
-                            if os.path.exists(self.path(self.server_path, "worlds", args[0], "client mods")):
-                                old_path = self.path(self.server_path, "worlds", args[0], "client mods")
-                                shutil.copytree(old_path, resource_path)
-                                shutil.rmtree(old_path, ignore_errors=True)
-                            
-                            if os.path.exists(resource_path):
-                                    valid_extensions = (".jar", ".zip")
-                                    files = [f for f in glob.glob(self.path(resource_path, "*")) if os.path.isfile(f) and f.endswith(valid_extensions)]
-                                    available = len(files) > 0
-                                    self.send_data("available-resources", [args[0], available], client)
-                            else:
-                                self.send_data("available-resources", [args[0], False], client)
+                            world_folder_path = self.server_path + "\\worlds\\" + args[0]
+                            has_resources, resource_paths = file_funcs.get_available_resources(world_folder_path)
+                            self.send_data("available-resources", [args[0], has_resources], client)
                         elif request == "download-resources":
                             world = args[0]
-                            resource_path = self.path(self.server_path, "worlds", args[0], "client resources")
-                            if os.path.isdir(self.path(self.server_path, "worlds", args[0], "client mods")):
-                                old_path = self.path(self.server_path, "worlds", args[0], "client mods")
-                                shutil.copytree(old_path, resource_path)
-                                shutil.rmtree(old_path, ignore_errors=True)
+                            resources = args[1:]
+                            world_folder_path = self.server_path + "\\worlds\\" + world
+                            has_resources, resource_paths = file_funcs.get_available_resources(world_folder_path, resources)
+                            if not has_resources:
+                                continue
                             
-                            if os.path.isdir(resource_path):
-                                valid_extensions = (".jar", ".zip")
-                                files = [f for f in glob.glob(self.path(resource_path, "*")) if os.path.isfile(f) and f.endswith(valid_extensions)]
-                                total_size = sum(os.path.getsize(file) for file in files)
-                                for i, file in enumerate(files):
-                                    filesize = os.path.getsize(file)
-                                    filename = os.path.basename(file)
-                                    header = [filename, filesize, i + 1, len(files), total_size]
-                                    self.send_data("sending-file", header, client)
-                                    with open(file, "rb") as f:
-                                        client.sendfile(f)
-                                self.send_data("file-transfer-complete", "", client)
+                            total_size = sum(os.path.getsize(file) for file in resource_paths)
+                            for i, file in enumerate(resource_paths):
+                                filesize = os.path.getsize(file)
+                                filename = os.path.basename(file)
+                                header = [filename, filesize, i + 1, len(resource_paths), total_size]
+                                self.send_data("sending-file", header, client)
+                                with open(file, "rb") as f:
+                                    client.sendfile(f)
+                            self.send_data("file-transfer-complete", "", client)
                         elif request == "get-world-size":
                             if self.query_status()[0] == "online":
                                 self.tell(client, "<font color='red'>Cannot initiate world transfer while server is running.</font>")
@@ -1901,6 +1887,12 @@ class ServerManagerApp(QMainWindow):
                         elif request == "check-download-enabled":
                             world = args[0]
                             self.send_data("downloadable-world", [world, world not in self.disabled_download_worlds], client)
+                        elif request == "get-resource-names":
+                            world_folder_path = self.server_path + "\\worlds\\" + args[0]
+                            has_resources, resource_paths = file_funcs.get_available_resources(world_folder_path)
+                            if has_resources:
+                                names = [os.path.basename(file_path) for file_path in resource_paths]
+                                self.send_data("resource-names", names, client)
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error

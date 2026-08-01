@@ -180,3 +180,10 @@ QCheckBox {
     border-radius: 5px;
     text-align: center;
 }
+
+#largeTitle {
+    background-color: rgba(55, 55, 55, 150);
+    border-radius: 5%;
+    padding: 2;
+    font-size: 35px;
+}

@@ -847,3 +847,23 @@ def get_folder_layout_version(world_path, log_queue):
         latest_release = queries.get_latest_release(log_queue)
         version = latest_release or "26.1-snapshot-6"
     return version
+
+def get_available_resources(world_folder, filter_resources=None):
+    resource_path = world_folder + "\\client resources"
+    if os.path.exists(world_folder + "\\client mods"):
+        old_path = world_folder + "\\client mods"
+        shutil.copytree(old_path, resource_path)
+        shutil.rmtree(old_path, ignore_errors=True)
+    
+    if os.path.exists(resource_path):
+            valid_extensions = (".jar", ".zip")
+            files = [f for f in glob.glob(resource_path + "\\*") if os.path.isfile(f) and f.endswith(valid_extensions)]
+            if filter_resources == None:
+                available = len(files) > 0
+                return available, files
+            else:
+                files = [f for f in files if os.path.basename(f) in filter_resources]
+                available = len(files) > 0
+                return available, files
+    else:
+        return False, []
