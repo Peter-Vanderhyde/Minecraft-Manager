@@ -1109,6 +1109,10 @@ class ServerManagerApp(QMainWindow):
                                     self.resource_list.addItem(item)
                                     self.resource_list.addItems(zips)
                                 self.resource_list.setCurrentItem(None)
+                            elif key == "host-version":
+                                version = args[0]
+                                if version != VERSION:
+                                    self.log_queue.put(f"<font color='orange'>WARNING: The host is using version {version}.\nSome features may not work correctly.</font>")
                     else:
                         self.log_message_signal.emit(f"{self.timestamp()} {text}")
                         

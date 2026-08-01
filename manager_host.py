@@ -1795,6 +1795,8 @@ class ServerManagerApp(QMainWindow):
                         return
                 
                 time.sleep(1)
+
+        self.send_data("host-version", VERSION, client)
         
         self.log_queue.put(f"<font color='#5050de'>{html.escape(self.clients[client])} has joined the room!</font>")
         self.tell(client, f"You have joined the room!")
