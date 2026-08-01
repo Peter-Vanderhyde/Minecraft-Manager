@@ -1746,7 +1746,6 @@ class ServerManagerApp(QMainWindow):
         while not self.stop_threads.is_set():
             try:
                 client, address = self.server.accept()
-                client.settimeout(None)
                 intention = client.recv(1024).decode("utf-8")
                 if intention == "connection request":
                     client_thread = threading.Thread(target=self.handle_client, args=(client, address))
@@ -1779,9 +1778,6 @@ class ServerManagerApp(QMainWindow):
                         return
 
                     messages += message.split("CLIENT-MESSAGE~~>")[1:]
-                    if "CLOSING" in messages:
-                        client.close()
-                        return
 
                     self.clients[client] = messages.pop(0)
                     self.ips[ip] = self.clients[client]
@@ -1895,6 +1891,11 @@ class ServerManagerApp(QMainWindow):
                             if has_resources:
                                 names = [os.path.basename(file_path) for file_path in resource_paths]
                                 self.send_data("resource-names", names, client)
+                        elif request == "closing":
+                            try:
+                                client.close()
+                            except socket.error:
+                                pass
 
             except socket.error as e:
                 if e.errno == 10035: # Non blocking socket error
@@ -4133,10 +4134,15 @@ class ServerManagerApp(QMainWindow):
                 self.close_supervisor_server("keep alive")
             self.delay(1)
             self.async_runner.submit(self.supervisor_connector.close())
+
+        if self.server:
+            try:
+                self.server.close()
+            except socket.error:
+                pass
+        
         if self.receive_thread.is_alive():
             self.receive_thread.join(timeout=2.0)
-        if self.server:
-            self.server.close()
     
     def exit_prompt(self, event: QCloseEvent):
         box = QMessageBox(self)
@@ -4161,7 +4167,7 @@ class ServerManagerApp(QMainWindow):
             self.exit_prompt(event)
         else:
             try:
-                self.broadcast("CLOSING")
+                self.send_data("closing", "")
             except:
                 pass
             self.stop_server_threads(close_server=(self.status!="bypass"))

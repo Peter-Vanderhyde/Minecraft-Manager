@@ -1113,6 +1113,11 @@ class ServerManagerApp(QMainWindow):
                                 version = args[0]
                                 if version != VERSION:
                                     self.log_queue.put(f"<font color='orange'>WARNING: The host is using version {version}.\nSome features may not work correctly.</font>")
+                            elif key == "closing":
+                                try:
+                                    self.client.close()
+                                except socket.error:
+                                    pass
                     else:
                         self.log_message_signal.emit(f"{self.timestamp()} {text}")
                         
@@ -1224,9 +1229,6 @@ class ServerManagerApp(QMainWindow):
         while not self.close_threads.is_set():
             while not self.log_queue.empty():
                 message = self.log_queue.get()
-                if message.endswith("CLOSING"):
-                    continue
-
                 self.update_log_signal.emit(message)
 
     def first_connect(self):
@@ -1617,7 +1619,7 @@ class ServerManagerApp(QMainWindow):
     
     def closeEvent(self, event):
         try:
-            self.send("CLOSING")
+            self.send_request("closing")
             self.close_connection_thread()
         except:
             pass
