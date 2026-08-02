@@ -262,6 +262,8 @@ class ServerManagerApp(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.aspect_ratio = 16/9
+
         # Default IP
         self.host_ip = self.load_ip()
         self.port = 5555
@@ -303,7 +305,25 @@ class ServerManagerApp(QMainWindow):
         self.download_cancelled_signal.connect(self.cancel_download)
         
         self.init_ui()
+        self.resize_ratio()
         self.switch_to_mode_page()
+
+    def resize_ratio(self):
+        screen = QApplication.primaryScreen()
+        if not screen:
+            self.resize(800, 450) # Fallback standard 16:9 size
+            return
+
+        screen_geometry = screen.availableGeometry()
+        
+        target_height = self.height()
+        
+        target_width = int(target_height * self.aspect_ratio)
+        
+        center_x = screen_geometry.x() + (screen_geometry.width() - target_width) // 2
+        center_y = screen_geometry.y() + (screen_geometry.height() - target_height) // 2
+        
+        self.setGeometry(center_x, center_y, target_width, target_height)
 
     def init_ui(self):
 
@@ -696,7 +716,7 @@ class ServerManagerApp(QMainWindow):
         center_column_layout = QVBoxLayout()
         center_column_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label = QLabel("Add a New Server")
-        title_label.setObjectName("mediumText")
+        title_label.setFont(self.title_font)
         self.server_name_prompt = QLineEdit()
         self.server_name_prompt.setMinimumWidth(self.width() // 2)
         self.server_name_prompt.setMaximumWidth(self.width() // 2)

@@ -97,6 +97,8 @@ class ServerManagerApp(QMainWindow):
     def __init__(self):
         super().__init__()
 
+        self.aspect_ratio = 16/9
+
         # Default IP
         self.ip_placeholder_msg = "Hosting IP"
         self.saved_ip = ""
@@ -160,6 +162,7 @@ class ServerManagerApp(QMainWindow):
         self.bus_shutdown_complete.set()
 
         self.init_ui()
+        self.resize_ratio()
 
         # Check if Java is installed before anything else
         version = check_java_installed()
@@ -208,6 +211,23 @@ class ServerManagerApp(QMainWindow):
                 self.start_manager_server()
             elif eula_result is None:
                 return
+
+    def resize_ratio(self):
+        screen = QApplication.primaryScreen()
+        if not screen:
+            self.resize(800, 450) # Fallback standard 16:9 size
+            return
+
+        screen_geometry = screen.availableGeometry()
+        
+        target_height = self.height()
+        
+        target_width = int(target_height * self.aspect_ratio)
+        
+        center_x = screen_geometry.x() + (screen_geometry.width() - target_width) // 2
+        center_y = screen_geometry.y() + (screen_geometry.height() - target_height) // 2
+        
+        self.setGeometry(center_x, center_y, target_width, target_height)
 
     def init_ui(self):
         # Central widget to hold everything
