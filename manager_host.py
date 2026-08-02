@@ -134,6 +134,13 @@ class ServerManagerApp(QMainWindow):
 
         self.custom_commands = file_funcs.load_commands(self.file_lock)
         self.startup_buffer_active = True
+        self.startup_buffer_active = True
+        def flip_buffer():
+            self.startup_buffer_active = False
+        buffer_timer = QTimer(self)
+        buffer_timer.setSingleShot(True)
+        buffer_timer.timeout.connect(flip_buffer)
+        buffer_timer.start(10000)
 
         # Signals
         self.get_status_signal.connect(self.get_status)
@@ -2027,13 +2034,6 @@ class ServerManagerApp(QMainWindow):
         self.get_status()
     
     def first_load(self):
-        self.startup_buffer_active = True
-        def flip_buffer():
-            self.startup_buffer_active = False
-        buffer_timer = QTimer(self)
-        buffer_timer.setSingleShot(True)
-        buffer_timer.timeout.connect(flip_buffer)
-        buffer_timer.start(10000)
         self.verify_world_formatting() # Update outdated formatting from previous versions
         self.set_worlds_list()
         timer = QTimer(self)
