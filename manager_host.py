@@ -90,7 +90,7 @@ class ServerManagerApp(QMainWindow):
     stop_server_signal = pyqtSignal(object)
     wait_for_server_shutdown_signal = pyqtSignal()
     stats_signal = pyqtSignal(object) # For memory stats
-    close_manager_signal = pyqtSignal()
+    close_manager_signal = pyqtSignal(bool)
     update_properties_signal = pyqtSignal(str, str, bool)
     transfer_signal = pyqtSignal(str, object)
 
@@ -1959,7 +1959,6 @@ class ServerManagerApp(QMainWindow):
     
     def connect_supervisor(self):
         self.log_queue.put("Looking for running servers...")
-        self.delay(1)
         existing = True
         self.async_runner.submit(self.supervisor_connector.connect())
         while not self.supervisor_connector.connected():
@@ -1968,13 +1967,14 @@ class ServerManagerApp(QMainWindow):
                 self.supervisor_connector.failed_to_load.clear()
                 self.log_queue.put("Creating new supervisor...")
                 self.create_supervisor_process()
-                self.delay(1)
                 self.async_runner.submit(self.supervisor_connector.connect())
                 while not self.supervisor_connector.connected():
                     if self.supervisor_connector.failed_to_load.is_set():
                         self.log_queue.put("<font color='red'>Failed to connect to supervisor<br>Please restart manager.</font>")
                         break
+                    QApplication.processEvents()
                 break
+            QApplication.processEvents()
         
         if existing:
             self.log_queue.put("<font color='green'>Found server.</font>")
@@ -1982,7 +1982,8 @@ class ServerManagerApp(QMainWindow):
         
         if self.supervisor_connector.connected() and self.status == "offline":
             self.start_button.setEnabled(True)
-        
+
+        self.startup_buffer_active = False
         self.log_queue.put("Waiting for connections...")
         self.log_queue.put("<font color='green'>Manager online.<br></font>")
         if not self.dropdown.currentText():
@@ -2004,7 +2005,7 @@ class ServerManagerApp(QMainWindow):
         buffer_timer = QTimer(self)
         buffer_timer.setSingleShot(True)
         buffer_timer.timeout.connect(flip_buffer)
-        buffer_timer.start(5000)
+        buffer_timer.start(10000)
         self.verify_world_formatting() # Update outdated formatting from previous versions
         self.set_worlds_list()
         timer = QTimer(self)
@@ -4106,11 +4107,8 @@ class ServerManagerApp(QMainWindow):
         self.log_queue.put(f"New World Size: {file_funcs.format_size(file_funcs.get_total_size(world_folder))}")
         self.log_queue.put(f"Total Space Freed: {file_funcs.format_size(previous_size - new_size)}")
     
-    def close_manager(self):
-        if self.query_status()[0] == "online":
-            self.status = "bypass"
-        else:
-            self.status = "offline"
+    def close_manager(self, kill_supervisor):
+        self.status = "offline" if kill_supervisor else "bypass"
         self.close()
 
     @pyqtSlot()

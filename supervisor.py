@@ -85,8 +85,9 @@ class Supervisor:
             )
     
     def hide_manager(self, icon, item):
+        mode = "kill_supervisor" if not self._mc_is_alive() else "keep_supervisor"
         asyncio.run_coroutine_threadsafe(
-            self.send_to_client({"type": "close_manager"}),
+            self.send_to_client({"type": "close_manager", "mode": mode}),
             self.loop
         )
     
@@ -681,7 +682,10 @@ class SupervisorConnector:
                 elif msg.get("type") == "server_error":
                     self.msg_queue.put(f"<font color='red'>Server Error: {msg.get("error")}</font>")
                 elif msg.get("type") == "close_manager":
-                    self.close_manager.emit()
+                    if msg.get("mode") == "kill_supervisor":
+                        self.close_manager.emit(True)
+                    else:
+                        self.close_manager.emit(False)
                 elif msg.get("type") == "tray_close_server":
                     self.loading_complete.clear()
                     self.loading_chunks.clear()
@@ -721,6 +725,8 @@ class SupervisorConnector:
                 if obj.get("type") == "close":
                     self.closing_server.set()
             await self._client.send(json.dumps(obj))
+            if obj.get("mode") == "keep alive":
+                await self._client.close()
         except:
             await self.close()
 
