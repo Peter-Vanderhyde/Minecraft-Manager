@@ -8,6 +8,9 @@ import threading
 import psutil
 import pystray
 import mcstatus
+import os
+import shutil
+import base64
 from queries import version_comparison, players
 from file_funcs import load_commands
 
@@ -122,10 +125,94 @@ class Supervisor:
         self._listener_task = asyncio.create_task(self.server_listener())
         if self._debug_logs:
             self._error_task = asyncio.create_task(self.error_listener())
+
+    def ensure_java_firewall_allowed(self):
+        java_path = shutil.which("java")
+        if not java_path:
+            logging.error("Could not find Java in the system PATH.")
+            return False
+        
+        java_path = os.path.abspath(java_path)
+        logging.info(f"Checking firewall rules for: {java_path}")
+
+        check_cmd = (
+            f"Get-NetFirewallApplicationFilter -Program '{java_path}' -ErrorAction SilentlyContinue | "
+            f"Get-NetFirewallRule | Where-Object {{ $_.Direction -eq 'Inbound' }} | "
+            f"Select-Object Name, Action, Enabled | ConvertTo-Json -Compress"
+        )
+
+        try:
+            result = subprocess.run(["powershell", "-Command", check_cmd], capture_output=True, text=True, check=True)
+            output = result.stdout.strip()
+            
+            rules = []
+            if output:
+                parsed = json.loads(output)
+                rules = parsed if isinstance(parsed, list) else [parsed]
+                
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Failed to query firewall rules: {e.stderr}")
+            return False
+        except json.JSONDecodeError:
+            rules = []
+
+        has_enabled_allow = False
+        block_rule_names = []
+
+        for rule in rules:
+            if str(rule.get("Enabled")).lower() in ["1", "true"]:
+                action = str(rule.get("Action")).lower()
+                
+                if action in ["4", "block"]:
+                    block_rule_names.append(rule.get("Name"))
+                
+                elif action in ["2", "3", "allow", "allowbypass"]:
+                    has_enabled_allow = True
+
+        if has_enabled_allow and not block_rule_names:
+            logging.info("Firewall is already configured correctly. No action needed.")
+            return True
+
+        ps_commands = []
+        
+        # Queue removal of any blocking rules
+        for bad_rule in block_rule_names:
+            ps_commands.append(f"Remove-NetFirewallRule -Name '{bad_rule}'")
+            logging.info(f"Detected blocking rule '{bad_rule}'. Will request removal.")
+
+        # Queue creation of an allow rule if one isn't present (or if replacing block rules)
+        if not has_enabled_allow or block_rule_names:
+            rule_name = "Minecraft Server Java (Automated)"
+            ps_commands.append(
+                f"New-NetFirewallRule -DisplayName '{rule_name}' "
+                f"-Direction Inbound -Program '{java_path}' "
+                f"-Action Allow -Profile Domain,Private,Public"
+            )
+            logging.info("Missing Allow rule. Will request creation.")
+
+        full_ps_script = "; ".join(ps_commands)
+
+        # PowerShell requires UTF-16LE encoding for its -EncodedCommand parameter
+        encoded_command = base64.b64encode(full_ps_script.encode('utf-16-le')).decode('utf-8')
+        try:
+            subprocess.run(
+                [
+                    "powershell", "-Command", 
+                    f"Start-Process powershell -ArgumentList '-WindowStyle Hidden -EncodedCommand {encoded_command}' -Verb RunAs"
+                ],
+                check=True
+            )
+            logging.info("Firewall rules updated successfully (UAC prompt accepted).")
+            return True
+        except subprocess.CalledProcessError:
+            logging.error("Failed to apply firewall rules. The UAC prompt may have been denied or closed.")
+            return False
     
     def _start_mc_server(self, process_args, server_path):
         if self._mc_is_alive():
             return
+
+        self.ensure_java_firewall_allowed()
         
         self._logs.clear()
         if self._debug_logs:

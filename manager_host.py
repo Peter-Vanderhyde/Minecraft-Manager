@@ -23,7 +23,7 @@ import html
 import supervisor
 import nbt_funcs
 
-VERSION = "v2.10.12"
+VERSION = "v2.10.13"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -1082,6 +1082,9 @@ class ServerManagerApp(QMainWindow):
             self.simulation_distance_textbox.text() if self.simulation_distance_textbox.text().isdigit() else self.simulation_distance_textbox.text()[:-1]
         ))
 
+        java_button = QPushButton("Open java.exe Location")
+        java_button.clicked.connect(self.go_to_java_exe)
+
         self.commands_back_button = QPushButton("Save")
         self.commands_back_button.clicked.connect(self.leave_commands_page)
 
@@ -1108,6 +1111,11 @@ class ServerManagerApp(QMainWindow):
         hor_box.addWidget(self.simulation_distance_textbox)
         center_layout.addLayout(hor_box)
         center_layout.addWidget(self.commands_warning_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        hor_box = QHBoxLayout()
+        hor_box.addStretch()
+        hor_box.addWidget(java_button)
+        hor_box.addStretch()
+        center_layout.addLayout(hor_box)
         hor_box = QHBoxLayout()
         hor_box.addStretch(1)
         hor_box.addWidget(self.commands_back_button)
@@ -4126,6 +4134,9 @@ class ServerManagerApp(QMainWindow):
         self.log_queue.put(f"Total Chunks Deleted: {deleted_chunks}")
         self.log_queue.put(f"New World Size: {file_funcs.format_size(file_funcs.get_total_size(world_folder))}")
         self.log_queue.put(f"Total Space Freed: {file_funcs.format_size(previous_size - new_size)}")
+
+    def go_to_java_exe(self):
+        file_funcs.open_folder_explorer(os.path.dirname(shutil.which("java")))
     
     def close_manager(self, kill_supervisor):
         self.status = "offline" if kill_supervisor else "bypass"
