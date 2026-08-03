@@ -23,7 +23,7 @@ import html
 import supervisor
 import nbt_funcs
 
-VERSION = "v2.10.13"
+VERSION = "v2.10.14"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -2970,7 +2970,7 @@ class ServerManagerApp(QMainWindow):
                 f"Transferring {world}...",
                 "Cancel",
                 0,
-                total_bytes,
+                100,
                 self  # Assuming 'self' is the parent QWidget. 
             )
             dialog_box.setWindowTitle("World Transfer")
@@ -3009,14 +3009,15 @@ class ServerManagerApp(QMainWindow):
                         # Throttle UI and Network updates to keep the event loop fast
                         current_time = time.time()
                         if current_time - last_progress_time > 1:  # Max 10 updates per second
-                            dialog_box.setValue(bytes_sent)
+
+                            dialog_box.setValue(int((bytes_sent / total_bytes) * 100))
                             QApplication.processEvents()
                             
                             self.send_data("transfer-progress", [bytes_sent, world], client)
                             last_progress_time = current_time
                     
                     # Ensure the progress bar hits exactly 100% at the end
-                    dialog_box.setValue(total_bytes)
+                    dialog_box.setValue(100)
                     QApplication.processEvents()
                 
                 self.send_data("transfer-complete", world, client)
