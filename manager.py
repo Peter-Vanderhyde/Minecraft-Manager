@@ -11,11 +11,11 @@ import manager_host
 import file_funcs
 from queries import latest_app_info
 from pathlib import Path
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea, QListWidget, QAbstractItemView, QListWidgetItem
+from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea, QListWidget, QAbstractItemView, QListWidgetItem, QInputDialog
 from PyQt6.QtGui import QFont, QIcon, QPixmap, QPainter, QPaintEvent, QDesktopServices
 from PyQt6.QtCore import Qt, QRect, QThread, pyqtSignal, QObject, QUrl, QCoreApplication
 
-VERSION = "v2.10.14"
+VERSION = "v2.10.15"
 DEBUG_LOGS = False
 
 KEY_PATH = "Software\\MinecraftManager"
@@ -279,6 +279,8 @@ class ServerManagerApp(QMainWindow):
         self.last_page_index = 0
         self.log_queue = queue.Queue()
         self.world_transfer_location: str | None = None
+        self.total_zipping_files = 0
+        self.transfer_total_bytes = 0
         self.cancelled_download = threading.Event()
         self.connection_delay_messages = ["Having trouble connecting? Either",
                                      "1. Your Hamachi is not open",
@@ -500,7 +502,7 @@ class ServerManagerApp(QMainWindow):
 
         self.world_download_button = QPushButton("Download World")
         self.world_download_button.setObjectName("blueButton")
-        self.world_download_button.clicked.connect(lambda: self.send_request("get-world-size", self.dropdown.currentText()))
+        self.world_download_button.clicked.connect(lambda: self.send_request("get-world-size", [self.dropdown.currentText()]))
         self.world_download_button.setEnabled(False)
 
         functions_layout = QGridLayout()
@@ -1030,48 +1032,239 @@ class ServerManagerApp(QMainWindow):
                                 size, world = args
                                 self.download_query_signal.emit(size, world)
                             elif key == "zipping-world":
-                                total_files = args[0]
+                                self.total_zipping_files = int(args[0])
                                 self.setup_world_transfer_signal.emit("zipping")
-                                self.progress_range_signal.emit(0, total_files)
+                                self.progress_range_signal.emit(0, self.total_zipping_files)
                                 self.progress_set_signal.emit(0)
+                            elif key == "zipping-progress":
+                                files_zipped = int(args[0])
+                                file_name = args[1]
+
+                                self.progress_set_signal.emit(files_zipped)
+                                self.download_message_signal.emit(f"Zipping: {file_name}")
                             elif key == "starting-transfer":
-                                total_bytes, world, transfer_port = args
+                                self.transfer_total_bytes = int(args[0])
+                                self.transfer_world = args[1]
+                                transfer_port = int(args[2])
+
+                                bytes_received = 0
+
                                 self.setup_world_transfer_signal.emit("downloading")
-                                self.progress_range_signal.emit(0, total_bytes)
+                                self.progress_range_signal.emit(0, 100)
                                 self.progress_set_signal.emit(0)
 
-                                def write_zip(client: socket.socket):
-                                    save_path = str(self.world_transfer_location) + f"/{world}.zip"
+                                def connect_transfer_socket(host_ip, port, attempts=10):
+                                    """
+                                    Connect to the host's transfer socket.
+
+                                    A few retries make the connection robust against a small
+                                    startup/network race.
+                                    """
+                                    last_error = None
+
+                                    for attempt in range(attempts):
+                                        transfer_sock = None
+
+                                        try:
+                                            transfer_sock = socket.socket(
+                                                socket.AF_INET,
+                                                socket.SOCK_STREAM
+                                            )
+
+                                            transfer_sock.settimeout(5)
+
+                                            transfer_sock.connect(
+                                                (host_ip, port)
+                                            )
+
+                                            # Return to normal blocking behavior for recv().
+                                            transfer_sock.settimeout(None)
+
+                                            return transfer_sock
+
+                                        except (
+                                            ConnectionRefusedError,
+                                            TimeoutError,
+                                            socket.timeout,
+                                            OSError
+                                        ) as e:
+
+                                            last_error = e
+
+                                            if transfer_sock is not None:
+                                                try:
+                                                    transfer_sock.close()
+                                                except OSError:
+                                                    pass
+
+                                            # Give the host a moment to finish accepting/listening.
+                                            if attempt < attempts - 1:
+                                                time.sleep(0.2)
+
+                                    raise ConnectionError(
+                                        f"Could not connect to world transfer socket: {last_error}"
+                                    )
+
+                                def write_zip(transfer_client: socket.socket, expected_bytes: int, world_name: str):
+                                    save_path = os.path.join(
+                                        self.world_transfer_location,
+                                        f"{world}.zip"
+                                    )
+
                                     success = False
+                                    received = 0
+
+                                    receive_mb = 8
+
                                     try:
-                                        with open(save_path, 'wb') as zf:
-                                            while not self.close_threads.is_set() and not self.cancelled_download.is_set():
-                                                data = client.recv(64 * 1024 * 1024)
+                                        with open(save_path, "wb") as zf:
+
+                                            while (
+                                                not self.close_threads.is_set()
+                                                and not self.cancelled_download.is_set()
+                                            ):
+                                                data = transfer_client.recv(
+                                                    receive_mb * 1024 * 1024
+                                                )
+
                                                 if not data:
                                                     break
-                                                zf.write(data)
-                                        success = True
-                                    except Exception as e:
-                                        if os.path.exists(save_path):
-                                            os.remove(save_path)
-                                    finally:
-                                        if not success and os.path.exists(save_path):
-                                            os.remove(save_path)
-                                        client.shutdown(socket.SHUT_RDWR)
-                                        client.close()
 
-                                transfer_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                transfer_sock.connect((self.host_ip, transfer_port))
-                                threading.Thread(target=write_zip, args=(transfer_sock,)).start()
+                                                zf.write(data)
+                                                received += len(data)
+
+                                        # -----------------------------------------------------
+                                        # Make sure we actually received the entire ZIP.
+                                        # -----------------------------------------------------
+                                        if received != expected_bytes:
+                                            raise ConnectionError(
+                                                f"Incomplete world transfer: "
+                                                f"received {received:,} of "
+                                                f"{expected_bytes:,} bytes."
+                                            )
+
+                                        success = True
+
+                                        # -----------------------------------------------------
+                                        # IMPORTANT:
+                                        #
+                                        # This happens only AFTER the entire ZIP has been
+                                        # written and closed.
+                                        # -----------------------------------------------------
+                                        self.send_request(
+                                            "transfer-received",
+                                            [world]
+                                        )
+
+                                    except Exception as e:
+
+                                        self.log_queue.put(
+                                            f"{self.timestamp()} "
+                                            f"<font color='red'>"
+                                            f"World transfer failed: {e}"
+                                            f"</font>"
+                                        )
+
+                                        try:
+                                            # self.send_request(
+                                            #     "cancelled-transfer",
+                                            #     [world]
+                                            # )
+                                            pass
+                                        except Exception:
+                                            pass
+
+                                    finally:
+
+                                        if not success:
+                                            try:
+                                                if os.path.exists(save_path):
+                                                    os.remove(save_path)
+                                            except OSError:
+                                                pass
+
+                                        try:
+                                            transfer_client.shutdown(
+                                                socket.SHUT_RDWR
+                                            )
+                                        except OSError:
+                                            pass
+
+                                        try:
+                                            transfer_client.close()
+                                        except OSError:
+                                            pass
+
+                                try:
+                                    transfer_sock = connect_transfer_socket(
+                                        self.host_ip,
+                                        transfer_port
+                                    )
+
+                                    threading.Thread(
+                                        target=write_zip,
+                                        args=(
+                                            transfer_sock,
+                                            self.transfer_total_bytes,
+                                            self.transfer_world
+                                        ),
+                                        daemon=True
+                                    ).start()
+
+                                except Exception as e:
+
+                                    self.log_queue.put(
+                                        f"{self.timestamp()} "
+                                        f"<font color='red'>"
+                                        f"Could not start world transfer: {e}"
+                                        f"</font>"
+                                    )
+
+                                    try:
+                                        # self.send_data(
+                                        #     "cancelled-transfer",
+                                        #     world
+                                        # )
+                                        pass
+                                    except Exception:
+                                        pass
+
                             elif key == "transfer-progress":
-                                processed, file = args
-                                self.progress_set_signal.emit(processed)
+                                bytes_received = int(args[0])
+                                file = args[1]
+
+                                if self.transfer_total_bytes > 0:
+                                    progress = int(
+                                        bytes_received * 100 / self.transfer_total_bytes
+                                    )
+
+                                    self.progress_set_signal.emit(
+                                        min(progress, 100)
+                                    )
+
                                 self.download_message_signal.emit(file)
+
+
+                            elif key == "transfer-sent":
+                                pass
+
+
                             elif key == "transfer-complete":
+                                # This message comes from the host after the entire ZIP has
+                                # been received AND closed on disk.
                                 world = args[0]
+
                                 self.resources_download_path = self.world_transfer_location
+
+                                self.progress_set_signal.emit(100)
                                 self.download_complete_signal.emit()
-                                self.log_queue.put(f"{self.timestamp()} <font color='green'>Transfer of {world} completed.</font>")
+
+                                self.log_queue.put(
+                                    f"{self.timestamp()} "
+                                    f"<font color='green'>"
+                                    f"Transfer of {world} completed."
+                                    f"</font>"
+                                )
                             elif key == "cancelled-transfer":
                                 world = args[0]
                                 self.download_cancelled_signal.emit()
@@ -1148,10 +1341,10 @@ class ServerManagerApp(QMainWindow):
     def send(self, message):
         self.client.sendall(f"CLIENT-MESSAGE~~>{message}".encode("utf-8"))
     
-    def send_request(self, topic, *data):
-        args = ",".join(data)
-        if args != "":
-            args = "," + args
+    def send_request(self, topic, data_list=[]):
+        args = ""
+        for data in data_list:
+            args += f",{str(data)}"
         self.send(f"MANAGER-REQUEST~~>{topic}{args}")
 
     def switch_to_name_prompt(self):
@@ -1221,7 +1414,7 @@ class ServerManagerApp(QMainWindow):
         self.server_name_prompt.setFocus()
 
     def switch_to_resource_selection_page(self):
-        self.send_request("get-resource-names", self.dropdown.currentText())
+        self.send_request("get-resource-names", [self.dropdown.currentText()])
         self.resource_list.clear()
         self.stacked_layout.setCurrentIndex(7)
 
@@ -1252,7 +1445,7 @@ class ServerManagerApp(QMainWindow):
         self.send_request("get-worlds-list")
     
     def start_server(self, world):
-        self.send_request("start-server", world)
+        self.send_request("start-server", [world])
         self.start_button.setEnabled(False)
     
     def stop_server(self):
@@ -1260,7 +1453,7 @@ class ServerManagerApp(QMainWindow):
         self.stop_button.setEnabled(False)
     
     def check_available_resources(self, world):
-        self.send_request("check-resources", world)
+        self.send_request("check-resources", [world])
     
     def set_status(self, info):
         status, version, world = info
@@ -1334,7 +1527,7 @@ class ServerManagerApp(QMainWindow):
                 self.check_available_resources(world)
             else:
                 self.resources_download_button.hide()
-            self.send_request("check-download-enabled", world)
+            self.send_request("check-download-enabled", [world])
         else:
             self.world_version_label.setText("")
     
@@ -1352,7 +1545,7 @@ class ServerManagerApp(QMainWindow):
             self.download_progress.show()
             self.downloads_message.setText("Downloading Resources...")
             self.download_file_label.setText("")
-            self.send_request("download-resources", self.dropdown.currentText(), *resources)
+            self.send_request("download-resources", [self.dropdown.currentText(), resources])
     
     def download_world_setup(self, mode="downloading"):
         self.cancelled_download.clear()
@@ -1463,8 +1656,21 @@ class ServerManagerApp(QMainWindow):
                 box.setStyleSheet("QLabel { color: red; }")
                 box.exec()
                 return
-            
-            self.send_request(f"begin-world-transfer,{world}")
+
+            number, ok = QInputDialog.getInt(
+                self,
+                "Mb Speed",
+                "Enter Mb speed test amount:",
+                8,      # default
+                8,      # minimum
+                128,  # maximum
+                8
+            )
+
+            if not ok:
+                number = 8
+
+            self.send_request("begin-world-transfer", [world, number])
             self.world_transfer_location = download_folder
     
     def timestamp(self):
@@ -1546,8 +1752,34 @@ class ServerManagerApp(QMainWindow):
             self.stacked_layout.setCurrentIndex(self.last_page_index)
             version_name, tag_version, link = latest_app_info()
             
-            if not link or tag_version == VERSION:
+            if not link:
                 return
+            
+            if tag_version == VERSION:
+                box = QMessageBox(self)
+                box.setWindowTitle("Confirm Re-Install")
+                box.setText(f"You are currently using the latest version.<br>Re-install it anyway?")
+                box.setStyleSheet("QLabel { color: green; }")
+                box.setIcon(QMessageBox.Icon.Question)
+                ok = QMessageBox.StandardButton.Ok
+                cancel = QMessageBox.StandardButton.Cancel
+                box.setStandardButtons(ok | cancel)
+                box.button(cancel).setStyleSheet("""
+                                                    QPushButton {
+                                                        color: lightcoral;
+                                                        background-color: darkred;
+                                                    }
+                                                    
+                                                    QPushButton:hover {
+                                                        background-color: #780000;
+                                                    }
+                                                    
+                                                    QPushButton:pressed {
+                                                        background-color: #660000;
+                                                    }""")
+                button = box.exec()
+                if button != ok:
+                    return
 
             QApplication.processEvents()
 

@@ -23,7 +23,7 @@ import html
 import supervisor
 import nbt_funcs
 
-VERSION = "v2.10.14"
+VERSION = "v2.10.15"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -92,7 +92,7 @@ class ServerManagerApp(QMainWindow):
     stats_signal = pyqtSignal(object) # For memory stats
     close_manager_signal = pyqtSignal(bool)
     update_properties_signal = pyqtSignal(str, str, bool)
-    transfer_signal = pyqtSignal(str, object)
+    transfer_signal = pyqtSignal(str, int, object)
 
     def __init__(self):
         super().__init__()
@@ -1916,7 +1916,15 @@ class ServerManagerApp(QMainWindow):
                             self.send_data("world-size", [size_mb, args[0]], client)
                         elif request == "begin-world-transfer":
                             world = args[0]
-                            self.transfer_signal.emit(world, client)
+                            speed = int(args[1])
+                            self.transfer_signal.emit(world, speed, client)
+                        elif request == "transfer-received":
+                            world = args[0]
+
+                            self.log_queue.put(
+                                f"<font color='green'>Transfer of {world} completed!</font>"
+                            )
+                            self.send_data("transfer-complete", world, client)
                         elif request == "check-download-enabled":
                             world = args[0]
                             self.send_data("downloadable-world", [world, world not in self.disabled_download_worlds], client)
@@ -2918,128 +2926,351 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page()
             return False
     
-    def transfer_world(self, world, client: socket.socket):
+    def transfer_world(self, world, speed, client: socket.socket):
+        archive_path = None
+        transfer_sock = None
+
         try:
-            self.log_queue.put(f"{self.clients.get(client)} initiated a world transfer for {world}.")
-            
-            # 1. Zip the world to a temporary location first (Extremely fast)
+            self.log_queue.put(
+                f"{self.clients.get(client)} initiated a world transfer for {world}."
+            )
+
+            # ---------------------------------------------------------
+            # 1. Create the ZIP
+            # ---------------------------------------------------------
             self.log_queue.put("Zipping world files...")
+
             world_path = Path(self.server_path) / "worlds" / world
             temp_zip_dir = Path(os.environ.get("TEMP", "."))
             archive_path = str(temp_zip_dir / f"tmp_{world}.zip")
+
             total_files = 0
             for _, _, files in os.walk(world_path):
                 total_files += len(files)
+
             self.send_data("zipping-world", [total_files], client)
+
             def prog_update(progress, name):
-                self.send_data("transfer-progress", [progress, name], client)
-            success = file_funcs.backup_world(world_path, archive_path, self, prog_update)
+                self.send_data(
+                    "zipping-progress",
+                    [progress, name],
+                    client
+                )
+
+            success = file_funcs.backup_world(
+                world_path,
+                archive_path,
+                self,
+                prog_update
+            )
+
             if not success:
-                self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
+                self.log_queue.put(
+                    f"<font color='red'>"
+                    f"Cancelled transfer of '{os.path.basename(world_path)}'."
+                    f"</font>"
+                )
                 self.send_data("cancelled-transfer", world, client)
                 return False
 
-            # Using stat().st_size forces 64-bit precision tracking on modern operating systems
+            # ---------------------------------------------------------
+            # 2. Get ZIP size
+            # ---------------------------------------------------------
             total_bytes = int(Path(archive_path).stat().st_size)
 
+            # ---------------------------------------------------------
+            # 3. Create and LISTEN on transfer socket BEFORE telling
+            #    the client to connect.
+            # ---------------------------------------------------------
             class TransferSocket:
                 def __init__(self, host_ip):
-                    self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.sock = socket.socket(
+                        socket.AF_INET,
+                        socket.SOCK_STREAM
+                    )
+
+                    self.sock.setsockopt(
+                        socket.SOL_SOCKET,
+                        socket.SO_REUSEADDR,
+                        1
+                    )
+
                     self.sock.bind((host_ip, 0))
+                    self.sock.listen(1)
+
                     self.port = self.sock.getsockname()[1]
                     self.transfer_client = None
-                
+
                 def waitfor(self, client_ip):
-                    self.sock.listen(1)
                     while True:
-                        client, address = self.sock.accept()
-                        client.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-                        client.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 1024 * 1024)
+                        transfer_client, address = self.sock.accept()
+
                         if address[0] == client_ip:
-                            self.transfer_client = client
-                            break
-                        client.close()
+                            self.transfer_client = transfer_client
+
+                            # We only need one connection.
+                            self.sock.close()
+                            self.sock = None
+
+                            return
+
+                        # Reject unexpected clients.
+                        transfer_client.close()
+
+                def close(self):
+                    if self.transfer_client is not None:
+                        try:
+                            self.transfer_client.shutdown(
+                                socket.SHUT_RDWR
+                            )
+                        except OSError:
+                            pass
+
+                        try:
+                            self.transfer_client.close()
+                        except OSError:
+                            pass
+
+                        self.transfer_client = None
+
+                    if self.sock is not None:
+                        try:
+                            self.sock.close()
+                        except OSError:
+                            pass
+
+                        self.sock = None
 
             transfer_sock = TransferSocket(self.host_ip)
-            # Pass total_bytes instead of total_files
-            self.log_queue.put("Transferring world...")
-            self.send_data("starting-transfer", [total_bytes, world, transfer_sock.port], client)
-            transfer_sock.waitfor(client.getpeername()[0])
 
+            # ---------------------------------------------------------
+            # 4. Tell client about the transfer.
+            #
+            # The socket is ALREADY listening at this point.
+            # ---------------------------------------------------------
+            self.log_queue.put("Transferring world...")
+
+            self.send_data(
+                "starting-transfer",
+                [total_bytes, world, transfer_sock.port],
+                client
+            )
+
+            # ---------------------------------------------------------
+            # 5. Wait for the client to connect.
+            # ---------------------------------------------------------
+            transfer_sock.waitfor(
+                client.getpeername()[0]
+            )
+
+            if transfer_sock.transfer_client is None:
+                raise ConnectionError(
+                    "Transfer client failed to connect."
+                )
+
+            # ---------------------------------------------------------
+            # 6. Progress dialog
+            # ---------------------------------------------------------
             dialog_box = QProgressDialog(
                 f"Transferring {world}...",
                 "Cancel",
                 0,
                 100,
-                self  # Assuming 'self' is the parent QWidget. 
+                self
             )
+
             dialog_box.setWindowTitle("World Transfer")
             dialog_box.setMinimumDuration(500)
+
             dialog_box.setStyleSheet("""
-                QLabel { color: green; }
-                QPushButton { color: lightcoral; background-color: darkred; }
+                QLabel {
+                    color: green;
+                }
+
+                QPushButton {
+                    color: lightcoral;
+                    background-color: darkred;
+                }
             """)
+
             dialog_box.setModal(True)
 
-            # 2. Stream using OS-level zero-copy (sendfile) in 2MB chunks
+            # ---------------------------------------------------------
+            # 7. Send ZIP
+            # ---------------------------------------------------------
             bytes_sent = 0
-            last_progress_time = 0
-            chunk_size = 2 * 1024 * 1024  # 2 MB chunks for optimal network pipeline
-            
+            last_progress_time = time.monotonic()
+
+            # speed is assumed to be MB per chunk
+            chunk_size = max(
+                1,
+                int(1024 * 1024 * speed)
+            )
+
             try:
-                with open(archive_path, 'rb') as f:
+                with open(archive_path, "rb") as f:
+
                     while bytes_sent < total_bytes:
+
+                        # Host cancelled transfer.
                         if dialog_box.wasCanceled():
                             dialog_box.setCancelButton(None)
                             dialog_box.setLabelText("Cancelling...")
-                            raise InterruptedError("Transfer cancelled by host")
-                        
-                        # sendfile() passes the file descriptor directly to the OS kernel.
-                        # It returns the actual number of bytes sent.
-                        # sent = transfer_sock.transfer_client.sendfile(f, offset=bytes_sent, count=chunk_size)
-                        sent = transfer_sock.transfer_client.sendfile(
-                            f, offset=bytes_sent, count=65536*100
-                        )
-                        
-                        if sent == 0:
-                            break  # EOF or connection closed abruptly
-                        
-                        bytes_sent += sent
-                        
-                        # Throttle UI and Network updates to keep the event loop fast
-                        current_time = time.time()
-                        if current_time - last_progress_time > 1:  # Max 10 updates per second
+                            raise InterruptedError(
+                                "Transfer cancelled by host"
+                            )
 
-                            dialog_box.setValue(int((bytes_sent / total_bytes) * 100))
+                        remaining = total_bytes - bytes_sent
+
+                        sent = transfer_sock.transfer_client.sendfile(
+                            f,
+                            offset=bytes_sent,
+                            count=min(chunk_size, remaining)
+                        )
+
+                        if sent is None:
+                            raise ConnectionError(
+                                "sendfile() returned None."
+                            )
+
+                        if sent <= 0:
+                            raise ConnectionError(
+                                "Connection closed during transfer."
+                            )
+
+                        bytes_sent += sent
+
+                        # -------------------------------------------------
+                        # Update UI/network roughly 10 times per second.
+                        # -------------------------------------------------
+                        current_time = time.monotonic()
+
+                        if current_time - last_progress_time >= 0.1:
+                            progress = int(
+                                bytes_sent * 100 / total_bytes
+                            )
+
+                            dialog_box.setValue(progress)
                             QApplication.processEvents()
-                            
-                            self.send_data("transfer-progress", [bytes_sent, world], client)
+
+                            self.send_data(
+                                "transfer-progress",
+                                [bytes_sent, world],
+                                client
+                            )
+
                             last_progress_time = current_time
-                    
-                    # Ensure the progress bar hits exactly 100% at the end
-                    dialog_box.setValue(100)
-                    QApplication.processEvents()
-                
-                self.send_data("transfer-complete", world, client)
-                self.log_queue.put("<font color='green'>Transfer complete!</font>")
-            
+
+                # ---------------------------------------------------------
+                # 8. Transfer socket has sent the entire ZIP.
+                # ---------------------------------------------------------
+                dialog_box.setValue(100)
+                QApplication.processEvents()
+
+                # Tell the client that the sender is finished.
+                #
+                # Do NOT call this "transfer-complete", because the client
+                # may still be writing the last received bytes to disk.
+                self.send_data(
+                    "transfer-sent",
+                    world,
+                    client
+                )
+
+                self.log_queue.put(
+                    "<font color='green'>"
+                    "World sent successfully; waiting for client confirmation..."
+                    "</font>"
+                )
+
             except InterruptedError:
-                self.send_data("cancelled-transfer", world, client)
-                self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
-            except (ConnectionResetError, BrokenPipeError):
+                self.send_data(
+                    "cancelled-transfer",
+                    world,
+                    client
+                )
+
+                self.log_queue.put(
+                    f"<font color='red'>"
+                    f"Cancelled transfer of "
+                    f"'{os.path.basename(world_path)}'."
+                    f"</font>"
+                )
+
+                return False
+
+            except (
+                ConnectionResetError,
+                BrokenPipeError,
+                ConnectionAbortedError,
+                ConnectionError,
+                OSError
+            ) as e:
+
                 dialog_box.cancel()
-                self.send_data("cancelled-transfer", world, client)
-                self.log_queue.put(f"<font color='red'>Cancelled transfer of '{os.path.basename(world_path)}'.</font>")
+
+                self.send_data(
+                    "cancelled-transfer",
+                    world,
+                    client
+                )
+
+                self.log_queue.put(
+                    f"<font color='red'>"
+                    f"Transfer connection lost: {e}"
+                    f"</font>"
+                )
+
+                return False
+
             finally:
-            # Clean up the temporary zip archive
-                if 'archive_path' in locals() and os.path.exists(archive_path):
-                    os.remove(archive_path)
-                transfer_sock.transfer_client.close()
+                # ---------------------------------------------------------
+                # 9. Clean up transfer socket
+                # ---------------------------------------------------------
+                if transfer_sock is not None:
+                    transfer_sock.close()
+
+                # ---------------------------------------------------------
+                # 10. Remove temporary ZIP
+                # ---------------------------------------------------------
+                if archive_path is not None:
+                    try:
+                        if os.path.exists(archive_path):
+                            os.remove(archive_path)
+                    except OSError:
+                        pass
+
+            return True
 
         except Exception as e:
-            if 'archive_path' in locals() and os.path.exists(archive_path):
-                os.remove(archive_path)
-            self.log_queue.put(f"<font color='red'>Transfer error: {str(e)}</font>")
+
+            if transfer_sock is not None:
+                try:
+                    transfer_sock.close()
+                except Exception:
+                    pass
+
+            if archive_path is not None:
+                try:
+                    if os.path.exists(archive_path):
+                        os.remove(archive_path)
+                except OSError:
+                    pass
+
+            self.log_queue.put(
+                f"<font color='red'>Transfer error: {str(e)}</font>"
+            )
+
+            try:
+                self.send_data(
+                    "cancelled-transfer",
+                    world,
+                    client
+                )
+            except Exception as e:
+                pass
+
+            return False
         
     
     def add_existing_world(self, update=False):
@@ -3857,8 +4088,30 @@ class ServerManagerApp(QMainWindow):
                 return
                 
             if tag_version == VERSION:
-                self.log_queue.put("You are already running the latest version.")
-                return
+                box = QMessageBox(self)
+                box.setWindowTitle("Confirm Re-Install")
+                box.setText(f"You are currently using the latest version.<br>Re-install it anyway?")
+                box.setStyleSheet("QLabel { color: green; }")
+                box.setIcon(QMessageBox.Icon.Question)
+                ok = QMessageBox.StandardButton.Ok
+                cancel = QMessageBox.StandardButton.Cancel
+                box.setStandardButtons(ok | cancel)
+                box.button(cancel).setStyleSheet("""
+                                                    QPushButton {
+                                                        color: lightcoral;
+                                                        background-color: darkred;
+                                                    }
+                                                    
+                                                    QPushButton:hover {
+                                                        background-color: #780000;
+                                                    }
+                                                    
+                                                    QPushButton:pressed {
+                                                        background-color: #660000;
+                                                    }""")
+                button = box.exec()
+                if button != ok:
+                    return
 
             self.log_queue.put(f"Downloading update: {version_name}...")
             QApplication.processEvents()
