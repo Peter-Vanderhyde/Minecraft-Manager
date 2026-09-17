@@ -1114,7 +1114,7 @@ class ServerManagerApp(QMainWindow):
                                     success = False
                                     received = 0
 
-                                    receive_mb = 8
+                                    receive_mb = 64
 
                                     try:
                                         with open(save_path, "wb") as zf:
