@@ -2074,6 +2074,14 @@ class ServerManagerApp(QMainWindow):
             outdated = True
             for world in self.worlds.keys():
                 self.world_order.append(world)
+
+        if len(self.world_order) > len(self.worlds):
+            remove_worlds = []
+            for world in self.world_order:
+                if world not in self.worlds.keys():
+                    remove_worlds.append(world)
+            for world in remove_worlds:
+                self.world_order.remove(world)
         
         if self.universal_settings in [{}, None]:
             self.universal_settings = {
