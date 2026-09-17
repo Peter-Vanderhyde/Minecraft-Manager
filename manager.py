@@ -1136,14 +1136,13 @@ class ServerManagerApp(QMainWindow):
                                         # -----------------------------------------------------
                                         # Make sure we actually received the entire ZIP.
                                         # -----------------------------------------------------
+                                        success = False
                                         if received != expected_bytes:
                                             raise ConnectionError(
-                                                f"Incomplete world transfer: "
-                                                f"received {received:,} of "
-                                                f"{expected_bytes:,} bytes."
+                                                f"Incomplete world transfer."
                                             )
-
-                                        success = True
+                                        else:
+                                            success = True
 
                                         # -----------------------------------------------------
                                         # IMPORTANT:

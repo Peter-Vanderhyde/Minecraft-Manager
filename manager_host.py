@@ -3217,7 +3217,7 @@ class ServerManagerApp(QMainWindow):
 
                 self.log_queue.put(
                     f"<font color='red'>"
-                    f"Transfer connection lost: {e}"
+                    f"Transfer cancelled."
                     f"</font>"
                 )
 
