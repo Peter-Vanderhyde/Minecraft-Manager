@@ -684,6 +684,9 @@ class ServerManagerApp(QMainWindow):
         backup_button = QPushButton("Save Backup")
         backup_button.clicked.connect(self.backup_world)
         backup_button.setObjectName("yellowButton")
+        restore_button = QPushButton("Restore Backup")
+        restore_button.clicked.connect(self.show_world_selection_page)
+        restore_button.setObjectName("yellowButton")
         cancel_button = QPushButton("Cancel")
         cancel_button.setObjectName("smallRedButton")
         cancel_button.clicked.connect(self.show_main_page)
@@ -693,6 +696,7 @@ class ServerManagerApp(QMainWindow):
         top_box.addWidget(self.prune_world_button)
         top_box.addWidget(remove_world_button)
         top_box.addWidget(backup_button)
+        top_box.addWidget(restore_button)
         bot_box.addWidget(cancel_button)
 
         center_layout.addLayout(top_box)
@@ -1239,7 +1243,7 @@ class ServerManagerApp(QMainWindow):
         custom_commands_layout = QVBoxLayout()
         
         cc_title = QLabel("Custom Commands")
-        cc_title.setObjectName("largeText")
+        cc_title.setObjectName("largeTitle")
         cc_title.setFont(self.title_font)
         cc_title.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         custom_commands_layout.addWidget(cc_title)
@@ -1265,7 +1269,10 @@ class ServerManagerApp(QMainWindow):
 
         # --- Left Side: Commands List ---
         cc_left_layout = QVBoxLayout()
-        cc_left_layout.addWidget(QLabel("Commands:"))
+        label = QLabel("Commands:")
+        label.setObjectName("mediumText")
+        label.setFont(self.title_font)
+        cc_left_layout.addWidget(label)
         self.cc_cmd_list = QListWidget()
         # self.cc_cmd_list.setAlternatingRowColors(True) # Adds zebra-striping
         self.cc_cmd_list.setStyleSheet(list_stylesheet)
@@ -1288,7 +1295,10 @@ class ServerManagerApp(QMainWindow):
 
         # --- Right Side: Executed Commands List ---
         cc_right_layout = QVBoxLayout()
-        cc_right_layout.addWidget(QLabel("Executed Commands:"))
+        label = QLabel("Executed Commands:")
+        label.setObjectName("mediumText")
+        label.setFont(self.title_font)
+        cc_right_layout.addWidget(label)
         self.cc_step_list = QListWidget()
         # self.cc_step_list.setAlternatingRowColors(True) # Adds zebra-striping
         self.cc_step_list.setStyleSheet(list_stylesheet)
@@ -1468,6 +1478,53 @@ class ServerManagerApp(QMainWindow):
         prune_page = QWidget()
         prune_page.setLayout(page_layout)
 
+
+        # Page 15: World Selection List
+        
+        page_layout = QHBoxLayout()
+
+        center_layout = QVBoxLayout()
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        worlds_title = QLabel("World Selection")
+        worlds_title.setObjectName("largeTitle")
+        worlds_title.setFont(self.title_font)
+
+        self.world_selection_list = QListWidget()
+
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(lambda: self.show_main_page(True))
+        cancel.setObjectName("redButton")
+
+        confirm = QPushButton("Confirm")
+        confirm.clicked.connect(lambda: self.show_main_page(True))
+
+        center_layout.addWidget(worlds_title)
+        center_layout.addWidget(self.world_selection_list)
+
+        button_box = QHBoxLayout()
+        button_box.addStretch()
+        button_box.addWidget(cancel)
+        button_box.addStretch()
+        button_box.addWidget(confirm)
+        button_box.addStretch()
+        center_layout.addLayout(button_box)
+
+        right_layout = QVBoxLayout()
+        version = QPushButton(VERSION)
+        version.setObjectName("version_num")
+        version.setCursor(Qt.CursorShape.PointingHandCursor)
+        version.clicked.connect(self.show_update_page)
+        right_layout.addWidget(version, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(center_layout)
+        page_layout.addLayout(right_layout)
+        page_layout.setStretch(2, 1)
+
+        world_selection_page = QWidget()
+        world_selection_page.setLayout(page_layout)
+
         #----------------------------------------------------
 
         self.stacked_layout.addWidget(server_manager_page)
@@ -1484,6 +1541,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(update_page)
         self.stacked_layout.addWidget(custom_commands_page)
         self.stacked_layout.addWidget(prune_page)
+        self.stacked_layout.addWidget(world_selection_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1739,6 +1797,14 @@ class ServerManagerApp(QMainWindow):
         self.chunk_radius.setText("10")
         self.chunk_radius.setStyleSheet("border: 4px solid #4CAF50")
         self.stacked_layout.setCurrentIndex(13)
+
+    def show_world_selection_page(self):
+        self.world_selection_list.clear()
+        for world in self.world_order:
+            item = QListWidgetItem(world)
+            item.setFont(QFont(item.font().family(), 16))
+            self.world_selection_list.addItem(item)
+        self.stacked_layout.setCurrentIndex(14)
     
     def save_properties_edit(self):
         world = self.dropdown.currentText()
@@ -2878,7 +2944,13 @@ class ServerManagerApp(QMainWindow):
     def backup_world(self, world_path=None, progress_function=None, socket_writer=None):
         streaming = (socket_writer is not None)
         if not world_path:
-            world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
+            world_folder_path = self.path(self.server_path, "worlds")
+            # Only show known worlds
+            world_dirs: list[str] = [world for world in os.listdir(world_folder_path) if world not in self.worlds.keys()]
+            for world in self.worlds.keys():
+                if world in world_dirs:
+                    world_dirs.remove(world)
+            world_path = file_funcs.select_world(self, world_folder_path, excluded_worlds=world_dirs)
         if world_path is None:
             return False
         
@@ -3282,7 +3354,7 @@ class ServerManagerApp(QMainWindow):
         
     
     def add_existing_world(self, update=False):
-        world_path = file_funcs.pick_folder(self, self.path(self.server_path, "worlds"))
+        world_path = file_funcs.select_world(self, self.path(self.server_path, "worlds"), "Select Existing World", excluded_worlds=self.worlds.keys())
         if world_path is None:
             return
         

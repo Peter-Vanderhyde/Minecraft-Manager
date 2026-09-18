@@ -7,10 +7,106 @@ import glob
 import subprocess
 import zipfile
 from pathlib import Path
-from PyQt6.QtWidgets import QFileDialog, QProgressDialog, QApplication, QMessageBox
-from PyQt6.QtCore import QUrl
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtWidgets import QFileDialog, QProgressDialog, QApplication, QMessageBox, QDialog, QDialogButtonBox, QListView, QVBoxLayout
+from PyQt6.QtCore import QUrl, QDir, Qt, QSortFilterProxyModel
+from PyQt6.QtGui import QDesktopServices, QFileSystemModel, QPainter
 from queries import version_comparison
+
+
+class PlaceholderListView(QListView):
+    def __init__(self, placeholder_text="No existing worlds", parent=None):
+        super().__init__(parent)
+        self.placeholder_text = placeholder_text
+
+    def setPlaceholderText(self, text: str):
+        self.placeholder_text = text
+        self.viewport().update()  # Redraw view when text changes
+
+    def paintEvent(self, event):
+        model = self.model()
+        if model is None or model.rowCount(self.rootIndex()) == 0:
+            painter = QPainter(self.viewport())
+
+            # Subtle gray text color
+            painter.setPen(
+                self.palette().color(
+                    self.palette().ColorGroup.Disabled,
+                    self.palette().ColorRole.Text,
+                )
+            )
+
+            # Draw placeholder text centered inside the view
+            painter.drawText(
+                self.viewport().rect(),
+                Qt.AlignmentFlag.AlignCenter,
+                self.placeholder_text,
+            )
+            painter.end()
+        else:
+            # Render normal list contents
+            super().paintEvent(event)
+
+class FolderExclusionProxyModel(QSortFilterProxyModel):
+    def __init__(self, excluded_folder_names=None, parent=None):
+        super().__init__(parent)
+        self.excluded_folder_names = set(excluded_folder_names or [])
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        source_model: QFileSystemModel = self.sourceModel()
+        if not source_model:
+            return True
+
+        index = source_model.index(source_row, 0, source_parent)
+        folder_name = source_model.fileName(index)
+        if folder_name in self.excluded_folder_names:
+            return False
+
+        return True
+
+class WorldPickerDialog(QDialog):
+    def __init__(self, worlds_dir, title="Select a World", excluded_worlds=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.resize(350, 400)
+        self.worlds_dir = worlds_dir
+        self.selected_world_path = None
+
+        layout = QVBoxLayout(self)
+
+        self.model = QFileSystemModel()
+        self.model.setFilter(QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.AllDirs)
+        self.model.setRootPath(self.worlds_dir)
+
+        self.proxy_model = FolderExclusionProxyModel(excluded_worlds, self)
+        self.proxy_model.setSourceModel(self.model)
+
+        self.view = PlaceholderListView("No Unrecognized Worlds Found in Worlds Folder")
+        self.view.setModel(self.proxy_model)
+        source_root_index = self.model.index(self.worlds_dir)
+        proxy_root_index = self.proxy_model.mapFromSource(source_root_index)
+        self.view.setRootIndex(proxy_root_index)
+        self.view.doubleClicked.connect(lambda idx: None)
+
+        layout.addWidget(self.view)
+
+        self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        confirm_btn = self.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        cancel_btn = self.button_box.button(QDialogButtonBox.StandardButton.Cancel)
+        confirm_btn.setText("Confirm")
+        cancel_btn.setObjectName("redButton")
+        self.button_box.accepted.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+    def accept(self):
+        indexes = self.view.selectedIndexes()
+        if not indexes:
+            return
+        else:
+            proxy_index = indexes[0]
+            source_index = self.proxy_model.mapToSource(proxy_index)
+            self.selected_world_path = self.model.filePath(source_index)
+            super().accept()
 
 def get_appdata_path():
     base = (os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA"))
@@ -423,6 +519,14 @@ def get_api_settings(server_path, api_version=1):
         return (host, port, auth_token)
     except:
         return ("localhost", "25585", "")
+
+def select_world(parent, starting_path: Path | str="", dialog_title="Select a World", excluded_worlds=None):
+    dialog = WorldPickerDialog(str(starting_path), dialog_title, excluded_worlds=excluded_worlds, parent=parent)
+    if dialog.exec() != WorldPickerDialog.DialogCode.Accepted:
+        return None
+
+    world_path = dialog.selected_world_path
+    return world_path
 
 def pick_folder(parent, starting_path: Path | str="", dialog_title="Open Folder"):
     # Show the file dialog for selecting a folder
