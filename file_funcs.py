@@ -64,7 +64,7 @@ class FolderExclusionProxyModel(QSortFilterProxyModel):
         return True
 
 class WorldPickerDialog(QDialog):
-    def __init__(self, worlds_dir, title="Select a World", excluded_worlds=None, parent=None):
+    def __init__(self, worlds_dir, title, empty_message, excluded_worlds=None, zips_only=False, parent=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.resize(350, 400)
@@ -74,18 +74,23 @@ class WorldPickerDialog(QDialog):
         layout = QVBoxLayout(self)
 
         self.model = QFileSystemModel()
-        self.model.setFilter(QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.AllDirs)
+        if zips_only:
+            self.model.setNameFilters(["*.zip"])
+            self.model.setNameFilterDisables(False)
+            self.model.setFilter(QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
+        else:
+            self.model.setFilter(QDir.Filter.Dirs | QDir.Filter.NoDotAndDotDot | QDir.Filter.AllDirs)
         self.model.setRootPath(self.worlds_dir)
 
         self.proxy_model = FolderExclusionProxyModel(excluded_worlds, self)
         self.proxy_model.setSourceModel(self.model)
 
-        self.view = PlaceholderListView("No Unrecognized Worlds Found in Worlds Folder")
+        self.view = PlaceholderListView(empty_message)
         self.view.setModel(self.proxy_model)
         source_root_index = self.model.index(self.worlds_dir)
         proxy_root_index = self.proxy_model.mapFromSource(source_root_index)
         self.view.setRootIndex(proxy_root_index)
-        self.view.doubleClicked.connect(lambda idx: None)
+        self.view.doubleClicked.connect(self.accept)
 
         layout.addWidget(self.view)
 
@@ -520,8 +525,8 @@ def get_api_settings(server_path, api_version=1):
     except:
         return ("localhost", "25585", "")
 
-def select_world(parent, starting_path: Path | str="", dialog_title="Select a World", excluded_worlds=None):
-    dialog = WorldPickerDialog(str(starting_path), dialog_title, excluded_worlds=excluded_worlds, parent=parent)
+def select_world(parent, starting_path: Path | str="", dialog_title="Select a World", empty_message="No World Found", excluded_worlds=None, zips_only=False):
+    dialog = WorldPickerDialog(str(starting_path), dialog_title, empty_message, excluded_worlds=excluded_worlds, zips_only=zips_only, parent=parent)
     if dialog.exec() != WorldPickerDialog.DialogCode.Accepted:
         return None
 

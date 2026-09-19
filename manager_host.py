@@ -8,6 +8,7 @@ import queue
 import subprocess
 import glob
 import shutil
+import zipfile
 from pathlib import Path
 from datetime import datetime
 from pyperclip import copy
@@ -681,12 +682,9 @@ class ServerManagerApp(QMainWindow):
         remove_world_button = QPushButton("Remove World")
         remove_world_button.clicked.connect(self.prepare_remove_world_page)
         remove_world_button.setObjectName("redButton")
-        backup_button = QPushButton("Save Backup")
-        backup_button.clicked.connect(self.backup_world)
-        backup_button.setObjectName("yellowButton")
-        restore_button = QPushButton("Restore Backup")
-        restore_button.clicked.connect(self.show_world_selection_page)
-        restore_button.setObjectName("yellowButton")
+        backups_button = QPushButton("Backups")
+        backups_button.clicked.connect(self.show_backups_page)
+        backups_button.setObjectName("yellowButton")
         cancel_button = QPushButton("Cancel")
         cancel_button.setObjectName("smallRedButton")
         cancel_button.clicked.connect(self.show_main_page)
@@ -695,8 +693,7 @@ class ServerManagerApp(QMainWindow):
         top_box.addWidget(update_world_button)
         top_box.addWidget(self.prune_world_button)
         top_box.addWidget(remove_world_button)
-        top_box.addWidget(backup_button)
-        top_box.addWidget(restore_button)
+        top_box.addWidget(backups_button)
         bot_box.addWidget(cancel_button)
 
         center_layout.addLayout(top_box)
@@ -1478,37 +1475,30 @@ class ServerManagerApp(QMainWindow):
         prune_page = QWidget()
         prune_page.setLayout(page_layout)
 
+        # Page 15: Backups Page
 
-        # Page 15: World Selection List
-        
         page_layout = QHBoxLayout()
-
+        
         center_layout = QVBoxLayout()
-        center_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        center_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        worlds_title = QLabel("World Selection")
-        worlds_title.setObjectName("largeTitle")
-        worlds_title.setFont(self.title_font)
+        backup_button = QPushButton("Save Backup")
+        backup_button.clicked.connect(self.backup_world)
+        backup_button.setObjectName("yellowButton")
+        restore_button = QPushButton("Restore Backup")
+        restore_button.clicked.connect(self.restore_backup)
+        restore_button.setObjectName("yellowButton")
+        cancel_add_world_button = QPushButton("Back")
+        cancel_add_world_button.setObjectName("smallRedButton")
+        cancel_add_world_button.clicked.connect(self.show_world_manager_page)
 
-        self.world_selection_list = QListWidget()
-
-        cancel = QPushButton("Cancel")
-        cancel.clicked.connect(lambda: self.show_main_page(True))
-        cancel.setObjectName("redButton")
-
-        confirm = QPushButton("Confirm")
-        confirm.clicked.connect(lambda: self.show_main_page(True))
-
-        center_layout.addWidget(worlds_title)
-        center_layout.addWidget(self.world_selection_list)
-
-        button_box = QHBoxLayout()
-        button_box.addStretch()
-        button_box.addWidget(cancel)
-        button_box.addStretch()
-        button_box.addWidget(confirm)
-        button_box.addStretch()
-        center_layout.addLayout(button_box)
+        center_layout.addWidget(backup_button)
+        center_layout.addWidget(restore_button)
+        back_layout = QHBoxLayout()
+        back_layout.addStretch(1)
+        back_layout.addWidget(cancel_add_world_button)
+        back_layout.addStretch(1)
+        center_layout.addLayout(back_layout)
 
         right_layout = QVBoxLayout()
         version = QPushButton(VERSION)
@@ -1522,8 +1512,8 @@ class ServerManagerApp(QMainWindow):
         page_layout.addLayout(right_layout)
         page_layout.setStretch(2, 1)
 
-        world_selection_page = QWidget()
-        world_selection_page.setLayout(page_layout)
+        backups_page = QWidget()
+        backups_page.setLayout(page_layout)
 
         #----------------------------------------------------
 
@@ -1541,7 +1531,7 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.addWidget(update_page)
         self.stacked_layout.addWidget(custom_commands_page)
         self.stacked_layout.addWidget(prune_page)
-        self.stacked_layout.addWidget(world_selection_page)
+        self.stacked_layout.addWidget(backups_page)
 
         # Set the main layout to the stacked layout
         main_layout.addLayout(self.stacked_layout)
@@ -1699,9 +1689,8 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(5)
     
     def prepare_remove_world_page(self):
-        worlds = self.worlds.keys()
         self.worlds_dropdown.clear()
-        self.worlds_dropdown.addItems(worlds)
+        self.worlds_dropdown.addItems(self.world_order)
         self.delete_world_checkbox.setChecked(False)
         self.show_remove_world_page()
 
@@ -1798,12 +1787,7 @@ class ServerManagerApp(QMainWindow):
         self.chunk_radius.setStyleSheet("border: 4px solid #4CAF50")
         self.stacked_layout.setCurrentIndex(13)
 
-    def show_world_selection_page(self):
-        self.world_selection_list.clear()
-        for world in self.world_order:
-            item = QListWidgetItem(world)
-            item.setFont(QFont(item.font().family(), 16))
-            self.world_selection_list.addItem(item)
+    def show_backups_page(self):
         self.stacked_layout.setCurrentIndex(14)
     
     def save_properties_edit(self):
@@ -2940,6 +2924,86 @@ class ServerManagerApp(QMainWindow):
                 file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, ip=self.host_ip)
                 self.saved_ip = self.host_ip
             self.start_manager_server()
+
+    def restore_backup(self):
+        backup_path = file_funcs.select_world(self, self.path(self.server_path, "backups"), "Select a Backup", "No Backups Found", zips_only=True)
+        if not backup_path:
+            return
+        
+        zip_name = str(os.path.basename(backup_path))
+        new_name, ok = QInputDialog.getText(self, "Name World", "Enter the name to save the backup as.", text=zip_name.removesuffix(".zip"))
+        while True:
+            if not ok:
+                return
+            elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(self.server_path, "worlds"))]:
+                reply = QMessageBox.question(
+                    self,
+                    "Overwrite World",
+                    f"The world {new_name} already exists.<br><br>Would you like to overwrite it?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    break
+                else:
+                    new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.", text=new_name)
+            elif new_name.strip() == "":
+                new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.<br><font color='red'>Invalid name.</font>", text=new_name)
+            else:
+                break
+
+
+        src = Path(backup_path)
+        dest = Path(self.path(self.server_path, "worlds"))
+
+        with zipfile.ZipFile(src, "r") as zip_ref:
+            top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
+
+            if len(top_level) == 1:
+                zip_ref.extractall(dest)
+                extracted_folder_name = list(top_level)[0]
+                extracted_path = dest / extracted_folder_name
+                target_path = dest / new_name
+
+                if extracted_path != target_path:
+                    if target_path.exists():
+                        shutil.rmtree(target_path)
+                    extracted_path.rename(target_path)
+            else:
+                zip_ref.extractall(dest / new_name)
+
+        restored_path = dest / new_name
+
+        if new_name not in self.worlds.keys():
+            reply = QMessageBox.question(
+                self,
+                "Add World",
+                f"Backup restored successfully as <b>{new_name}</b>.<br><br>"
+                "Would you like to add this world to your active worlds list now?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,  # Default selection
+            )
+
+            if reply == QMessageBox.StandardButton.Yes:
+                if self.add_existing_world(
+                    update=False, restored_backup=restored_path
+                ):
+                    self.log_queue.put(
+                        f"<font color='green'>Restored and added '{new_name}' in worlds folder.</font>"
+                    )
+                return
+            else:
+                self.log_queue.put(
+                    f"<font color='green'>Restored '{new_name}' to worlds folder (not added to active list).</font>"
+                )
+        else:
+            self.log_queue.put(
+                f"<font color='green'>Restored and replaced '{new_name}' in worlds folder.</font>"
+            )
+
+        self.show_main_page(True)
+        return restored_path
+
     
     def backup_world(self, world_path=None, progress_function=None, socket_writer=None):
         streaming = (socket_writer is not None)
@@ -3353,8 +3417,11 @@ class ServerManagerApp(QMainWindow):
             return False
         
     
-    def add_existing_world(self, update=False):
-        world_path = file_funcs.select_world(self, self.path(self.server_path, "worlds"), "Select Existing World", excluded_worlds=self.worlds.keys())
+    def add_existing_world(self, update=False, restored_backup=None):
+        if restored_backup:
+            world_path = restored_backup
+        else:
+            world_path = file_funcs.select_world(self, self.path(self.server_path, "worlds"), "Select Existing World", excluded_worlds=self.worlds.keys())
         if world_path is None:
             return
         
@@ -3424,6 +3491,8 @@ class ServerManagerApp(QMainWindow):
                     self.log_queue.put(f"<font color='red'>ERROR: Unable to {'update' if update else 'add'} world folder.</font>")
             elif world_path:
                 self.log_queue.put(f"<font color='red'>ERROR: Invalid world folder.</font>")
+
+        return True
     
     def add_new_world(self):
         self.add_world(new=True)
