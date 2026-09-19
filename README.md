@@ -29,6 +29,7 @@ The host has the ability to
   > **Note**:  
   Newly created worlds do not generate any world files until their first time being run.
 - Easily backup server worlds as ZIP folders.
+- Restore backups from the manager.
 - Close the manager, but leave the server running in the background.
 - Update worlds to newer versions.
 - Prune world chunks based on each chunk's inhabited time to free up space.
