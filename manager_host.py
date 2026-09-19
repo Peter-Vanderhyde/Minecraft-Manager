@@ -3133,10 +3133,24 @@ class ServerManagerApp(QMainWindow):
                         socket.SOCK_STREAM
                     )
 
+                    buffer_size = 8 * 1024 * 1024
+
                     self.sock.setsockopt(
                         socket.SOL_SOCKET,
                         socket.SO_REUSEADDR,
                         1
+                    )
+
+                    self.sock.setsockopt(
+                        socket.SOL_SOCKET,
+                        socket.SO_SNDBUF,
+                        buffer_size
+                    )
+
+                    self.sock.setsockopt(
+                        socket.SOL_SOCKET,
+                        socket.SO_RCVBUF,
+                        buffer_size
                     )
 
                     self.sock.bind((host_ip, 0))
@@ -3289,7 +3303,7 @@ class ServerManagerApp(QMainWindow):
                         # -------------------------------------------------
                         current_time = time.monotonic()
 
-                        if current_time - last_progress_time >= 0.1:
+                        if current_time - last_progress_time >= 0.5:
                             progress = int(
                                 bytes_sent * 100 / total_bytes
                             )

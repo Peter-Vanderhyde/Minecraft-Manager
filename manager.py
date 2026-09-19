@@ -1071,6 +1071,19 @@ class ServerManagerApp(QMainWindow):
                                                 socket.SOCK_STREAM
                                             )
 
+                                            buffer_size = 8 * 1024 * 1024
+                                            transfer_sock.setsockopt(
+                                                socket.SOL_SOCKET,
+                                                socket.SO_SNDBUF,
+                                                buffer_size
+                                            )
+                        
+                                            transfer_sock.setsockopt(
+                                                socket.SOL_SOCKET,
+                                                socket.SO_RCVBUF,
+                                                buffer_size
+                                            )
+
                                             transfer_sock.settimeout(5)
 
                                             transfer_sock.connect(
@@ -1656,20 +1669,9 @@ class ServerManagerApp(QMainWindow):
                 box.exec()
                 return
 
-            number, ok = QInputDialog.getInt(
-                self,
-                "Mb Speed",
-                "Enter Mb speed test amount:",
-                8,      # default
-                8,      # minimum
-                128,  # maximum
-                8
-            )
+            request_mb = 256
 
-            if not ok:
-                number = 8
-
-            self.send_request("begin-world-transfer", [world, number])
+            self.send_request("begin-world-transfer", [world, request_mb])
             self.world_transfer_location = download_folder
     
     def timestamp(self):
