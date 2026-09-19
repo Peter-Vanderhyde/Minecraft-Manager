@@ -3133,7 +3133,7 @@ class ServerManagerApp(QMainWindow):
                         socket.SOCK_STREAM
                     )
 
-                    buffer_size = 8 * 1024 * 1024
+                    buffer_size = 16 * 1024 * 1024
 
                     self.sock.setsockopt(
                         socket.SOL_SOCKET,

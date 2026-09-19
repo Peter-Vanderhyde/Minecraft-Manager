@@ -1071,7 +1071,7 @@ class ServerManagerApp(QMainWindow):
                                                 socket.SOCK_STREAM
                                             )
 
-                                            buffer_size = 8 * 1024 * 1024
+                                            buffer_size = 16 * 1024 * 1024
                                             transfer_sock.setsockopt(
                                                 socket.SOL_SOCKET,
                                                 socket.SO_SNDBUF,
@@ -1669,7 +1669,7 @@ class ServerManagerApp(QMainWindow):
                 box.exec()
                 return
 
-            request_mb = 256
+            request_mb = 8
 
             self.send_request("begin-world-transfer", [world, request_mb])
             self.world_transfer_location = download_folder
