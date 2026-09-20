@@ -2928,7 +2928,7 @@ class ServerManagerApp(QMainWindow):
             return
         
         zip_name = str(os.path.basename(backup_path))
-        new_name, ok = QInputDialog.getText(self, "Name World", "Enter the name to save the backup as.", text=zip_name.removesuffix(".zip"))
+        new_name, ok = QInputDialog.getText(self, "Name World", "<font color='green'>Enter the name to save the backup as.</font>", text=zip_name.removesuffix(".zip"))
         while True:
             if not ok:
                 return
@@ -2936,16 +2936,16 @@ class ServerManagerApp(QMainWindow):
                 reply = QMessageBox.question(
                     self,
                     "Delete World",
-                    f"The world {new_name} already exists.<br><br>Would you like to delete it?",
+                    f"<font color='green'>The world {new_name} already exists.<br><br>Would you like to delete it?</font>",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.Yes
                 )
                 if reply == QMessageBox.StandardButton.Yes:
                     break
                 else:
-                    new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.", text=new_name)
+                    new_name, ok = QInputDialog.getText(self, "Name World", f"<font color='green'>Enter the name to save the backup as.</font>", text=new_name)
             elif new_name.strip() == "":
-                new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.<br><font color='red'>Invalid name.</font>", text=new_name)
+                new_name, ok = QInputDialog.getText(self, "Name World", f"<font color='green'>Enter the name to save the backup as.<br></font><font color='red'>Invalid name.</font>", text=new_name)
             else:
                 break
 
@@ -2975,8 +2975,8 @@ class ServerManagerApp(QMainWindow):
             reply = QMessageBox.question(
                 self,
                 "Add World",
-                f"Backup restored successfully as <b>{new_name}</b>.<br><br>"
-                "Would you like to add this world to your active worlds list now?",
+                f"<font color='green'>Backup restored successfully as <b>{new_name}</b>.<br><br>"
+                "Would you like to add this world to your active worlds list now?</font>",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.Yes,  # Default selection
             )
@@ -4227,7 +4227,7 @@ class ServerManagerApp(QMainWindow):
             if tag_version == VERSION:
                 box = QMessageBox(self)
                 box.setWindowTitle("Confirm Re-Install")
-                box.setText(f"You are currently using the latest version.<br>Re-install it anyway?")
+                box.setText(f"<font color='green'>You are currently using the latest version.<br>Re-install it anyway?</font>")
                 box.setStyleSheet("QLabel { color: green; }")
                 box.setIcon(QMessageBox.Icon.Question)
                 ok = QMessageBox.StandardButton.Ok
@@ -4306,11 +4306,11 @@ class ServerManagerApp(QMainWindow):
             self.cc_step_list.addItems(steps)
     
     def add_custom_command(self):
-        name, ok = QInputDialog.getText(self, "Add Command", "Enter new custom command name:")
+        name, ok = QInputDialog.getText(self, "Add Command", "<font color='green'>Enter new custom command name:</font>")
         if ok and name:
             name = name.strip()
             if name in self.custom_commands or name in ["help", "reload_commands"]:
-                QMessageBox.warning(self, "Error", "Command already exists or is reserved.")
+                QMessageBox.warning(self, "Error", "<font color='red'>Command already exists or is reserved.</font>")
                 return
             self.custom_commands[name] = []
             self.cc_cmd_list.addItem(name)
@@ -4324,7 +4324,7 @@ class ServerManagerApp(QMainWindow):
             if ok and new_name and new_name != old_name:
                 new_name = new_name.strip()
                 if new_name in self.custom_commands or new_name in ["help", "reload_commands"]:
-                    QMessageBox.warning(self, "Error", "Command name already exists or is reserved.")
+                    QMessageBox.warning(self, "Error", "<font color='red'>Command name already exists or is reserved.</font>")
                     return
                 # Transfer data and update UI
                 self.custom_commands[new_name] = self.custom_commands.pop(old_name)
@@ -4334,7 +4334,7 @@ class ServerManagerApp(QMainWindow):
         current_item = self.cc_cmd_list.currentItem()
         if current_item:
             name = current_item.text()
-            confirm = QMessageBox.question(self, "Confirm Delete", f"Delete command '{name}'?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            confirm = QMessageBox.question(self, "Confirm Delete", f"<font color='green'>Delete command '{name}'?</font>", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             if confirm == QMessageBox.StandardButton.Yes:
                 self.custom_commands.pop(name, None)
                 self.cc_cmd_list.takeItem(self.cc_cmd_list.row(current_item))
@@ -4347,7 +4347,7 @@ class ServerManagerApp(QMainWindow):
             
             dialog = QInputDialog(self)
             dialog.setWindowTitle("Add Executed Command")
-            dialog.setLabelText("Enter the command to execute:")
+            dialog.setLabelText("<font color='green'>Enter the command to execute:</font>")
             dialog.resize(600, 150)
             
             if dialog.exec():
@@ -4367,7 +4367,7 @@ class ServerManagerApp(QMainWindow):
             
             dialog = QInputDialog(self)
             dialog.setWindowTitle("Edit Executed Command")
-            dialog.setLabelText("Edit the command:")
+            dialog.setLabelText("<font color='green'>Edit the command:</font>")
             dialog.setTextValue(old_step)
             dialog.resize(600, 150)
             

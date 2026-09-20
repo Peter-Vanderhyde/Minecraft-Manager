@@ -1561,18 +1561,21 @@ class ServerManagerApp(QMainWindow):
         extract = QMessageBox.question(
             self,
             "World Extraction",
-            f"Would you like to extract {world} to<br>the worlds folder?",
+            f"<font color='green'>Would you like to extract {world} to<br>the worlds folder?</font>",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
         )
 
+        self.cancel_download_button.hide()
+        self.download_progress.hide()
+
         if extract == QMessageBox.StandardButton.Yes:
             self.extract_world_download(world)
+            self.downloads_message.setText("World Extracted!")
+            self.delay(0.5)
         
         self.finish_button.show()
         self.open_downloads_button.show()
-        self.cancel_download_button.hide()
-        self.download_progress.hide()
 
     def extract_world_download(self, world):
         zip_path = Path(self.world_transfer_location, world + ".zip")
@@ -1589,16 +1592,16 @@ class ServerManagerApp(QMainWindow):
                 reply = QMessageBox.question(
                     self,
                     "Overwrite World",
-                    f"The world {new_name} already exists.<br><br>Would you like to overwrite it?",
+                    f"<font color='green'>The world {new_name} already exists.<br><br>Are you sure you want to delete it?</font>",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.Yes
                 )
                 if reply == QMessageBox.StandardButton.Yes:
                     break
                 else:
-                    new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the world as.", text=new_name)
+                    new_name, ok = QInputDialog.getText(self, "Name World", f"<font color='green'>Enter the name to save the world as.</font>", text=new_name)
             elif new_name.strip() == "":
-                new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the world as.<br><font color='red'>Invalid name.</font>", text=new_name)
+                new_name, ok = QInputDialog.getText(self, "Name World", f"<font color='green'>Enter the name to save the world as.<br></font><font color='red'>Invalid name.</font>", text=new_name)
             else:
                 break
 
@@ -1608,6 +1611,9 @@ class ServerManagerApp(QMainWindow):
 
         with zipfile.ZipFile(src, "r") as zip_ref:
             top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
+
+            self.downloads_message.setText("Extracting World...")
+            self.delay(0.5)
 
             if len(top_level) == 1:
                 zip_ref.extractall(dest)
@@ -1622,11 +1628,11 @@ class ServerManagerApp(QMainWindow):
             else:
                 zip_ref.extractall(dest / new_name)
 
-        if new_name not in self.worlds.keys():
+        if new_name not in settings.worlds.keys():
             QMessageBox.information(
                 self,
                 "World Extracted",
-                f"{new_name} was successfully extracted.<br><br>Use Add World/Add Existing in your host manager to<br>run it as a server world.",
+                f"<font color='green'>{new_name} was successfully extracted.<br><br>Use Add World/Add Existing in your host manager to<br>run it as a server world.</font>",
                 QMessageBox.StandardButton.Ok,
                 QMessageBox.StandardButton.Ok
             )
@@ -1866,7 +1872,7 @@ class ServerManagerApp(QMainWindow):
 
             # 2. Download the installation asset to the system temporary directory
             urllib.request.urlretrieve(link, temp_installer)
-            QMessageBox(QMessageBox.Icon.NoIcon, "Restarting", "Restarting the application...").exec()
+            QMessageBox(QMessageBox.Icon.NoIcon, "Restarting", "<font color='green'>Restarting the application...</font>").exec()
             QApplication.processEvents()
             self.delay(1)
 
@@ -1902,7 +1908,7 @@ class ServerManagerApp(QMainWindow):
                 return
 
         except Exception as e:
-            QMessageBox.critical(self, "Failed to Update", f"Failed to update and restart the application: {str(e)}", QMessageBox.StandardButton.Ok)
+            QMessageBox.critical(self, "Failed to Update", f"<font color='red'>Failed to update and restart the application: {str(e)}</font>", QMessageBox.StandardButton.Ok)
 
     def on_resource_selected(self):
         if len(self.resource_list.selectedItems()) == 0:
