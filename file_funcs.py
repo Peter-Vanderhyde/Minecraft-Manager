@@ -7,11 +7,26 @@ import glob
 import subprocess
 import zipfile
 from pathlib import Path
+from dataclasses import dataclass
 from PyQt6.QtWidgets import QFileDialog, QProgressDialog, QApplication, QMessageBox, QDialog, QDialogButtonBox, QListView, QVBoxLayout
 from PyQt6.QtCore import QUrl, QDir, Qt, QSortFilterProxyModel
 from PyQt6.QtGui import QDesktopServices, QFileSystemModel, QPainter
 from queries import version_comparison
 
+
+@dataclass
+class Settings:
+    host_ip: str
+    ips: dict
+    servers: list[str]
+    server_path: str
+    worlds: dict
+    world_order: list[str]
+    disabled_download_worlds: set[str]
+    universal_settings: dict
+
+    def __post_init__(self):
+        self.disabled_download_worlds = set(self.disabled_download_worlds)
 
 class PlaceholderListView(QListView):
     def __init__(self, placeholder_text="No existing worlds", parent=None):
@@ -195,22 +210,24 @@ def load_settings(log_queue, file_lock):
     else:
         worlds = {}
         log_queue.put(f"<font color='red'>Missing worlds key in the settings.</font>")
+
+    settings = Settings(host_ip, ips, servers, server_path, worlds, world_order, disabled_download_worlds, universal_settings)
     
     if host_ip is None or ips is None:
         if ips is None:
-            ips = {}
+            settings.ips = {}
         if host_ip is None:
-            host_ip = ""
-        update_settings(file_lock, ips, servers, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=host_ip)
-    return host_ip, ips, servers, server_path, worlds, world_order, set(disabled_download_worlds), universal_settings
+            settings.host_ip = ""
+        update_settings(file_lock, settings, ip=settings.host_ip)
+    return settings
 
 def load_saved_servers(log_queue, file_lock):
-    return load_settings(log_queue, file_lock)[2]
+    return load_settings(log_queue, file_lock).servers
 
 def update_saved_servers(servers, log_queue, file_lock):
-    data = list(load_settings(log_queue, file_lock))
-    data[2] = servers
-    update_settings(file_lock, *data[1:], data[0])
+    settings = load_settings(log_queue, file_lock)
+    settings.servers = servers
+    update_settings(file_lock, settings, settings.host_ip)
 
 def load_worlds(server_path, worlds, log_queue):
     # Add worlds folder if not already present
@@ -244,23 +261,23 @@ def load_worlds(server_path, worlds, log_queue):
     
     return worlds
 
-def update_settings(file_lock, ips, servers, server_path, worlds, world_order, disabled_download_worlds, universal_settings, ip=""):
+def update_settings(file_lock, settings, ip=""):
     with file_lock:
         with open(MANAGER_SETTINGS, 'w') as f:
             json.dump(
                 {
                     "ip": ip,
-                    "names": ips,
-                    "servers": servers,
+                    "names": settings.ips,
+                    "servers": settings.servers,
                     "server folder": {
-                        "path": server_path,
-                        "worlds": worlds,
-                        "world order": world_order,
-                        "disabled download": list(disabled_download_worlds)
+                        "path": settings.server_path,
+                        "worlds": settings.worlds,
+                        "world order": settings.world_order,
+                        "disabled download": list(settings.disabled_download_worlds)
                     },
-                    "universal settings": universal_settings
+                    "universal settings": settings.universal_settings
                 }, f, indent=4)
-    save_all_world_properties(server_path, worlds)
+    save_all_world_properties(settings.server_path, settings.worlds)
 
 def prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, server_path, log_queue, seed=None):
     # Change the properties
@@ -780,8 +797,10 @@ def check_for_property_updates(server_folder, world, file_lock, ips, host_ip):
     worlds[world] = old_props
     world_order = old_settings["server folder"].get("world order", [])
     disabled_download_worlds = old_settings["server folder"].get("disabled download", [])
+
+    new_settings = Settings(host_ip, ips, servers, server_folder, worlds, world_order, disabled_download_worlds, old_universal)
     
-    update_settings(file_lock, ips, servers, server_folder, worlds, world_order, set(disabled_download_worlds), old_universal, host_ip)
+    update_settings(file_lock, new_settings, host_ip)
     update_all_universal_settings(server_folder)
     return old_universal
 

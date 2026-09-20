@@ -253,7 +253,7 @@ class ServerManagerApp(QMainWindow):
     progress_range_signal = pyqtSignal(int, int)
     download_message_signal = pyqtSignal(str)
     enable_resources_button_signal = pyqtSignal()
-    download_complete_signal = pyqtSignal()
+    download_complete_signal = pyqtSignal(str)
     log_message_signal = pyqtSignal(str)
     download_query_signal = pyqtSignal(int, str)
     setup_world_transfer_signal = pyqtSignal(str)
@@ -1025,7 +1025,7 @@ class ServerManagerApp(QMainWindow):
                                 if args[0] == self.selected_dropdown_text and args[1] == True:
                                     self.enable_resources_button_signal.emit()
                             elif key == "file-transfer-complete":
-                                self.download_complete_signal.emit()
+                                self.download_complete_signal.emit("")
                                 total_file_sizes = 0
                                 size_so_far = 0
                             elif key == "world-size":
@@ -1146,9 +1146,7 @@ class ServerManagerApp(QMainWindow):
                                                 zf.write(data)
                                                 received += len(data)
 
-                                        # -----------------------------------------------------
                                         # Make sure we actually received the entire ZIP.
-                                        # -----------------------------------------------------
                                         success = False
                                         if received != expected_bytes:
                                             raise ConnectionError(
@@ -1157,12 +1155,6 @@ class ServerManagerApp(QMainWindow):
                                         else:
                                             success = True
 
-                                        # -----------------------------------------------------
-                                        # IMPORTANT:
-                                        #
-                                        # This happens only AFTER the entire ZIP has been
-                                        # written and closed.
-                                        # -----------------------------------------------------
                                         self.send_request(
                                             "transfer-received",
                                             [world]
@@ -1176,15 +1168,6 @@ class ServerManagerApp(QMainWindow):
                                             f"World transfer failed: {e}"
                                             f"</font>"
                                         )
-
-                                        try:
-                                            # self.send_request(
-                                            #     "cancelled-transfer",
-                                            #     [world]
-                                            # )
-                                            pass
-                                        except Exception:
-                                            pass
 
                                     finally:
 
@@ -1232,15 +1215,6 @@ class ServerManagerApp(QMainWindow):
                                         f"</font>"
                                     )
 
-                                    try:
-                                        # self.send_data(
-                                        #     "cancelled-transfer",
-                                        #     world
-                                        # )
-                                        pass
-                                    except Exception:
-                                        pass
-
                             elif key == "transfer-progress":
                                 bytes_received = int(args[0])
                                 file = args[1]
@@ -1263,13 +1237,13 @@ class ServerManagerApp(QMainWindow):
 
                             elif key == "transfer-complete":
                                 # This message comes from the host after the entire ZIP has
-                                # been received AND closed on disk.
+                                # been received and closed on disk.
                                 world = args[0]
 
                                 self.resources_download_path = self.world_transfer_location
 
                                 self.progress_set_signal.emit(100)
-                                self.download_complete_signal.emit()
+                                self.download_complete_signal.emit(world)
 
                                 self.log_queue.put(
                                     f"{self.timestamp()} "
@@ -1574,14 +1548,106 @@ class ServerManagerApp(QMainWindow):
             self.cancel_download_button.show()
         self.download_progress.show()
     
-    def download_complete(self):
+    def download_complete(self, world):
         self.downloads_message.setText("Download complete!")
         self.download_file_label.setText("")
         self.delay(0.5)
+
+        extract = QMessageBox.question(
+            self,
+            "World Extraction",
+            f"Would you like to extract {world} to<br>the worlds folder?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+        )
+
+        if extract == QMessageBox.StandardButton.Yes:
+            self.extract_world_download(world)
+        
         self.finish_button.show()
         self.open_downloads_button.show()
         self.cancel_download_button.hide()
         self.download_progress.hide()
+
+    def extract_world_download(self, world):
+        zip_path = Path(self.world_transfer_location, world + ".zip")
+        if not zip_path:
+            return
+
+        settings = file_funcs.load_settings(self.log_queue, threading.Lock())
+        
+        # new_name, ok = QInputDialog.getText(self, "Name World", "Enter the name to save the world as.", text=world)
+        # while True:
+        #     if not ok:
+        #         return
+        #     elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(self.server_path, "worlds"))]:
+        #         reply = QMessageBox.question(
+        #             self,
+        #             "Overwrite World",
+        #             f"The world {new_name} already exists.<br><br>Would you like to overwrite it?",
+        #             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        #             QMessageBox.StandardButton.Yes
+        #         )
+        #         if reply == QMessageBox.StandardButton.Yes:
+        #             break
+        #         else:
+        #             new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.", text=new_name)
+        #     elif new_name.strip() == "":
+        #         new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.<br><font color='red'>Invalid name.</font>", text=new_name)
+        #     else:
+        #         break
+
+
+        # src = Path(backup_path)
+        # dest = Path(self.path(self.server_path, "worlds"))
+
+        # with zipfile.ZipFile(src, "r") as zip_ref:
+        #     top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
+
+        #     if len(top_level) == 1:
+        #         zip_ref.extractall(dest)
+        #         extracted_folder_name = list(top_level)[0]
+        #         extracted_path = dest / extracted_folder_name
+        #         target_path = dest / new_name
+
+        #         if extracted_path != target_path:
+        #             if target_path.exists():
+        #                 shutil.rmtree(target_path)
+        #             extracted_path.rename(target_path)
+        #     else:
+        #         zip_ref.extractall(dest / new_name)
+
+        # restored_path = dest / new_name
+
+        # if new_name not in self.worlds.keys():
+        #     reply = QMessageBox.question(
+        #         self,
+        #         "Add World",
+        #         f"Backup restored successfully as <b>{new_name}</b>.<br><br>"
+        #         "Would you like to add this world to your active worlds list now?",
+        #         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        #         QMessageBox.StandardButton.Yes,  # Default selection
+        #     )
+
+        #     if reply == QMessageBox.StandardButton.Yes:
+        #         if self.add_existing_world(
+        #             update=False, restored_backup=restored_path
+        #         ):
+        #             self.log_queue.put(
+        #                 f"<font color='green'>Restored and added '{new_name}' in worlds folder.</font>"
+        #             )
+        #         return
+        #     else:
+        #         self.log_queue.put(
+        #             f"<font color='green'>Restored '{new_name}' to worlds folder (not added to active list).</font>"
+        #         )
+        # else:
+        #     self.log_queue.put(
+        #         f"<font color='green'>Restored and replaced '{new_name}' in worlds folder.</font>"
+        #     )
+
+        # self.show_main_page(True)
+        # return restored_path
     
     def cancel_download(self):
         self.cancelled_download.set()

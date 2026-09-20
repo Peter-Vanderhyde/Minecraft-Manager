@@ -103,7 +103,7 @@ class ServerManagerApp(QMainWindow):
         # Default IP
         self.ip_placeholder_msg = "Hosting IP"
         self.saved_ip = ""
-        self.host_ip = ""
+        self.settings = file_funcs.Settings("", {}, [], "", {}, [], [], {})
         self.port = 5555
         self.server_port = "25565"
         self.server = None # server socket
@@ -111,21 +111,15 @@ class ServerManagerApp(QMainWindow):
         self.receive_thread = threading.Thread(target=self.receive)
         self.message_timer = QTimer(self)
         self.message_timer.timeout.connect(self.check_messages)
-        self.ips = {}
         self.clients = {}
         self.status = ""
-        self.server_path = ""
         self._state = ""
         self.world = ""
         self.world_version = ""
-        self.worlds = {}
-        self.world_order = []
-        self.universal_settings = {}
-        self.disabled_download_worlds: set = set()
         self.curr_players = []
         self.last_page_index = 0
         self.log_queue = queue.Queue()
-        self.running_version = lambda: self.worlds[self.world]["version"]
+        self.running_version = lambda: self.settings.worlds[self.world]["version"]
 
         self.server_log_queue = queue.Queue()
 
@@ -201,13 +195,13 @@ class ServerManagerApp(QMainWindow):
                 return
 
 
-        self.host_ip, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
-        self.saved_ip = self.host_ip
-        self.ip_button.setText(f"IP: {self.host_ip}")
+        self.settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+        self.saved_ip = self.settings.host_ip
+        self.ip_button.setText(f"IP: {self.settings.host_ip}")
         self.clear_log_queue()
-        self.supervisor_connector.set_info(self.host_ip, self.server_port)
+        self.supervisor_connector.set_info(self.settings.host_ip, self.server_port)
         
-        if self.server_path == "" or not os.path.isdir(self.server_path):
+        if self.settings.server_path == "" or not os.path.isdir(self.settings.server_path):
             self.message_timer.stop()
             self.show_server_entry_page()
         else:
@@ -253,7 +247,7 @@ class ServerManagerApp(QMainWindow):
 
         # Left column
         left_column_layout = QVBoxLayout()
-        self.ip_button = QPushButton(f"IP: {self.host_ip}")
+        self.ip_button = QPushButton(f"IP: {self.settings.host_ip}")
         self.ip_button.setObjectName("smallGreenButton")
         self.ip_button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         self.ip_button.clicked.connect(lambda: self.open_ip_context_menu(QCursor.pos()))
@@ -613,7 +607,7 @@ class ServerManagerApp(QMainWindow):
         self.hosting_ip_entry.setMinimumWidth(self.width() // 2)
         self.hosting_ip_entry.setMaximumWidth(self.width() // 2)
         self.hosting_ip_entry.setFont(QFont(self.hosting_ip_entry.font().family(), int(self.hosting_ip_entry.font().pointSize() * 1.5)))
-        self.hosting_ip_entry.setPlaceholderText(self.host_ip or self.ip_placeholder_msg)
+        self.hosting_ip_entry.setPlaceholderText(self.settings.host_ip or self.ip_placeholder_msg)
         self.default_ip_check = QCheckBox("Set as default")
         self.default_ip_check.setObjectName("checkbox")
         self.default_ip_check.setChecked(False)
@@ -1369,7 +1363,7 @@ class ServerManagerApp(QMainWindow):
         backup_button = QPushButton("Backup World (Recommended!)")
         backup_button.setObjectName("yellowButton")
         backup_button.clicked.connect(lambda: self.backup_world(world_path=(
-            self.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
+            self.settings.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
         )))
 
         t_box2.addStretch()
@@ -1567,7 +1561,7 @@ class ServerManagerApp(QMainWindow):
 
         # This version will start the threads attempting to connect to the api.
         # A signal is used to broadcast whether the threads successfully connected (i.e. the server is up)
-        api_settings = file_funcs.get_api_settings(self.server_path, api_version)
+        api_settings = file_funcs.get_api_settings(self.settings.server_path, api_version)
         self.mgmt_listener_thread = threading.Thread(target=self.bus.run_mgmt_listener_client, args=api_settings, daemon=True)
         self.mgmt_listener_thread.start()
         self.mgmt_sender_thread = threading.Thread(target=self.bus.run_mgmt_sender_client, args=api_settings, daemon=True)
@@ -1619,7 +1613,7 @@ class ServerManagerApp(QMainWindow):
         self.bus_shutdown_complete.set()
     
     def open_server_folder(self):
-        file_funcs.open_folder_explorer(self.server_path)
+        file_funcs.open_folder_explorer(self.settings.server_path)
     
     def delay(self, delay_amount):
         end_time = time.time() + delay_amount
@@ -1647,7 +1641,7 @@ class ServerManagerApp(QMainWindow):
     
     def show_main_page(self, ignore_load=False):
         if not ignore_load:
-            saved_ip, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+            self.settings = file_funcs.load_settings(self.log_queue, self.file_lock)
         
         self.check_messages()
         self.stacked_layout.setCurrentIndex(0)
@@ -1676,7 +1670,7 @@ class ServerManagerApp(QMainWindow):
             self.connecting_label.setText("")
             self.connection_delabel.setText("")
         self.default_ip_check.setChecked(False)
-        self.hosting_ip_entry.setText(self.host_ip)
+        self.hosting_ip_entry.setText(self.settings.host_ip)
         self.show_ip_entry_page()
     
     def show_ip_entry_page(self):
@@ -1690,7 +1684,7 @@ class ServerManagerApp(QMainWindow):
     
     def prepare_remove_world_page(self):
         self.worlds_dropdown.clear()
-        self.worlds_dropdown.addItems(self.world_order)
+        self.worlds_dropdown.addItems(self.settings.world_order)
         self.delete_world_checkbox.setChecked(False)
         self.show_remove_world_page()
 
@@ -1699,7 +1693,7 @@ class ServerManagerApp(QMainWindow):
     
     def show_edit_properties_page(self):
         world = self.dropdown.currentText()
-        file_path = self.path(self.server_path, "worlds", world, "saved_properties.properties")
+        file_path = self.path(self.settings.server_path, "worlds", world, "saved_properties.properties")
         with open(file_path, 'r') as props:
             curr_properties = props.read()
         
@@ -1723,13 +1717,13 @@ class ServerManagerApp(QMainWindow):
             self.commands_warning_label.show()
         else:
             self.commands_warning_label.hide()
-        if self.universal_settings.get("whitelist enabled"):
+        if self.settings.universal_settings.get("whitelist enabled"):
             self.whitelist_toggle_button.setProperty("variant", "")
             self.whitelist_toggle_button.setText("Enabled")
         else:
             self.whitelist_toggle_button.setProperty("variant", "red")
             self.whitelist_toggle_button.setText("Disabled")
-        if self.universal_settings.get("gui enabled"):
+        if self.settings.universal_settings.get("gui enabled"):
             self.gui_toggle_button.setProperty("variant", "")
             self.gui_toggle_button.setText("Enabled")
         else:
@@ -1745,8 +1739,8 @@ class ServerManagerApp(QMainWindow):
 
         self.whitelist_add_textbox.clear()
 
-        self.view_distance_textbox.setText(str(self.universal_settings.get("view distance")))
-        self.simulation_distance_textbox.setText(str(self.universal_settings.get("simulation distance")))
+        self.view_distance_textbox.setText(str(self.settings.universal_settings.get("view distance")))
+        self.simulation_distance_textbox.setText(str(self.settings.universal_settings.get("simulation distance")))
         self.stacked_layout.setCurrentIndex(9)
     
     def show_mods_page(self):
@@ -1773,12 +1767,12 @@ class ServerManagerApp(QMainWindow):
         self.stacked_layout.setCurrentIndex(12)
 
     def update_prune_file_size(self):
-        file_size = file_funcs.get_total_size(self.path(self.server_path, "worlds", self.prune_worlds_dropdown.currentText()))
+        file_size = file_funcs.get_total_size(self.path(self.settings.server_path, "worlds", self.prune_worlds_dropdown.currentText()))
         self.prune_file_size.setText("World File Size: " + file_funcs.format_size(file_size))
 
     def show_pruning_page(self):
         self.prune_worlds_dropdown.clear()
-        self.prune_worlds_dropdown.addItems(self.worlds.keys())
+        self.prune_worlds_dropdown.addItems(self.settings.worlds.keys())
         self.dimension_dropdown.setCurrentIndex(0)
         self.update_prune_file_size()
         self.minute_box.setText("")
@@ -1792,12 +1786,12 @@ class ServerManagerApp(QMainWindow):
     
     def save_properties_edit(self):
         world = self.dropdown.currentText()
-        file_path = self.path(self.server_path, "worlds", world, "saved_properties.properties")
+        file_path = self.path(self.settings.server_path, "worlds", world, "saved_properties.properties")
         new_contents = self.edit_box.toPlainText()
         with open(file_path, 'w') as props:
             props.write(new_contents)
         
-        self.universal_settings = file_funcs.check_for_property_updates(self.server_path, world, self.file_lock, self.ips, self.host_ip)
+        self.settings.universal_settings = file_funcs.check_for_property_updates(self.settings.server_path, world, self.file_lock, self.settings.ips, self.settings.host_ip)
         self.log_queue.put(f"<font color='green'>Properties have been saved.</font>")
 
         self.show_main_page(True)
@@ -1809,17 +1803,17 @@ class ServerManagerApp(QMainWindow):
     def start_manager_server(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.settimeout(0.1)
-        if self.host_ip == "":
+        if self.settings.host_ip == "":
             self.show_ip_entry_page()
             self.default_ip_check.setChecked(False)
             return
         try:
-            self.server.bind((self.host_ip, self.port))
+            self.server.bind((self.settings.host_ip, self.port))
             self.server.listen()
         except:
             self.prepare_ip_page(failed=True)
             return
-        self.ip_button.setText(f"IP: {self.host_ip}")
+        self.ip_button.setText(f"IP: {self.settings.host_ip}")
         self.show_main_page()
         self.first_load()
         self.receive_thread = threading.Thread(target=self.receive)
@@ -1848,8 +1842,8 @@ class ServerManagerApp(QMainWindow):
         skip_receive = False
         messages = []
         ip, port = address
-        if self.ips.get(ip) is not None:
-            self.clients[client] = self.ips.get(ip)
+        if self.settings.ips.get(ip) is not None:
+            self.clients[client] = self.settings.ips.get(ip)
             client.sendall("accept".encode("utf-8"))
         else:
             # Get display name
@@ -1865,8 +1859,8 @@ class ServerManagerApp(QMainWindow):
                     messages += message.split("CLIENT-MESSAGE~~>")[1:]
 
                     self.clients[client] = messages.pop(0)
-                    self.ips[ip] = self.clients[client]
-                    file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                    self.settings.ips[ip] = self.clients[client]
+                    file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
                     stop = True
                 except socket.error as e:
                     if e.errno == 10035: # Non blocking socket error
@@ -1936,13 +1930,13 @@ class ServerManagerApp(QMainWindow):
                             self.tell(client, "<font color='red'>The host manager no longer supports restarting worlds in the current version.</font>")
                             self.tell(client, "You are using an outdated client version. You can find the latest release at https://www.github.com/Peter-Vanderhyde/Minecraft-Manager/releases.")
                         elif request == "check-resources":
-                            world_folder_path = self.server_path + "\\worlds\\" + args[0]
+                            world_folder_path = self.settings.server_path + "\\worlds\\" + args[0]
                             has_resources, resource_paths = file_funcs.get_available_resources(world_folder_path)
                             self.send_data("available-resources", [args[0], has_resources], client)
                         elif request == "download-resources":
                             world = args[0]
                             resources = args[1:]
-                            world_folder_path = self.server_path + "\\worlds\\" + world
+                            world_folder_path = self.settings.server_path + "\\worlds\\" + world
                             has_resources, resource_paths = file_funcs.get_available_resources(world_folder_path, resources)
                             if not has_resources:
                                 continue
@@ -1961,7 +1955,7 @@ class ServerManagerApp(QMainWindow):
                                 self.tell(client, "<font color='red'>Cannot initiate world transfer while server is running.</font>")
                                 continue
 
-                            size = file_funcs.get_total_size(os.path.join(self.server_path, "worlds", args[0]))
+                            size = file_funcs.get_total_size(os.path.join(self.settings.server_path, "worlds", args[0]))
                             size_mb = size // (1024 * 1024)
                             self.send_data("world-size", [size_mb, args[0]], client)
                         elif request == "begin-world-transfer":
@@ -1977,9 +1971,9 @@ class ServerManagerApp(QMainWindow):
                             self.send_data("transfer-complete", world, client)
                         elif request == "check-download-enabled":
                             world = args[0]
-                            self.send_data("downloadable-world", [world, world not in self.disabled_download_worlds], client)
+                            self.send_data("downloadable-world", [world, world not in self.settings.disabled_download_worlds], client)
                         elif request == "get-resource-names":
-                            world_folder_path = self.server_path + "\\worlds\\" + args[0]
+                            world_folder_path = self.settings.server_path + "\\worlds\\" + args[0]
                             has_resources, resource_paths = file_funcs.get_available_resources(world_folder_path)
                             if has_resources:
                                 names = [os.path.basename(file_path) for file_path in resource_paths]
@@ -2101,7 +2095,7 @@ class ServerManagerApp(QMainWindow):
     
     def verify_world_formatting(self):
         outdated = False
-        for name, data in self.worlds.items():
+        for name, data in self.settings.worlds.items():
             if not data.get("gamemode"):
                 # Older manager version
                 outdated = True
@@ -2113,28 +2107,28 @@ class ServerManagerApp(QMainWindow):
                     "fabric": data.get("fabric", False),
                     "level-type": data.get("level-type", "Normal")
                 }
-                self.worlds[name] = new_data
-                if os.path.exists(self.path(self.server_path, "worlds", name)):
-                    file_funcs.save_world_properties(self.path(self.server_path, "worlds", name), new_data)
+                self.settings.worlds[name] = new_data
+                if os.path.exists(self.path(self.settings.server_path, "worlds", name)):
+                    file_funcs.save_world_properties(self.path(self.settings.server_path, "worlds", name), new_data)
                 
-                if os.path.isfile(self.path(self.server_path, "worlds", name, "version.txt")):
-                    os.remove(self.path(self.server_path, "worlds", name, "version.txt"))
+                if os.path.isfile(self.path(self.settings.server_path, "worlds", name, "version.txt")):
+                    os.remove(self.path(self.settings.server_path, "worlds", name, "version.txt"))
         
-        if self.world_order == [] and len(self.worlds.keys()) > 0:
+        if self.settings.world_order == [] and len(self.settings.worlds.keys()) > 0:
             outdated = True
-            for world in self.worlds.keys():
-                self.world_order.append(world)
+            for world in self.settings.worlds.keys():
+                self.settings.world_order.append(world)
 
-        if len(self.world_order) > len(self.worlds):
+        if len(self.settings.world_order) > len(self.settings.worlds):
             remove_worlds = []
-            for world in self.world_order:
-                if world not in self.worlds.keys():
+            for world in self.settings.world_order:
+                if world not in self.settings.worlds.keys():
                     remove_worlds.append(world)
             for world in remove_worlds:
-                self.world_order.remove(world)
+                self.settings.world_order.remove(world)
         
-        if self.universal_settings in [{}, None]:
-            self.universal_settings = {
+        if self.settings.universal_settings in [{}, None]:
+            self.settings.universal_settings = {
                 "gui enabled": False,
                 "whitelist enabled": False,
                 "view distance": 10,
@@ -2143,7 +2137,7 @@ class ServerManagerApp(QMainWindow):
             outdated = True
         
         if outdated:
-            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+            file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
         
     
     def message_entered(self):
@@ -2196,9 +2190,9 @@ class ServerManagerApp(QMainWindow):
         self.log_queue.put(f"Server has been stopped.")
         self.broadcast(f"Server has been stopped.")
         self.send_data("stop", "refresh")
-        if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
+        if os.path.exists(self.path(self.settings.server_path, "mods")) and self.status == "offline":
             try:
-                shutil.rmtree(self.path(self.server_path, "mods"))
+                shutil.rmtree(self.path(self.settings.server_path, "mods"))
             except:
                 pass
     
@@ -2242,13 +2236,13 @@ class ServerManagerApp(QMainWindow):
                 return "already online"
             
             version, gamemode, difficulty, fabric, level_type = None, None, None, None, None
-            if self.worlds.get(world):
-                version = self.worlds[world].get("version")
-                fabric = self.worlds[world].get("fabric")
-                seed = self.worlds[world].get("seed", None)
-                difficulty = self.worlds[world].setdefault("difficulty", "Easy")
-                gamemode = self.worlds[world].setdefault("gamemode", "Survival")
-                level_type = self.worlds[world].setdefault("level-type", "Normal")
+            if self.settings.worlds.get(world):
+                version = self.settings.worlds[world].get("version")
+                fabric = self.settings.worlds[world].get("fabric")
+                seed = self.settings.worlds[world].get("seed", None)
+                difficulty = self.settings.worlds[world].setdefault("difficulty", "Easy")
+                gamemode = self.settings.worlds[world].setdefault("gamemode", "Survival")
+                level_type = self.settings.worlds[world].setdefault("level-type", "Normal")
             if not version:
                 self.log_queue.put(f"<font color='red'>The version is not specified for {world}.</font>")
                 return f"<font color='red'>ERROR: World {world} is missing version.</font>"
@@ -2270,15 +2264,15 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("Starting server...")
             self.server_chat.clear()
             QApplication.processEvents()
-            old_jars = glob.glob(self.path(self.server_path, "*.jar"))
+            old_jars = glob.glob(self.path(self.settings.server_path, "*.jar"))
             for path in old_jars:
                 os.remove(path)
-            data = self.worlds.get(world)
-            path = self.path(self.server_path, "worlds", world)
+            data = self.settings.worlds.get(world)
+            path = self.path(self.settings.server_path, "worlds", world)
             if not data:
                 self.log_queue.put(f"<font color='red'>ERROR: world '{world}' is not recognized.</font>")
                 return f"<font color='red'>Manager doesn't recognize that world.</font>"
-            elif not os.path.exists(path) and self.worlds[world].get("seed") is None:
+            elif not os.path.exists(path) and self.settings.worlds[world].get("seed") is None:
                 error = f"<font color='red'>Uh oh. Path to world '{world}' no longer exists.</font>"
                 self.log_queue.put(f"<font color='red'>ERROR: Unable to find '{world}' at path '{path}'!</font>")
                 return error
@@ -2295,15 +2289,15 @@ class ServerManagerApp(QMainWindow):
                     older_files = ["banned-players.txt", "banned-ips.txt", "ops.txt", "white-list.txt", "server.log"]
                     for file in older_files:
                         try:
-                            if os.path.isfile(self.path(self.server_path, file)):
-                                os.remove(self.path(self.server_path, file))
-                            if os.path.isfile(self.path(self.server_path, file + ".converted")):
-                                os.remove(self.path(self.server_path, file + ".converted"))
+                            if os.path.isfile(self.path(self.settings.server_path, file)):
+                                os.remove(self.path(self.settings.server_path, file))
+                            if os.path.isfile(self.path(self.settings.server_path, file + ".converted")):
+                                os.remove(self.path(self.settings.server_path, file + ".converted"))
                         except:
                             pass
 
                     # Erase old properties for fresh start each time
-                    with open(self.path(self.server_path, "server.properties"), 'w') as props:
+                    with open(self.path(self.settings.server_path, "server.properties"), 'w') as props:
                         props.write("")
                     
                     # Copy world properties to the server properties
@@ -2314,31 +2308,31 @@ class ServerManagerApp(QMainWindow):
                         for i in range(len(lines)):
                             if lines[i].startswith("management-server-secret="):
                                 lines[i] = ""
-                        with open(self.path(self.server_path, "server.properties"), 'w') as props:
+                        with open(self.path(self.settings.server_path, "server.properties"), 'w') as props:
                             props.writelines(lines)
                     elif not os.path.isdir(path):
                         os.mkdir(path)
                     
                     # Apply settings such as whitelist etc.
-                    file_funcs.apply_universal_settings(self.server_path)
+                    file_funcs.apply_universal_settings(self.settings.server_path)
 
                     # Convert new files to old files
-                    if queries.version_comparison(self.worlds[world]["version"], "1.7.6", before=True):
+                    if queries.version_comparison(self.settings.worlds[world]["version"], "1.7.6", before=True):
                         older_files = ["banned-ips", "banned-players", "ops", "whitelist"]
                         for file in older_files:
                             try:
-                                with open(self.path(self.server_path, file + ".json"), 'r') as f:
+                                with open(self.path(self.settings.server_path, file + ".json"), 'r') as f:
                                     data = json.loads(f.read())
                                 names = [player["name"] for player in data]
                                 if file == "whitelist":
                                     file = "white-list"
-                                with open(self.path(self.server_path, file + ".txt"), 'w') as f:
+                                with open(self.path(self.settings.server_path, file + ".txt"), 'w') as f:
                                     f.writelines(names)
                             except:
                                 pass
                     
                     world_mods_folder = self.path(path, "mods")
-                    server_mods_folder = self.path(self.server_path, "mods")
+                    server_mods_folder = self.path(self.settings.server_path, "mods")
                     if fabric and os.path.exists(world_mods_folder):
                         if os.path.exists(server_mods_folder):
                             shutil.rmtree(server_mods_folder)
@@ -2353,19 +2347,19 @@ class ServerManagerApp(QMainWindow):
 
                     if self.is_api_compatible(version):
                         api_version = self.get_api_version(version)
-                        file_funcs.get_api_settings(self.server_path, api_version)
-                    if not file_funcs.prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, self.server_path, self.log_queue, seed):
+                        file_funcs.get_api_settings(self.settings.server_path, api_version)
+                    if not file_funcs.prepare_server_settings(world, version, gamemode, difficulty, fabric, level_type, self.settings.server_path, self.log_queue, seed):
                         raise RuntimeError("Failed to prepare settings.")
                     else:
                         if seed is not None:
-                            self.worlds[world].pop("seed")
-                            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                            self.settings.worlds[world].pop("seed")
+                            file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
                 
-                    with open(self.path(self.server_path, "run.bat"), 'r') as f:
+                    with open(self.path(self.settings.server_path, "run.bat"), 'r') as f:
                         args = f.read()
                     
                     args = args.strip().split(" ")
-                    if "nogui" not in args and not self.universal_settings.get("gui enabled"):
+                    if "nogui" not in args and not self.settings.universal_settings.get("gui enabled"):
                         args.append("nogui")
                     
                     self._failed_msg = ""
@@ -2442,12 +2436,12 @@ class ServerManagerApp(QMainWindow):
     def update_saved_properties(self, path: str, world: str, fabric: bool):
         if not os.path.isfile(self.path(path, "saved_properties.properties")):
             lines = []
-            with open(self.path(self.server_path, "server.properties"), 'r') as props:
+            with open(self.path(self.settings.server_path, "server.properties"), 'r') as props:
                 lines = props.readlines()
             with open(self.path(path, "saved_properties.properties"), 'w') as world_props:
                 world_props.writelines(lines)
         else:
-            with open(self.path(self.server_path, "server.properties"), 'r') as serv:
+            with open(self.path(self.settings.server_path, "server.properties"), 'r') as serv:
                 serv_lines = serv.readlines()
             
             with open(self.path(path, "saved_properties.properties"), 'r') as saved:
@@ -2492,17 +2486,17 @@ class ServerManagerApp(QMainWindow):
         if self.supervisor_connector.connected():
             self.close_supervisor_server()
 
-            if not self.is_api_compatible(self.worlds[world]["version"]):
+            if not self.is_api_compatible(self.settings.worlds[world]["version"]):
                 self.delay(3)
                 # Hacky way to delete the mods folder after closing for old version
-                if os.path.exists(self.path(self.server_path, "mods")) and self.status == "offline":
+                if os.path.exists(self.path(self.settings.server_path, "mods")) and self.status == "offline":
                     try:
-                        shutil.rmtree(self.path(self.server_path, "mods"))
+                        shutil.rmtree(self.path(self.settings.server_path, "mods"))
                     except:
                         pass
 
         # No supervisor, only api
-        elif self.is_api_compatible(self.worlds[world]["version"]):
+        elif self.is_api_compatible(self.settings.worlds[world]["version"]):
             if len(self.curr_players) > 0:
                 self.log_queue.put("Giving players 10 seconds notice...")
                 self.bus.chat_msg.emit("[Server] The host has closed the server.")
@@ -2537,7 +2531,7 @@ class ServerManagerApp(QMainWindow):
             older_files = ["banned-ips", "banned-players", "ops", "white-list"]
             for file in older_files:
                 try:
-                    with open(self.path(self.server_path, file + ".txt"), 'r') as f:
+                    with open(self.path(self.settings.server_path, file + ".txt"), 'r') as f:
                         names = f.readlines()
                     data = []
                     for name in names:
@@ -2556,13 +2550,13 @@ class ServerManagerApp(QMainWindow):
                             data.append(obj)
                     if file == "white-list":
                         file = "whitelist"
-                    with open(self.path(self.server_path, file + ".json"), 'w') as f:
+                    with open(self.path(self.settings.server_path, file + ".json"), 'w') as f:
                         json.dump(data, f, indent=2)
                 except:
                     pass
 
     def query_status(self):
-        status, brand, version, world = queries.status(self.host_ip, self.server_port)
+        status, brand, version, world = queries.status(self.settings.host_ip, self.server_port)
         if status == "offline":
             return status, "", ""
         else:
@@ -2573,11 +2567,11 @@ class ServerManagerApp(QMainWindow):
             return status, version, world
     
     def query_players(self):
-        players = queries.players(self.host_ip, self.server_port)
+        players = queries.players(self.settings.host_ip, self.server_port)
         return players
     
     def query_worlds(self):
-        return (self.worlds, self.world_order)
+        return (self.settings.worlds, self.settings.world_order)
 
     def get_status(self):
         self.set_status(["pinging",None,None])
@@ -2612,7 +2606,7 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[self.world]['fabric']}")
+            self.version_label.setText(f"Version: {version} {'Fabric' * self.settings.worlds[self.world]['fabric']}")
             self.world_label.setText(f"World: {self.world}")
             self.refresh_button.setEnabled(True)
             self.refresh_status_button.setEnabled(True)
@@ -2646,8 +2640,8 @@ class ServerManagerApp(QMainWindow):
             self.server_status_label.hide()
             self.server_status_offline_label.hide()
             self.server_status_online_label.show()
-            if world in self.worlds:
-                self.version_label.setText(f"Version: {version} {'Fabric' * self.worlds[world]['fabric']}")
+            if world in self.settings.worlds:
+                self.version_label.setText(f"Version: {version} {'Fabric' * self.settings.worlds[world]['fabric']}")
             else:
                 self.version_label.setText(f"Version: {version}")
             self.world_label.setText(f"World: {world}")
@@ -2702,8 +2696,8 @@ class ServerManagerApp(QMainWindow):
 
         opped_players = []
         if queries.version_comparison(self.running_version(), "1.7.6", before=True):
-            if os.path.isfile(self.path(self.server_path, "ops.txt")):
-                with open(self.path(self.server_path, "ops.txt"), 'r') as f:
+            if os.path.isfile(self.path(self.settings.server_path, "ops.txt")):
+                with open(self.path(self.settings.server_path, "ops.txt"), 'r') as f:
                     opped_players = [line.strip('\n') for line in f.readlines() if line.strip('\n')]
             for player in self.curr_players:
                 if player.lower() in opped_players:
@@ -2712,8 +2706,8 @@ class ServerManagerApp(QMainWindow):
                 item.setForeground(QColor("purple"))
                 self.players_info_box.addItem(item)
         else:
-            if os.path.isfile(self.path(self.server_path, "ops.json")):
-                with open(self.path(self.server_path, "ops.json"), 'r') as f:
+            if os.path.isfile(self.path(self.settings.server_path, "ops.json")):
+                with open(self.path(self.settings.server_path, "ops.json"), 'r') as f:
                     opped_players = [p["name"] for p in json.loads(f.read())]
             for player in self.curr_players:
                 if player in opped_players:
@@ -2755,26 +2749,26 @@ class ServerManagerApp(QMainWindow):
     
     def set_worlds_list(self):
         self.dropdown.clear()
-        self.dropdown.addItems(self.world_order)
+        self.dropdown.addItems(self.settings.world_order)
         self.set_selected_world_version(self.dropdown.currentText())
     
     def set_selected_world_version(self, world):
         if world:
             self.prune_world_button.setEnabled(True)
-            self.world_version_label.setText(f'v{self.worlds[world]["version"]} {self.worlds[world]["fabric"] * "Fabric"}')
-            if os.path.isfile(self.path(self.server_path, "worlds", world, "saved_properties.properties")):
+            self.world_version_label.setText(f'v{self.settings.worlds[world]["version"]} {self.settings.worlds[world]["fabric"] * "Fabric"}')
+            if os.path.isfile(self.path(self.settings.server_path, "worlds", world, "saved_properties.properties")):
                 self.world_properties_button.setEnabled(True)
             else:
                 self.world_properties_button.setEnabled(False)
             
-            if self.worlds[world].get("fabric"):
+            if self.settings.worlds[world].get("fabric"):
                 self.world_mods_button.setEnabled(True)
                 self.modrinth_button.show()
             else:
                 self.world_mods_button.setEnabled(False)
                 self.modrinth_button.hide()
             
-            downloadable = world not in self.disabled_download_worlds
+            downloadable = world not in self.settings.disabled_download_worlds
             self.enable_download_checkbox.setChecked(downloadable)
             self.enable_download_checkbox.setEnabled(True)
         else:
@@ -2790,18 +2784,21 @@ class ServerManagerApp(QMainWindow):
         if os.path.isdir(path):
             self.clear_log_queue()
             self.message_timer.start(1000)
-            if self.server_path == path:
+            if self.settings.server_path == path:
                 pass
-            elif self.server_path:
-                self.worlds = {}
-                self.world_order = []
+            elif self.settings.server_path:
+                self.settings.worlds = {}
+                self.settings.world_order = []
                 self.dropdown.clear()
-                file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
-                saved_ip, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+                file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
+                old_host_ip = self.settings.host_ip
+                self.settings = file_funcs.load_settings(self.log_queue, self.file_lock)
+                saved_ip = self.settings.host_ip
+                self.settings.host_ip = old_host_ip
                 self.clear_log_queue()
             else:
-                self.server_path = path
-                file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+                self.settings.server_path = path
+                file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
             
             if self.receive_thread and self.receive_thread.is_alive():
                 self.show_main_page(ignore_load=True)
@@ -2825,10 +2822,10 @@ class ServerManagerApp(QMainWindow):
         self.clear_log_queue()
         self.message_timer.start(200)
         
-        self.worlds = {}
-        self.world_order = []
-        self.disabled_download_worlds = set()
-        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        self.settings.worlds = {}
+        self.settings.world_order = []
+        self.settings.disabled_download_worlds = set()
+        file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
         
         self.ip_button.setEnabled(False)
         self.refresh_button.setEnabled(False)
@@ -2853,7 +2850,7 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put("Please wait...")
             self.delay(0.5)
             subprocess.run(["java", "-jar", f"server-{version}.jar"], cwd=path)
-            self.server_path = path
+            self.settings.server_path = path
             self.message_timer.start(1000)
 
             self.ip_button.setEnabled(True)
@@ -2879,7 +2876,7 @@ class ServerManagerApp(QMainWindow):
 
     def check_eula(self):
         try:
-            with open(self.path(self.server_path, "eula.txt"), 'r') as f:
+            with open(self.path(self.settings.server_path, "eula.txt"), 'r') as f:
                 content = f.read()
             if "eula=false" in content:
                 return False
@@ -2890,12 +2887,12 @@ class ServerManagerApp(QMainWindow):
             return None
     
     def accepted_eula(self):
-        with open(self.path(self.server_path, "eula.txt"), 'r') as f:
+        with open(self.path(self.settings.server_path, "eula.txt"), 'r') as f:
             content = f.readlines()
         for i, line in enumerate(content):
             if line.strip() == "eula=false":
                 content[i] = "eula=true"
-        with open(self.path(self.server_path, "eula.txt"), 'w') as f:
+        with open(self.path(self.settings.server_path, "eula.txt"), 'w') as f:
             f.writelines(content)
         
         self.start_manager_server()
@@ -2906,7 +2903,7 @@ class ServerManagerApp(QMainWindow):
     def set_ip(self):
         ip = self.hosting_ip_entry.text()
         if ip:
-            if ip == self.host_ip and self.receive_thread.is_alive():
+            if ip == self.settings.host_ip and self.receive_thread.is_alive():
                 self.show_main_page(ignore_load=True)
                 return
             elif self.receive_thread.is_alive():
@@ -2918,15 +2915,15 @@ class ServerManagerApp(QMainWindow):
                 self.clear_log_queue()
                 self.clear_log()
             self.connecting_label.setText("Connecting...")
-            self.host_ip = ip
+            self.settings.host_ip = ip
             self.delay(0.5)
             if self.default_ip_check.isChecked():
-                file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, ip=self.host_ip)
-                self.saved_ip = self.host_ip
+                file_funcs.update_settings(self.file_lock, self.settings, ip=self.settings.host_ip)
+                self.saved_ip = self.settings.host_ip
             self.start_manager_server()
 
     def restore_backup(self):
-        backup_path = file_funcs.select_world(self, self.path(self.server_path, "backups"), "Select a Backup", "No Backups Found", zips_only=True)
+        backup_path = file_funcs.select_world(self, self.path(self.settings.server_path, "backups"), "Select a Backup", "No Backups Found", zips_only=True)
         if not backup_path:
             return
         
@@ -2935,7 +2932,7 @@ class ServerManagerApp(QMainWindow):
         while True:
             if not ok:
                 return
-            elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(self.server_path, "worlds"))]:
+            elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(self.settings.server_path, "worlds"))]:
                 reply = QMessageBox.question(
                     self,
                     "Overwrite World",
@@ -2954,7 +2951,7 @@ class ServerManagerApp(QMainWindow):
 
 
         src = Path(backup_path)
-        dest = Path(self.path(self.server_path, "worlds"))
+        dest = Path(self.path(self.settings.server_path, "worlds"))
 
         with zipfile.ZipFile(src, "r") as zip_ref:
             top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
@@ -2974,7 +2971,7 @@ class ServerManagerApp(QMainWindow):
 
         restored_path = dest / new_name
 
-        if new_name not in self.worlds.keys():
+        if new_name not in self.settings.worlds.keys():
             reply = QMessageBox.question(
                 self,
                 "Add World",
@@ -3008,10 +3005,10 @@ class ServerManagerApp(QMainWindow):
     def backup_world(self, world_path=None, progress_function=None, socket_writer=None):
         streaming = (socket_writer is not None)
         if not world_path:
-            world_folder_path = self.path(self.server_path, "worlds")
+            world_folder_path = self.path(self.settings.server_path, "worlds")
             # Only show known worlds
-            world_dirs: list[str] = [world for world in os.listdir(world_folder_path) if world not in self.worlds.keys()]
-            for world in self.worlds.keys():
+            world_dirs: list[str] = [world for world in os.listdir(world_folder_path) if world not in self.settings.worlds.keys()]
+            for world in self.settings.worlds.keys():
                 if world in world_dirs:
                     world_dirs.remove(world)
             world_path = file_funcs.select_world(self, world_folder_path, excluded_worlds=world_dirs)
@@ -3019,7 +3016,7 @@ class ServerManagerApp(QMainWindow):
             return False
         
         world_path = os.path.normpath(world_path)
-        world_folders = glob.glob(self.path(self.server_path, "worlds", "*/"))
+        world_folders = glob.glob(self.path(self.settings.server_path, "worlds", "*/"))
         if world_path in world_folders:
             try:
                 if self.world == os.path.basename(world_path) and self.query_status()[0] == "online":
@@ -3028,7 +3025,7 @@ class ServerManagerApp(QMainWindow):
                     return False
                 
                 current_date = datetime.now().strftime("%m-%d-%y")
-                new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}.zip"
+                new_path = f"{self.path(self.settings.server_path, 'backups', os.path.basename(world_path))}_{current_date}.zip"
                 if os.path.exists(new_path):
                     new_path = new_path.removesuffix(".zip")
                     index = 1
@@ -3059,7 +3056,7 @@ class ServerManagerApp(QMainWindow):
                     return False
                 
                 try:
-                    new_path = f"{self.path(self.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
+                    new_path = f"{self.path(self.settings.server_path, 'backups', os.path.basename(world_path))}_{current_date}"
                     shutil.rmtree(new_path)
                 except:
                     pass
@@ -3078,13 +3075,12 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(
                 f"{self.clients.get(client)} initiated a world transfer for {world}."
             )
-
             # ---------------------------------------------------------
-            # 1. Create the ZIP
+            # Create the ZIP
             # ---------------------------------------------------------
             self.log_queue.put("Zipping world files...")
 
-            world_path = Path(self.server_path) / "worlds" / world
+            world_path = Path(self.settings.server_path) / "worlds" / world
             temp_zip_dir = Path(os.environ.get("TEMP", "."))
             archive_path = str(temp_zip_dir / f"tmp_{world}.zip")
 
@@ -3117,15 +3113,8 @@ class ServerManagerApp(QMainWindow):
                 self.send_data("cancelled-transfer", world, client)
                 return False
 
-            # ---------------------------------------------------------
-            # 2. Get ZIP size
-            # ---------------------------------------------------------
             total_bytes = int(Path(archive_path).stat().st_size)
 
-            # ---------------------------------------------------------
-            # 3. Create and LISTEN on transfer socket BEFORE telling
-            #    the client to connect.
-            # ---------------------------------------------------------
             class TransferSocket:
                 def __init__(self, host_ip):
                     self.sock = socket.socket(
@@ -3199,15 +3188,8 @@ class ServerManagerApp(QMainWindow):
 
                         self.sock = None
 
-            transfer_sock = TransferSocket(self.host_ip)
-
-            # ---------------------------------------------------------
-            # 4. Tell client about the transfer.
-            #
-            # The socket is ALREADY listening at this point.
-            # ---------------------------------------------------------
+            transfer_sock = TransferSocket(self.settings.host_ip)
             self.log_queue.put("Transferring world...")
-
             self.send_data(
                 "starting-transfer",
                 [total_bytes, world, transfer_sock.port],
@@ -3215,7 +3197,7 @@ class ServerManagerApp(QMainWindow):
             )
 
             # ---------------------------------------------------------
-            # 5. Wait for the client to connect.
+            # Wait for the client to connect.
             # ---------------------------------------------------------
             transfer_sock.waitfor(
                 client.getpeername()[0]
@@ -3226,9 +3208,6 @@ class ServerManagerApp(QMainWindow):
                     "Transfer client failed to connect."
                 )
 
-            # ---------------------------------------------------------
-            # 6. Progress dialog
-            # ---------------------------------------------------------
             dialog_box = QProgressDialog(
                 f"Transferring {world}...",
                 "Cancel",
@@ -3253,13 +3232,9 @@ class ServerManagerApp(QMainWindow):
 
             dialog_box.setModal(True)
 
-            # ---------------------------------------------------------
-            # 7. Send ZIP
-            # ---------------------------------------------------------
             bytes_sent = 0
             last_progress_time = time.monotonic()
 
-            # speed is assumed to be MB per chunk
             chunk_size = max(
                 1,
                 int(1024 * 1024 * speed)
@@ -3298,36 +3273,32 @@ class ServerManagerApp(QMainWindow):
 
                         bytes_sent += sent
 
-                        # -------------------------------------------------
-                        # Update UI/network roughly 10 times per second.
-                        # -------------------------------------------------
                         current_time = time.monotonic()
 
-                        if current_time - last_progress_time >= 0.5:
-                            progress = int(
-                                bytes_sent * 100 / total_bytes
-                            )
+                        if current_time - last_progress_time >= 0.5 and total_bytes > 0:
+                            percent = bytes_sent * 100 / total_bytes
+                            if percent >= 0 and percent <= 100:
+                                progress = int(
+                                    bytes_sent * 100 / total_bytes
+                                )
 
-                            dialog_box.setValue(progress)
-                            QApplication.processEvents()
+                                dialog_box.setValue(progress)
+                                QApplication.processEvents()
 
-                            self.send_data(
-                                "transfer-progress",
-                                [bytes_sent, world],
-                                client
-                            )
+                                self.send_data(
+                                    "transfer-progress",
+                                    [bytes_sent, world],
+                                    client
+                                )
 
                             last_progress_time = current_time
 
-                # ---------------------------------------------------------
-                # 8. Transfer socket has sent the entire ZIP.
-                # ---------------------------------------------------------
                 dialog_box.setValue(100)
                 QApplication.processEvents()
 
                 # Tell the client that the sender is finished.
                 #
-                # Do NOT call this "transfer-complete", because the client
+                # Not "transfer-complete", because the client
                 # may still be writing the last received bytes to disk.
                 self.send_data(
                     "transfer-sent",
@@ -3383,13 +3354,13 @@ class ServerManagerApp(QMainWindow):
 
             finally:
                 # ---------------------------------------------------------
-                # 9. Clean up transfer socket
+                # Clean up transfer socket
                 # ---------------------------------------------------------
                 if transfer_sock is not None:
                     transfer_sock.close()
 
                 # ---------------------------------------------------------
-                # 10. Remove temporary ZIP
+                # Remove temporary ZIP
                 # ---------------------------------------------------------
                 if archive_path is not None:
                     try:
@@ -3435,16 +3406,16 @@ class ServerManagerApp(QMainWindow):
         if restored_backup:
             world_path = restored_backup
         else:
-            world_path = file_funcs.select_world(self, self.path(self.server_path, "worlds"), "Select Existing World", excluded_worlds=self.worlds.keys())
+            world_path = file_funcs.select_world(self, self.path(self.settings.server_path, "worlds"), "Select Existing World", excluded_worlds=self.settings.worlds.keys())
         if world_path is None:
             return
         
         world_path = self.path(world_path)
-        world_folders = glob.glob(self.path(self.server_path, "worlds", "*/"))
+        world_folders = glob.glob(self.path(self.settings.server_path, "worlds", "*/"))
         if not update:
             if world_path in world_folders:
                 try:
-                    if os.path.basename(world_path) in self.worlds.keys():
+                    if os.path.basename(world_path) in self.settings.worlds.keys():
                         self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' already in worlds list.</font>")
                         self.show_main_page()
                         return
@@ -3474,7 +3445,7 @@ class ServerManagerApp(QMainWindow):
         else:
             if world_path in world_folders:
                 try:
-                    if os.path.basename(world_path) not in self.worlds.keys():
+                    if os.path.basename(world_path) not in self.settings.worlds.keys():
                         self.log_queue.put(f"<font color='red'>ERROR: World '{os.path.basename(world_path)}' not found in worlds list.</font>")
                         self.show_main_page()
                         return
@@ -3581,16 +3552,16 @@ class ServerManagerApp(QMainWindow):
             name = self.add_world_label.text()
             if update:
                 self.remove_world(updating=name)
-            self.worlds[name] = {
+            self.settings.worlds[name] = {
                 "version": self.mc_version_dropdown.currentText(),
                 "gamemode": self.gamemode_dropdown.currentText(),
                 "difficulty": self.difficulty_dropdown.currentText(),
                 "fabric": self.is_fabric_check.isChecked(),
                 "level-type": self.level_type_dropdown.currentText()
             }
-            self.world_order.insert(0, name)
-            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
-            file_funcs.save_world_properties(self.path(os.path.join(self.server_path, "worlds", name)), self.worlds[name])
+            self.settings.world_order.insert(0, name)
+            file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
+            file_funcs.save_world_properties(self.path(os.path.join(self.settings.server_path, "worlds", name)), self.settings.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully {'updated' if update else 'added'} world.</font>")
@@ -3608,13 +3579,13 @@ class ServerManagerApp(QMainWindow):
         self.mc_version_dropdown.addItems(queries.get_mc_versions(include_snapshots=False))
 
     def confirm_create_world(self):
-        if self.new_world_name_edit.text() == "" or self.new_world_name_edit.text() in self.worlds.keys():
+        if self.new_world_name_edit.text() == "" or self.new_world_name_edit.text() in self.settings.worlds.keys():
             self.add_world_error.setText(f"Name invalid or already exists.")
             return
         
         result = self.verify_version(self.mc_version_dropdown.currentText(), self.is_fabric_check.isChecked())
         if result or self.fabric_dropdown.isHidden():
-            self.worlds[self.new_world_name_edit.text()] = {
+            self.settings.worlds[self.new_world_name_edit.text()] = {
                 "seed": self.new_world_seed_edit.text(),
                 "version": self.mc_version_dropdown.currentText(),
                 "gamemode": self.gamemode_dropdown.currentText(),
@@ -3622,8 +3593,8 @@ class ServerManagerApp(QMainWindow):
                 "fabric": self.is_fabric_check.isChecked() and not self.fabric_dropdown.isHidden(),
                 "level-type": self.level_type_dropdown.currentText()
             }
-            self.world_order.insert(0, self.new_world_name_edit.text())
-            file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+            self.settings.world_order.insert(0, self.new_world_name_edit.text())
+            file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
             self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
@@ -3637,12 +3608,12 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page()
     
     def version_dropdown_changed(self):
-        world_path = self.path(self.server_path, "worlds", self.add_world_label.text())
+        world_path = self.path(self.settings.server_path, "worlds", self.add_world_label.text())
         old_version = file_funcs.load_world_properties(world_path)["version"]
         unknown = ""
         if not old_version:
-            if os.path.isfile(self.path(self.server_path, "worlds", self.add_world_label.text(), "version.txt")):
-                with open(self.path(self.server_path, "worlds", self.add_world_label.text(), "version.txt"), 'r') as f:
+            if os.path.isfile(self.path(self.settings.server_path, "worlds", self.add_world_label.text(), "version.txt")):
+                with open(self.path(self.settings.server_path, "worlds", self.add_world_label.text(), "version.txt"), 'r') as f:
                     old_version = f.readline()
         
         if not old_version and self.create_new_world_button.isHidden():
@@ -3709,15 +3680,15 @@ class ServerManagerApp(QMainWindow):
         
         if not updating and self.delete_world_checkbox.isChecked():
             try:
-                folder_path = self.path(self.server_path, "worlds", world)
+                folder_path = self.path(self.settings.server_path, "worlds", world)
                 shutil.rmtree(folder_path)
                 self.log_queue.put(f"<font color='green'>Successfully deleted the world folder.</font>")
             except:
                 pass
         
-        self.worlds.pop(world)
-        self.world_order.remove(world)
-        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        self.settings.worlds.pop(world)
+        self.settings.world_order.remove(world)
+        file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
         self.set_worlds_list()
         self.send_data("worlds-list", self.query_worlds())
         if not updating:
@@ -3730,17 +3701,17 @@ class ServerManagerApp(QMainWindow):
             self.log_queue.put(f"<font color='red'>There is no world selected.</font>")
             return
         
-        if not os.path.isfile(self.path(self.server_path, "worlds", world, "saved_properties.properties")):
+        if not os.path.isfile(self.path(self.settings.server_path, "worlds", world, "saved_properties.properties")):
             self.log_queue.put(f"<font color='red'>The world has not been generated yet.")
             self.log_queue.put(f"<font color='red'>Start world once to generate the world properties.</font>")
             return
         
-        file_funcs.open_file(self.path(self.server_path, "worlds", world, "saved_properties.properties"))
+        file_funcs.open_file(self.path(self.settings.server_path, "worlds", world, "saved_properties.properties"))
     
     def open_resources_folder(self, client_folder=False):
         world = self.dropdown.currentText()
-        if world and self.worlds[world].get("fabric"):
-            world_folder = self.path(self.server_path, "worlds", world)
+        if world and self.settings.worlds[world].get("fabric"):
+            world_folder = self.path(self.settings.server_path, "worlds", world)
             if os.path.exists(world_folder):
                 if client_folder:
                     if not os.path.exists(self.path(world_folder, "client resources")):
@@ -3773,7 +3744,7 @@ class ServerManagerApp(QMainWindow):
     
     def set_whitelist(self):
         enabled = self.whitelist_toggle_button.text() == "Enabled"
-        self.universal_settings["whitelist enabled"] = enabled
+        self.settings.universal_settings["whitelist enabled"] = enabled
 
         status = self.query_status()[0]
         if status == "online" and self.bus is not None:
@@ -3794,7 +3765,7 @@ class ServerManagerApp(QMainWindow):
     
     def set_gui_option(self):
         enabled = self.gui_toggle_button.text() == "Enabled"
-        self.universal_settings["gui enabled"] = enabled
+        self.settings.universal_settings["gui enabled"] = enabled
 
     def add_player_to_whitelist(self):
         player = self.whitelist_add_textbox.text()
@@ -3816,10 +3787,10 @@ class ServerManagerApp(QMainWindow):
             
             self.whitelist_add_textbox.clear()
             try:
-                with open(self.path(self.server_path, "whitelist.json"), 'r') as f:
+                with open(self.path(self.settings.server_path, "whitelist.json"), 'r') as f:
                     curr_whitelists = json.loads(f.read())
             except FileNotFoundError:
-                with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
+                with open(self.path(self.settings.server_path, "whitelist.json"), 'w') as f:
                     json.dump([player_obj], f, indent=2)
                 return
             
@@ -3828,41 +3799,41 @@ class ServerManagerApp(QMainWindow):
                 return
             
             curr_whitelists.append(player_obj)
-            with open(self.path(self.server_path, "whitelist.json"), 'w') as f:
+            with open(self.path(self.settings.server_path, "whitelist.json"), 'w') as f:
                 json.dump(curr_whitelists, f, indent=2)
     
     def update_view_distance(self):
         distance = self.view_distance_textbox.text()
         if distance and distance.isdigit():
             distance = min(32, max(3, int(distance)))
-            self.universal_settings["view distance"] = int(distance)
+            self.settings.universal_settings["view distance"] = int(distance)
 
     def update_simulation_distance(self):
         distance = self.simulation_distance_textbox.text()
         if distance and distance.isdigit():
             distance = min(32, max(3, int(distance)))
-            self.universal_settings["simulation distance"] = int(distance)
+            self.settings.universal_settings["simulation distance"] = int(distance)
     
     def leave_commands_page(self):
         self.set_gui_option()
         self.set_whitelist()
         self.update_view_distance()
         self.update_simulation_distance()
-        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
-        file_funcs.update_all_universal_settings(self.server_path)
+        file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
+        file_funcs.update_all_universal_settings(self.settings.server_path)
         if self.status == "online" and self.bus is not None:
-            self.bus.view_distance.emit(int(self.universal_settings["view distance"]))
-            self.bus.simulation_distance.emit(int(self.universal_settings["simulation distance"]))
+            self.bus.view_distance.emit(int(self.settings.universal_settings["view distance"]))
+            self.bus.simulation_distance.emit(int(self.settings.universal_settings["simulation distance"]))
         self.show_main_page()
     
     def move_world_to_top(self, world):
-        self.world_order.remove(world)
-        self.world_order.insert(0, world)
+        self.settings.world_order.remove(world)
+        self.settings.world_order.insert(0, world)
         current_selected = self.dropdown.currentText()
         self.dropdown.clear()
-        self.dropdown.addItems(self.world_order)
+        self.dropdown.addItems(self.settings.world_order)
         self.dropdown.setCurrentText(current_selected)
-        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+        file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
     
     def open_player_context_menu(self, item_pos, cursor_pos):
         item = self.players_info_box.itemAt(item_pos)
@@ -3915,7 +3886,7 @@ class ServerManagerApp(QMainWindow):
                 file = option.get("file")
                 if file == "whitelist":
                     file = "white-list"
-                with open(self.path(self.server_path, file + ".txt"), 'r') as f:
+                with open(self.path(self.settings.server_path, file + ".txt"), 'r') as f:
                     players = [line.strip('\n') for line in f.readlines() if (line.strip('\n') and not line.startswith('#'))]
                 
                 remove = False
@@ -3924,7 +3895,7 @@ class ServerManagerApp(QMainWindow):
                         label = option.get("remove")
                         remove = True
             else:
-                with open(self.path(self.server_path, option.get("file") + ".json"), 'r') as f:
+                with open(self.path(self.settings.server_path, option.get("file") + ".json"), 'r') as f:
                     players = json.loads(f.read())
                 
                 remove = False
@@ -4032,7 +4003,7 @@ class ServerManagerApp(QMainWindow):
             self.mc_version_dropdown.setCurrentText(curr_selection)
         else:
             # In updating page, so limit versions available
-            version = self.worlds[self.add_world_label.text()]["version"]
+            version = self.settings.worlds[self.add_world_label.text()]["version"]
             new_versions = []
             if state == Qt.CheckState.Checked:
                 new_versions = queries.get_mc_versions(include_snapshots=True)
@@ -4103,7 +4074,7 @@ class ServerManagerApp(QMainWindow):
         menu.exec(pos)
     
     def copy_ip(self):
-        copy(self.host_ip)
+        copy(self.settings.host_ip)
         self.log_queue.put("Copied IP address to clipboard.")
     
     def timestamp(self):
@@ -4196,17 +4167,17 @@ class ServerManagerApp(QMainWindow):
         if self.query_status()[0] == "online":
             self.log_queue.put("<font color='red'>Cannot change path while server is running.</font>")
         else:
-            self.server_folder_path_entry.setText(self.server_path)
+            self.server_folder_path_entry.setText(self.settings.server_path)
             self.show_server_entry_page()
     
     def toggle_downloadable(self):
         enabled = self.enable_download_checkbox.isChecked()
         curr_world = self.dropdown.currentText()
-        if enabled and curr_world in self.disabled_download_worlds:
-            self.disabled_download_worlds.remove(curr_world)
+        if enabled and curr_world in self.settings.disabled_download_worlds:
+            self.settings.disabled_download_worlds.remove(curr_world)
         else:
-            self.disabled_download_worlds.add(self.dropdown.currentText())
-        file_funcs.update_settings(self.file_lock, self.ips, self.saved_servers, self.server_path, self.worlds, self.world_order, self.disabled_download_worlds, self.universal_settings, self.saved_ip)
+            self.settings.disabled_download_worlds.add(self.dropdown.currentText())
+        file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
         self.send_data("downloadable-world", [curr_world, enabled])
     
     def create_supervisor_process(self):
@@ -4232,7 +4203,7 @@ class ServerManagerApp(QMainWindow):
             )
     
     def start_supervisor_server(self, server_args, version):
-        self.supervisor_send({"type": "start_server", "args": [self.server_path, server_args], "version": version})
+        self.supervisor_send({"type": "start_server", "args": [self.settings.server_path, server_args], "version": version})
     
     def update_stats(self, stats: dict):
         self.total_mem_label.setText("Total RAM being used: " + str(round(stats.get("used_percent"), 1)) + "%")
@@ -4442,7 +4413,7 @@ class ServerManagerApp(QMainWindow):
         
         minutes = int(minutes)
         chunk_radius = int(chunk_radius)
-        world_folder = self.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
+        world_folder = self.settings.server_path + "\\worlds\\" + self.prune_worlds_dropdown.currentText()
         up_to_date_layout = os.path.exists(self.path(world_folder, "dimensions", "minecraft"))
 
         dimension = self.dimension_dropdown.currentText().lower().replace(" ", "_")
