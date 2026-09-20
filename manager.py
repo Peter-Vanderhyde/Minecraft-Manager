@@ -1553,121 +1553,18 @@ class ServerManagerApp(QMainWindow):
             self.cancel_download_button.show()
         self.download_progress.show()
     
-    def download_complete(self, world):
+    def download_complete(self, _world):
         self.downloads_message.setText("Download complete!")
         self.download_file_label.setText("")
         self.delay(0.5)
 
-        extract = QMessageBox.question(
-            self,
-            "World Extraction",
-            f"<font color='green'>Would you like to extract {world} to<br>the worlds folder?</font>",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes
-        )
-
         self.cancel_download_button.hide()
         self.download_progress.hide()
 
-        if extract == QMessageBox.StandardButton.Yes:
-            self.extract_world_download(world)
-            self.delay(0.5)
+        self.delay(0.5)
         
         self.finish_button.show()
         self.open_downloads_button.show()
-
-    def extract_world_download(self, world):
-        zip_path = Path(self.world_transfer_location, world + ".zip")
-        if not zip_path:
-            return
-
-        settings = file_funcs.load_settings(self.log_queue, threading.Lock())
-        
-        new_name, ok = QInputDialog.getText(self, "Name World", "<font color='green'>Enter the name to save the world as.</font>", text=world)
-        while True:
-            if not ok:
-                return
-            elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(settings.server_path, "worlds"))]:
-                reply = QMessageBox.warning(
-                    self,
-                    "Overwrite World",
-                    f"<font color='green'>The world {new_name} already exists.<br><br>Are you sure you want to delete it?</font>",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    break
-                else:
-                    new_name, ok = QInputDialog.getText(self, "Name World", f"<font color='green'>Enter the name to save the world as.</font>", text=new_name)
-            elif new_name.strip() == "":
-                new_name, ok = QInputDialog.getText(self, "Name World", f"<font color='green'>Enter the name to save the world as.<br></font><font color='red'>Invalid name.</font>", text=new_name)
-            else:
-                break
-
-
-        src = Path(zip_path)
-        dest = Path(self.path(settings.server_path, "worlds"))
-
-        self.downloads_message.setText("Extracting World...")
-
-        with zipfile.ZipFile(src, "r") as zip_ref:
-            top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
-
-            self.downloads_message.setText("Extracting World...")
-            self.delay(0.5)
-
-            if len(top_level) == 1:
-                target_path = dest / new_name
-                if target_path.exists():
-                    self.remove_world(new_name)
-                
-                zip_ref.extractall(dest)
-                extracted_folder_name = list(top_level)[0]
-                extracted_path = dest / extracted_folder_name
-
-                if extracted_path != target_path:
-                    extracted_path.rename(target_path)
-            else:
-                target_path = dest / new_name
-                if target_path.exists():
-                    self.remove_world(new_name)
-                zip_ref.extractall(target_path)
-
-        self.downloads_message.setText("Extracted World!")
-
-        if new_name not in settings.worlds.keys():
-            QMessageBox.information(
-                self,
-                "World Extracted",
-                f"<font color='green'>{new_name} was successfully extracted.<br><br>Use Add World/Add Existing in your host manager to<br>run it as a server world.</font>",
-                QMessageBox.StandardButton.Ok,
-                QMessageBox.StandardButton.Ok
-            )
-            self.log_queue.put(
-                f"{self.timestamp()} <font color='green'>Extracted '{new_name}' to worlds folder.</font>"
-            )
-        else:
-            self.log_queue.put(
-                f"{self.timestamp()} <font color='green'>Extracted and replaced '{new_name}' in worlds folder.</font>"
-            )
-
-    def remove_world(self, world):
-        if not world:
-            return
-
-        settings = file_funcs.load_settings(self.log_queue, threading.Lock())
-        
-        try:
-            folder_path = self.path(settings.server_path, "worlds", world)
-            shutil.rmtree(folder_path)
-            self.log_queue.put(f"{self.timestamp()} <font color='green'>Successfully deleted the world folder.</font>")
-        except:
-            pass
-        
-        settings.worlds.pop(world)
-        settings.world_order.remove(world)
-        file_funcs.update_settings(threading.Lock(), settings, settings.host_ip)
-        self.log_queue.put(f"{self.timestamp()} <font color='green'>Successfully removed world.</font>")
     
     def cancel_download(self):
         self.cancelled_download.set()
@@ -1740,7 +1637,8 @@ class ServerManagerApp(QMainWindow):
                                          }""")
         button = box.exec()
         if button == ok:
-            download_folder = file_funcs.pick_folder(self, starting_path=(self.world_transfer_location or ""), dialog_title="World Download Location")
+            settings = file_funcs.load_settings(self.log_queue, threading.Lock())
+            download_folder = file_funcs.pick_folder(self, starting_path=(self.world_transfer_location or self.path(settings.server_path, "worlds")), dialog_title="World Download Location")
             if not download_folder:
                 return
             
