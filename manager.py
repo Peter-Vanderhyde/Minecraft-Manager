@@ -9,8 +9,6 @@ import winreg
 import subprocess
 import manager_host
 import file_funcs
-import zipfile
-import shutil
 from queries import latest_app_info
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea, QListWidget, QAbstractItemView, QListWidgetItem, QInputDialog
