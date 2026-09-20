@@ -9,6 +9,8 @@ import winreg
 import subprocess
 import manager_host
 import file_funcs
+import zipfile
+import shutil
 from queries import latest_app_info
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QComboBox, QStackedLayout, QGridLayout, QWidget, QTextBrowser, QProgressBar, QSizePolicy, QCheckBox, QMessageBox, QProgressDialog, QScrollArea, QListWidget, QAbstractItemView, QListWidgetItem, QInputDialog
@@ -844,6 +846,9 @@ class ServerManagerApp(QMainWindow):
         end_time = time.time() + delay_amount
         while time.time() < end_time:
             QApplication.processEvents()
+
+    def path(self, *args):
+        return os.path.normpath(os.path.join(*args))
     
     def save_ip(self):
         try:
@@ -1576,78 +1581,80 @@ class ServerManagerApp(QMainWindow):
 
         settings = file_funcs.load_settings(self.log_queue, threading.Lock())
         
-        # new_name, ok = QInputDialog.getText(self, "Name World", "Enter the name to save the world as.", text=world)
-        # while True:
-        #     if not ok:
-        #         return
-        #     elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(self.server_path, "worlds"))]:
-        #         reply = QMessageBox.question(
-        #             self,
-        #             "Overwrite World",
-        #             f"The world {new_name} already exists.<br><br>Would you like to overwrite it?",
-        #             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        #             QMessageBox.StandardButton.Yes
-        #         )
-        #         if reply == QMessageBox.StandardButton.Yes:
-        #             break
-        #         else:
-        #             new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.", text=new_name)
-        #     elif new_name.strip() == "":
-        #         new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the backup as.<br><font color='red'>Invalid name.</font>", text=new_name)
-        #     else:
-        #         break
+        new_name, ok = QInputDialog.getText(self, "Name World", "Enter the name to save the world as.", text=world)
+        while True:
+            if not ok:
+                return
+            elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(settings.server_path, "worlds"))]:
+                reply = QMessageBox.question(
+                    self,
+                    "Overwrite World",
+                    f"The world {new_name} already exists.<br><br>Would you like to overwrite it?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    break
+                else:
+                    new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the world as.", text=new_name)
+            elif new_name.strip() == "":
+                new_name, ok = QInputDialog.getText(self, "Name World", f"Enter the name to save the world as.<br><font color='red'>Invalid name.</font>", text=new_name)
+            else:
+                break
 
 
-        # src = Path(backup_path)
-        # dest = Path(self.path(self.server_path, "worlds"))
+        src = Path(zip_path)
+        dest = Path(self.path(settings.server_path, "worlds"))
 
-        # with zipfile.ZipFile(src, "r") as zip_ref:
-        #     top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
+        with zipfile.ZipFile(src, "r") as zip_ref:
+            top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
 
-        #     if len(top_level) == 1:
-        #         zip_ref.extractall(dest)
-        #         extracted_folder_name = list(top_level)[0]
-        #         extracted_path = dest / extracted_folder_name
-        #         target_path = dest / new_name
+            if len(top_level) == 1:
+                zip_ref.extractall(dest)
+                extracted_folder_name = list(top_level)[0]
+                extracted_path = dest / extracted_folder_name
+                target_path = dest / new_name
 
-        #         if extracted_path != target_path:
-        #             if target_path.exists():
-        #                 shutil.rmtree(target_path)
-        #             extracted_path.rename(target_path)
-        #     else:
-        #         zip_ref.extractall(dest / new_name)
+                if extracted_path != target_path:
+                    if target_path.exists():
+                        self.remove_world(new_name)
+                    extracted_path.rename(target_path)
+            else:
+                zip_ref.extractall(dest / new_name)
 
-        # restored_path = dest / new_name
+        if new_name not in self.worlds.keys():
+            QMessageBox.information(
+                self,
+                "World Extracted",
+                f"{new_name} was successfully extracted.<br><br>Use Add World/Add Existing in your host manager to<br>run it as a server world.",
+                QMessageBox.StandardButton.Ok,
+                QMessageBox.StandardButton.Ok
+            )
+            self.log_queue.put(
+                f"<font color='green'>Extracted '{new_name}' to worlds folder.</font>"
+            )
+        else:
+            self.log_queue.put(
+                f"<font color='green'>Extracted and replaced '{new_name}' in worlds folder.</font>"
+            )
 
-        # if new_name not in self.worlds.keys():
-        #     reply = QMessageBox.question(
-        #         self,
-        #         "Add World",
-        #         f"Backup restored successfully as <b>{new_name}</b>.<br><br>"
-        #         "Would you like to add this world to your active worlds list now?",
-        #         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        #         QMessageBox.StandardButton.Yes,  # Default selection
-        #     )
+    def remove_world(self, world):
+        if not world:
+            return
 
-        #     if reply == QMessageBox.StandardButton.Yes:
-        #         if self.add_existing_world(
-        #             update=False, restored_backup=restored_path
-        #         ):
-        #             self.log_queue.put(
-        #                 f"<font color='green'>Restored and added '{new_name}' in worlds folder.</font>"
-        #             )
-        #         return
-        #     else:
-        #         self.log_queue.put(
-        #             f"<font color='green'>Restored '{new_name}' to worlds folder (not added to active list).</font>"
-        #         )
-        # else:
-        #     self.log_queue.put(
-        #         f"<font color='green'>Restored and replaced '{new_name}' in worlds folder.</font>"
-        #     )
-
-        # self.show_main_page(True)
-        # return restored_path
+        settings = file_funcs.load_settings(self.log_queue, threading.Lock())
+        
+        try:
+            folder_path = self.path(settings.server_path, "worlds", world)
+            shutil.rmtree(folder_path)
+            self.log_queue.put(f"<font color='green'>Successfully deleted the world folder.</font>")
+        except:
+            pass
+        
+        settings.worlds.pop(world)
+        settings.world_order.remove(world)
+        file_funcs.update_settings(threading.Lock(), settings, settings.host_ip)
+        self.log_queue.put(f"<font color='green'>Successfully removed world.</font>")
     
     def cancel_download(self):
         self.cancelled_download.set()

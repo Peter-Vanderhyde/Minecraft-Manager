@@ -2935,8 +2935,8 @@ class ServerManagerApp(QMainWindow):
             elif new_name in [os.path.basename(world_path) for world_path in os.listdir(self.path(self.settings.server_path, "worlds"))]:
                 reply = QMessageBox.question(
                     self,
-                    "Overwrite World",
-                    f"The world {new_name} already exists.<br><br>Would you like to overwrite it?",
+                    "Delete World",
+                    f"The world {new_name} already exists.<br><br>Would you like to delete it?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                     QMessageBox.StandardButton.Yes
                 )
@@ -2964,7 +2964,7 @@ class ServerManagerApp(QMainWindow):
 
                 if extracted_path != target_path:
                     if target_path.exists():
-                        shutil.rmtree(target_path)
+                        self.remove_world(overwriting=new_name)
                     extracted_path.rename(target_path)
             else:
                 zip_ref.extractall(dest / new_name)
@@ -3665,11 +3665,14 @@ class ServerManagerApp(QMainWindow):
             self.fabric_dropdown.hide()
             self.fabric_label.hide()
     
-    def remove_world(self, updating=""):
-        if not updating:
-            world = self.worlds_dropdown.currentText()
-        else:
+    def remove_world(self, updating="", overwriting=""):
+        if updating:
             world = updating
+        elif overwriting:
+            world = overwriting
+        else:
+            world = self.worlds_dropdown.currentText()
+        
         if not world:
             return
         
@@ -3678,7 +3681,7 @@ class ServerManagerApp(QMainWindow):
             self.show_main_page()
             return
         
-        if not updating and self.delete_world_checkbox.isChecked():
+        if not updating and (overwriting or self.delete_world_checkbox.isChecked()):
             try:
                 folder_path = self.path(self.settings.server_path, "worlds", world)
                 shutil.rmtree(folder_path)
