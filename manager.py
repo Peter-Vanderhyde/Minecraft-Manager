@@ -1071,7 +1071,7 @@ class ServerManagerApp(QMainWindow):
                                                 socket.SOCK_STREAM
                                             )
 
-                                            buffer_size = 16 * 1024 * 1024
+                                            buffer_size = 32 * 1024 * 1024
                                             transfer_sock.setsockopt(
                                                 socket.SOL_SOCKET,
                                                 socket.SO_SNDBUF,
