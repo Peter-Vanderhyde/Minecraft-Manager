@@ -1635,7 +1635,7 @@ class ServerManagerApp(QMainWindow):
         button = box.exec()
         if button == ok:
             settings = file_funcs.load_settings(self.log_queue, threading.Lock())
-            download_folder = file_funcs.pick_folder(self, starting_path=(self.world_transfer_location or self.path(settings.server_path, "worlds")), dialog_title="World Download Location")
+            download_folder = file_funcs.pick_folder(self, starting_path=(self.world_transfer_location or Path.home() / "Downloads"), dialog_title="World Download Location")
             if not download_folder:
                 return
             
