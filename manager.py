@@ -1556,7 +1556,6 @@ class ServerManagerApp(QMainWindow):
     def download_complete(self, _world):
         self.downloads_message.setText("Download complete!")
         self.download_file_label.setText("")
-        self.delay(0.5)
 
         self.cancel_download_button.hide()
         self.download_progress.hide()
