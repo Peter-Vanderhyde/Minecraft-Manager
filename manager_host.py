@@ -2953,23 +2953,36 @@ class ServerManagerApp(QMainWindow):
         src = Path(backup_path)
         dest = Path(self.path(self.settings.server_path, "worlds"))
 
+        self.show_main_page(True)
+        self.delay(0.5)
+
         with zipfile.ZipFile(src, "r") as zip_ref:
             top_level = {Path(name).parts[0] for name in zip_ref.namelist() if name}
+
+            target_path = dest / new_name
+            if target_path.exists():
+                self.log_queue.put(f"Removing old world...")
+                self.delay(0.5)
+                if new_name in self.settings.worlds.keys():
+                    self.remove_world(overwriting=new_name)
+                else:
+                    shutil.rmtree(target_path)
+            self.log_queue.put(f"Extracting {new_name}. Please wait...")
+            self.delay(0.5)
 
             if len(top_level) == 1:
                 zip_ref.extractall(dest)
                 extracted_folder_name = list(top_level)[0]
                 extracted_path = dest / extracted_folder_name
-                target_path = dest / new_name
 
                 if extracted_path != target_path:
-                    if target_path.exists():
-                        self.remove_world(overwriting=new_name)
                     extracted_path.rename(target_path)
             else:
                 zip_ref.extractall(dest / new_name)
 
         restored_path = dest / new_name
+        self.log_queue.put(f"<font color='green'>Extraction complete.</font>")
+        self.delay(0.5)
 
         if new_name not in self.settings.worlds.keys():
             reply = QMessageBox.question(
@@ -2982,23 +2995,12 @@ class ServerManagerApp(QMainWindow):
             )
 
             if reply == QMessageBox.StandardButton.Yes:
-                if self.add_existing_world(
-                    update=False, restored_backup=restored_path
-                ):
-                    self.log_queue.put(
-                        f"<font color='green'>Restored and added '{new_name}' in worlds folder.</font>"
-                    )
-                return
-            else:
-                self.log_queue.put(
-                    f"<font color='green'>Restored '{new_name}' to worlds folder (not added to active list).</font>"
-                )
+                self.add_existing_world(update=False, restored_backup=restored_path)
         else:
             self.log_queue.put(
-                f"<font color='green'>Restored and replaced '{new_name}' in worlds folder.</font>"
+                f"<font color='green'>Extracted and replaced '{new_name}' in worlds folder.</font>"
             )
 
-        self.show_main_page(True)
         return restored_path
 
     
@@ -3564,7 +3566,7 @@ class ServerManagerApp(QMainWindow):
             file_funcs.save_world_properties(self.path(os.path.join(self.settings.server_path, "worlds", name)), self.settings.worlds[name])
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
-            self.log_queue.put(f"<font color='green'>Successfully {'updated' if update else 'added'} world.</font>")
+            self.log_queue.put(f"<font color='green'>Successfully {'updated' if update else 'added'} '{name}'.</font>")
             self.dropdown.setCurrentText(self.add_world_label.text())
             self.show_main_page()
         elif result is False:
@@ -3597,7 +3599,7 @@ class ServerManagerApp(QMainWindow):
             file_funcs.update_settings(self.file_lock, self.settings, self.saved_ip)
             self.set_worlds_list()
             self.send_data("worlds-list", self.query_worlds())
-            self.log_queue.put(f"<font color='green'>Successfully added world.</font>")
+            self.log_queue.put(f"<font color='green'>Successfully added '{self.new_world_name_edit.text()}'.</font>")
             self.log_queue.put("The world and its folder will be generated when the world is run for the first time.")
             self.dropdown.setCurrentText(self.new_world_name_edit.text())
             self.show_main_page()
