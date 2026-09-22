@@ -173,8 +173,10 @@ def get_mc_versions(include_snapshots=False):
         
         elif version["type"] == "release":
             sections = version["id"].split(".")
-            if len(sections) == 2 and int(sections[1]) <= 2:
-                return False
+            if len(sections) == 2:
+                if not sections[0].isnumeric() or sections[0] == "1":
+                    if int(sections[1]) <= 2:
+                        return False
             elif len(sections) == 3 and int(sections[1]) == 2 and int(sections[2]) <= 4:
                 return False
 
