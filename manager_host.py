@@ -24,7 +24,7 @@ import html
 import supervisor
 import nbt_funcs
 
-VERSION = "v2.10.15"
+VERSION = "v2.10.16"
 DEBUG_LOGS = False
 
 if getattr(sys, "frozen", False):
@@ -3407,6 +3407,9 @@ class ServerManagerApp(QMainWindow):
     def add_existing_world(self, update=False, restored_backup=None):
         if restored_backup:
             world_path = restored_backup
+        elif update:
+            extra_worlds = [world for world in os.listdir(self.path(self.settings.server_path, "worlds")) if world not in self.settings.worlds.keys()]
+            world_path = file_funcs.select_world(self, self.path(self.settings.server_path, "worlds"), "Select Existing World", excluded_worlds=extra_worlds)
         else:
             world_path = file_funcs.select_world(self, self.path(self.settings.server_path, "worlds"), "Select Existing World", excluded_worlds=self.settings.worlds.keys())
         if world_path is None:
